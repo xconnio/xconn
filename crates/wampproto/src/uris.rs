@@ -1,0 +1,34 @@
+//! Standard WAMP error and close URIs.
+
+pub const INVALID_ARGUMENT: &str = "wamp.error.invalid_argument";
+pub const PROCEDURE_ALREADY_EXISTS: &str = "wamp.error.procedure_already_exists";
+pub const INVALID_URI: &str = "wamp.error.invalid_uri";
+pub const AUTHENTICATION_FAILED: &str = "wamp.error.authentication_failed";
+pub const CLOSE_REALM: &str = "wamp.close.close_realm";
+pub const CLOSE_GOOD_BYE_AND_OUT: &str = "wamp.close.goodbye_and_out";
+pub const CLOSE_SYSTEM_SHUTDOWN: &str = "wamp.close.system_shutdown";
+pub const CLOSE_KILLED: &str = "wamp.close.killed";
+pub const NO_MATCHING_AUTH_METHOD: &str = "wamp.error.no_matching_auth_method";
+pub const NO_SUCH_REALM: &str = "wamp.error.no_such_realm";
+pub const NO_SUCH_ROLE: &str = "wamp.error.no_such_role";
+pub const NO_SUCH_PRINCIPAL: &str = "wamp.error.no_such_principal";
+pub const NO_SUCH_SESSION: &str = "wamp.error.no_such_session";
+pub const AUTHENTICATION_DENIED: &str = "wamp.error.authentication_denied";
+pub const AUTHENTICATION_REQUIRED: &str = "wamp.error.authentication_required";
+pub const AUTHORIZATION_DENIED: &str = "wamp.error.authorization_denied";
+pub const AUTHORIZATION_FAILED: &str = "wamp.error.authorization_failed";
+pub const AUTHORIZATION_REQUIRED: &str = "wamp.error.authorization_required";
+pub const TIMEOUT: &str = "wamp.error.timeout";
+pub const OPTION_NOT_ALLOWED: &str = "wamp.error.option_not_allowed";
+pub const OPTION_DISALLOWED_DISCLOSE_ME: &str = "wamp.error.option_disallowed.disclose_me";
+pub const NETWORK_FAILURE: &str = "wamp.error.network_failure";
+pub const UNAVAILABLE: &str = "wamp.error.unavailable";
+pub const NO_AVAILABLE_CALLEE: &str = "wamp.error.no_available_callee";
+pub const FEATURE_NOT_SUPPORTED: &str = "wamp.error.feature_not_supported";
+pub const NO_SUCH_PROCEDURE: &str = "wamp.error.no_such_procedure";
+pub const NO_SUCH_REGISTRATION: &str = "wamp.error.no_such_registration";
+pub const NO_SUCH_SUBSCRIPTION: &str = "wamp.error.no_such_subscription";
+pub const CANCELED: &str = "wamp.error.canceled";
+pub const PAYLOAD_SIZE_EXCEEDED: &str = "wamp.error.payload_size_exceeded";
+pub const PROTOCOL_VIOLATION: &str = "wamp.error.protocol_violation";
+pub const NOT_AUTHORIZED: &str = "wamp.error.not_authorized";
