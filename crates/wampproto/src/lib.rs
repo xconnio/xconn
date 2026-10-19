@@ -12,6 +12,7 @@ pub mod messages;
 pub mod options;
 pub mod routing;
 pub mod serializers;
+pub mod transports;
 pub mod types;
 pub mod uris;
 

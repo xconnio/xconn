@@ -9,7 +9,7 @@ The crate provides:
 - Client joining and router acceptance state machines.
 - Anonymous, ticket, WAMP-CRA, and cryptosign authentication helpers.
 - Broker and dealer routing, including progressive RPC protocol handling.
-- Request/session ID generation.
+- Request/session ID generation and RawSocket framing and handshake helpers.
 
 It does not open sockets, spawn tasks, or choose an application execution model.
 Feed decoded messages into the protocol components and send their returned
