@@ -9,7 +9,7 @@ will be introduced in subsequent milestones.
 ## Workspace
 
 - [`crates/wampproto`](crates/wampproto): protocol messages, codecs,
-  broker, and dealer.
+  authentication, client joining, router acceptance, broker, and dealer.
 
 The protocol crate has no socket or async runtime dependency. Applications own
 network I/O and drive its state machines with incoming protocol messages.
