@@ -30,3 +30,8 @@ required-features = ["async"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
+
+[[example]]
+name = "streaming_peer"
+path = "tests/support/streaming_peer.rs"
+required-features = ["async"]
