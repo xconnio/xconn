@@ -1,0 +1,1175 @@
+[
+  {
+    "engine": "broker",
+    "steps": [
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          32,
+          1,
+          {
+            "match": "exact"
+          },
+          "foo.bar"
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              33,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "publish",
+        "session": 1,
+        "wire": [
+          16,
+          2,
+          {
+            "acknowledge": true
+          },
+          "foo.bar",
+          [
+            "payload"
+          ],
+          {
+            "x": 42
+          }
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              17,
+              2,
+              2
+            ]
+          }
+        ],
+        "events": [
+          {
+            "recipients": [
+              2
+            ],
+            "wire": [
+              36,
+              1,
+              2,
+              {
+                "publisher": 1,
+                "publisher_authid": "user1",
+                "publisher_authrole": "user",
+                "topic": "foo.bar"
+              },
+              [
+                "payload"
+              ],
+              {
+                "x": 42
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          34,
+          3,
+          1
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              35,
+              3
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "engine": "broker",
+    "steps": [
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          32,
+          1,
+          {
+            "match": "prefix"
+          },
+          "foo."
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              33,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "publish",
+        "session": 1,
+        "wire": [
+          16,
+          2,
+          {
+            "acknowledge": true
+          },
+          "foo.bar",
+          [
+            "payload"
+          ],
+          {
+            "x": 42
+          }
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              17,
+              2,
+              2
+            ]
+          }
+        ],
+        "events": [
+          {
+            "recipients": [
+              2
+            ],
+            "wire": [
+              36,
+              1,
+              2,
+              {
+                "publisher": 1,
+                "publisher_authid": "user1",
+                "publisher_authrole": "user",
+                "topic": "foo.bar"
+              },
+              [
+                "payload"
+              ],
+              {
+                "x": 42
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          34,
+          3,
+          1
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              35,
+              3
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "engine": "broker",
+    "steps": [
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          32,
+          1,
+          {
+            "match": "wildcard"
+          },
+          "foo.*"
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              33,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "publish",
+        "session": 1,
+        "wire": [
+          16,
+          2,
+          {
+            "acknowledge": true
+          },
+          "foo.bar",
+          [
+            "payload"
+          ],
+          {
+            "x": 42
+          }
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              17,
+              2,
+              2
+            ]
+          }
+        ],
+        "events": [
+          {
+            "recipients": [
+              2
+            ],
+            "wire": [
+              36,
+              1,
+              2,
+              {
+                "publisher": 1,
+                "publisher_authid": "user1",
+                "publisher_authrole": "user",
+                "topic": "foo.bar"
+              },
+              [
+                "payload"
+              ],
+              {
+                "x": 42
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          34,
+          3,
+          1
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              35,
+              3
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "engine": "dealer",
+    "steps": [
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          64,
+          1,
+          {
+            "invoke": "single"
+          },
+          "add"
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              65,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          3,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              68,
+              2,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          70,
+          2,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              3,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          4,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              68,
+              3,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          70,
+          3,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              4,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          5,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              68,
+              4,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          70,
+          4,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              5,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "engine": "dealer",
+    "steps": [
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          64,
+          1,
+          {
+            "invoke": "first"
+          },
+          "add"
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              65,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 3,
+        "wire": [
+          64,
+          2,
+          {
+            "invoke": "first"
+          },
+          "add"
+        ],
+        "deliveries": [
+          {
+            "recipient": 3,
+            "wire": [
+              65,
+              2,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          3,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              68,
+              2,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          70,
+          2,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              3,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          4,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              68,
+              3,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          70,
+          3,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              4,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          5,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              68,
+              4,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          70,
+          4,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              5,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "engine": "dealer",
+    "steps": [
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          64,
+          1,
+          {
+            "invoke": "last"
+          },
+          "add"
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              65,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 3,
+        "wire": [
+          64,
+          2,
+          {
+            "invoke": "last"
+          },
+          "add"
+        ],
+        "deliveries": [
+          {
+            "recipient": 3,
+            "wire": [
+              65,
+              2,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          3,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 3,
+            "wire": [
+              68,
+              2,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 3,
+        "wire": [
+          70,
+          2,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              3,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          4,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 3,
+            "wire": [
+              68,
+              3,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 3,
+        "wire": [
+          70,
+          3,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              4,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          5,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 3,
+            "wire": [
+              68,
+              4,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 3,
+        "wire": [
+          70,
+          4,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              5,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "engine": "dealer",
+    "steps": [
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          64,
+          1,
+          {
+            "invoke": "roundrobin"
+          },
+          "add"
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              65,
+              1,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 3,
+        "wire": [
+          64,
+          2,
+          {
+            "invoke": "roundrobin"
+          },
+          "add"
+        ],
+        "deliveries": [
+          {
+            "recipient": 3,
+            "wire": [
+              65,
+              2,
+              1
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          3,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              68,
+              2,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          70,
+          2,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              3,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          4,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 3,
+            "wire": [
+              68,
+              3,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 3,
+        "wire": [
+          70,
+          3,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              4,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 1,
+        "wire": [
+          48,
+          5,
+          {},
+          "add",
+          [
+            1,
+            2
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 2,
+            "wire": [
+              68,
+              4,
+              1,
+              {
+                "caller": 1,
+                "caller_authid": "user1",
+                "caller_authrole": "user",
+                "procedure": "add"
+              },
+              [
+                1,
+                2
+              ]
+            ]
+          }
+        ]
+      },
+      {
+        "operation": "receive",
+        "session": 2,
+        "wire": [
+          70,
+          4,
+          {},
+          [
+            3
+          ]
+        ],
+        "deliveries": [
+          {
+            "recipient": 1,
+            "wire": [
+              50,
+              5,
+              {},
+              [
+                3
+              ]
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]
