@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/wampproto",
+    "crates/xconn-core",
 ]
 resolver = "3"
 

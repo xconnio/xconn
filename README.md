@@ -2,11 +2,13 @@
 
 Reusable connectivity technology implemented in Rust, with language bindings.
 
-This workspace starts with `wampproto`, the sans-I/O WAMP protocol engine.
-Networking runtimes, transport streams, reusable services, and language bindings
-will be introduced in subsequent milestones.
+The workspace contains the sans-I/O WAMP engine and its Rust networking runtime.
+Reusable services, WebRTC, and language bindings will follow in separate milestones.
 
 ## Workspace
+
+- [`crates/xconn-core`](crates/xconn-core): async clients, routers, and transport
+  connections.
 
 - [`crates/wampproto`](crates/wampproto): protocol messages, codecs,
   authentication, client joining, router acceptance, broker, and dealer.
@@ -22,8 +24,10 @@ cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 cargo test --locked --workspace --all-features
 ```
 
-CI runs these checks on Linux, macOS, and Windows. Go is not required for the
-Rust tests; router reference transcripts are checked in with their provenance.
+CI runs these checks on Linux, macOS, and Windows, plus async-only and protocol-only
+builds. Go is not required for the normal Rust tests.
+
+[Progressive RPC APIs](docs/streaming.md) describe runtime behavior.
 
 ## License
 

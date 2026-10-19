@@ -1,0 +1,153 @@
+use crate::async_::peer::Peer;
+use crate::async_::rawsocket::connect_rawsocket;
+use crate::async_::websocket::WebSocketPeer;
+use crate::common::types::{Error, JSONSerializerSpec, SerializerSpec, SessionDetails};
+use futures_util::{StreamExt, TryFutureExt};
+use tokio_tungstenite::connect_async_with_config;
+use tungstenite::ClientRequestBuilder;
+use tungstenite::protocol::WebSocketConfig;
+use wampproto::authenticators::anonymous::AnonymousAuthenticator;
+use wampproto::authenticators::authenticator::ClientAuthenticator;
+use wampproto::joiner;
+use wampproto::serializers::serializer::Serializer;
+
+pub struct WebSocketJoiner {
+    serializer: Box<dyn SerializerSpec>,
+    authenticator: Box<dyn ClientAuthenticator + Send + Sync>,
+}
+
+impl Default for WebSocketJoiner {
+    fn default() -> Self {
+        Self::new(
+            Box::new(JSONSerializerSpec {}),
+            Box::new(AnonymousAuthenticator::default()),
+        )
+    }
+}
+
+impl WebSocketJoiner {
+    pub fn new(serializer: Box<dyn SerializerSpec>, authenticator: Box<dyn ClientAuthenticator + Send + Sync>) -> Self {
+        Self {
+            serializer,
+            authenticator,
+        }
+    }
+
+    pub async fn join(&self, uri: &str, realm: &str) -> Result<(Box<dyn Peer>, SessionDetails), Error> {
+        #[cfg(unix)]
+        if uri.starts_with("unix+ws://") {
+            let url = url::Url::parse(uri).map_err(|error| Error::new(error.to_string()))?;
+            let stream = tokio::net::UnixStream::connect(url.path())
+                .await
+                .map_err(|error| Error::new(error.to_string()))?;
+            let request = ClientRequestBuilder::new("ws://localhost/ws".parse().unwrap())
+                .with_sub_protocol(self.serializer.subprotocol());
+            let (websocket, response) = tokio_tungstenite::client_async(request, stream)
+                .await
+                .map_err(|error| Error::new(error.to_string()))?;
+            if response
+                .headers()
+                .get("Sec-WebSocket-Protocol")
+                .and_then(|value| value.to_str().ok())
+                != Some(self.serializer.subprotocol().as_str())
+            {
+                return Err(Error::new("server did not negotiate requested WAMP subprotocol"));
+            }
+
+            let (writer, reader) = websocket.split();
+            return join(
+                WebSocketPeer::new(reader, writer, self.serializer.is_binary()),
+                realm,
+                self.serializer.serializer(),
+                self.authenticator.clone(),
+            )
+            .await;
+        }
+
+        let uri = uri.parse().map_err(|e| Error::new(format!("invalid URI: {e}")))?;
+        let request = ClientRequestBuilder::new(uri).with_sub_protocol(self.serializer.subprotocol());
+        let config = Some(WebSocketConfig::default());
+
+        let (ws, response) = connect_async_with_config(request, config, false)
+            .await
+            .map_err(|e| Error::new(format!("failed to connect: {e}")))?;
+        if response
+            .headers()
+            .get("Sec-WebSocket-Protocol")
+            .and_then(|v| v.to_str().ok())
+            != Some(self.serializer.subprotocol().as_str())
+        {
+            return Err(Error::new("server did not negotiate requested WAMP subprotocol"));
+        }
+
+        let (writer, reader) = ws.split();
+        let peer = WebSocketPeer::new(reader, writer, self.serializer.is_binary());
+        let auth = self.authenticator.clone();
+        join(peer, realm, self.serializer.serializer(), auth).await
+    }
+}
+
+pub async fn join(
+    peer: Box<dyn Peer>,
+    realm: &str,
+    serializer: Box<dyn Serializer>,
+    authenticator: Box<dyn ClientAuthenticator + Send + Sync>,
+) -> Result<(Box<dyn Peer>, SessionDetails), Error> {
+    let mut proto = joiner::Joiner::new(realm, serializer.clone(), authenticator);
+
+    let hello_raw = proto
+        .send_hello()
+        .map_err(|e| Error::new(format!("failed to send hello: {e}")))?;
+
+    peer.write(hello_raw).await?;
+
+    loop {
+        let reply = peer
+            .read()
+            .await
+            .map_err(|e| Error::new(format!("failed to read: {e}")))?;
+
+        match proto.receive(reply) {
+            Ok(Some(to_send)) => peer.write(to_send).await?,
+            Ok(None) => {
+                if let Ok(Some(details)) = proto.session_details() {
+                    let details = SessionDetails::from_protocol(details);
+
+                    return Ok((peer, details));
+                }
+            }
+            Err(e) => return Err(Error::new(format!("failed to join: {e}"))),
+        }
+    }
+}
+
+pub struct RawSocketJoiner {
+    serializer: Box<dyn SerializerSpec>,
+    authenticator: Box<dyn ClientAuthenticator + Send + Sync>,
+}
+
+impl Default for RawSocketJoiner {
+    fn default() -> Self {
+        Self::new(
+            Box::new(JSONSerializerSpec {}),
+            Box::new(AnonymousAuthenticator::default()),
+        )
+    }
+}
+
+impl RawSocketJoiner {
+    pub fn new(serializer: Box<dyn SerializerSpec>, authenticator: Box<dyn ClientAuthenticator + Send + Sync>) -> Self {
+        Self {
+            serializer,
+            authenticator,
+        }
+    }
+
+    pub async fn join(&self, uri: &str, realm: &str) -> Result<(Box<dyn Peer>, SessionDetails), Error> {
+        let peer = connect_rawsocket(uri, self.serializer.clone())
+            .map_err(|e| Error::new(format!("failed to connect: {e}")))
+            .await?;
+
+        join(peer, realm, self.serializer.serializer(), self.authenticator.clone()).await
+    }
+}
