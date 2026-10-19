@@ -8,7 +8,8 @@ description = "Async and blocking WAMP clients, routers, and transports"
 readme = "README.md"
 
 [features]
-default = ["async"]
+default = ["async", "sync"]
+sync = ["mio", "async"]
 async = ["tokio", "tokio-tungstenite", "futures-util", "async-trait"]
 
 [dependencies]
@@ -17,11 +18,19 @@ wampproto = { version = "0.1.0", path = "../wampproto" }
 tungstenite = {  version = "0.27.0", features = ["rustls-tls-native-roots"] }
 url = { version = "2.5.4" }
 
+# sync websocket
+mio = { version = "1.0.4", optional = true }
+
 # async websocket
 tokio = { version = "1", features = ["full"], optional = true }
 tokio-tungstenite = { version = "0.27.0", features = ["rustls-tls-native-roots"], optional = true }
 futures-util = { version = "0.3.31", optional = true }
 async-trait = { version = "0.1.88", optional = true }
+
+[[example]]
+name = "sync_example"
+path = "examples/sync/main.rs"
+required-features = ["sync"]
 
 [[example]]
 name = "async_example"

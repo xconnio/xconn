@@ -1,0 +1,68 @@
+use crate::common::types::{CBORSerializerSpec, Error, JSONSerializerSpec, SerializerSpec};
+use crate::sync::session::Session;
+
+use wampproto::authenticators::anonymous::AnonymousAuthenticator;
+use wampproto::authenticators::authenticator::ClientAuthenticator;
+use wampproto::authenticators::cryptosign::CryptoSignAuthenticator;
+use wampproto::authenticators::ticket::TicketAuthenticator;
+use wampproto::authenticators::wampcra::WAMPCRAAuthenticator;
+
+pub struct Client {
+    serializer: Box<dyn SerializerSpec>,
+    authenticator: Box<dyn ClientAuthenticator + Send + Sync>,
+}
+
+impl Client {
+    pub fn new(serializer: Box<dyn SerializerSpec>, authenticator: Box<dyn ClientAuthenticator + Send + Sync>) -> Self {
+        Self {
+            serializer,
+            authenticator,
+        }
+    }
+
+    pub fn connect(self, uri: &str, realm: &str) -> Result<Session, Error> {
+        super::session::block_on(
+            crate::async_::client::Client::new(self.serializer, self.authenticator).connect(uri, realm),
+        )
+        .map(Session::from_async)
+    }
+}
+
+impl Default for Client {
+    fn default() -> Self {
+        Self {
+            serializer: Box::new(JSONSerializerSpec {}),
+            authenticator: Box::new(AnonymousAuthenticator::new("", Default::default())),
+        }
+    }
+}
+
+pub fn connect_anonymous(uri: &str, realm: &str) -> Result<Session, Error> {
+    let client = Client::default();
+    client.connect(uri, realm)
+}
+
+pub fn connect_ticket(uri: &str, realm: &str, authid: &str, ticket: &str) -> Result<Session, Error> {
+    let serializer = Box::new(CBORSerializerSpec {});
+    let authenticator = Box::new(TicketAuthenticator::new(authid, ticket, Default::default()));
+
+    let client = Client::new(serializer, authenticator);
+    client.connect(uri, realm)
+}
+
+pub fn connect_wampcra(uri: &str, realm: &str, authid: &str, secret: &str) -> Result<Session, Error> {
+    let serializer = Box::new(CBORSerializerSpec {});
+    let authenticator = Box::new(WAMPCRAAuthenticator::new(authid, secret, Default::default()));
+
+    let client = Client::new(serializer, authenticator);
+    client.connect(uri, realm)
+}
+
+pub fn connect_cryptosign(uri: &str, realm: &str, authid: &str, private_key_hex: &str) -> Result<Session, Error> {
+    let serializer = Box::new(CBORSerializerSpec {});
+    let authenticator = CryptoSignAuthenticator::try_new(authid, private_key_hex, Default::default())
+        .map_err(|e| Error::new(e.to_string()))?;
+
+    let client = Client::new(serializer, Box::new(authenticator));
+    client.connect(uri, realm)
+}

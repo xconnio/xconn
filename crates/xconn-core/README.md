@@ -1,8 +1,8 @@
 # XConn Core for Rust
 
-Async WAMP clients and routers using the sans-I/O `wampproto` engine. Network
-I/O and execution live here; protocol state and serialization remain in
-`wampproto`.
+Async and blocking WAMP clients and routers using the sans-I/O `wampproto`
+engine. Network I/O and execution live here; protocol state and serialization
+remain in `wampproto`.
 
 ## Client
 
@@ -41,13 +41,15 @@ router.close();
 # }
 ```
 
-Events, invocations, and RPC results share the `Payload` parsing helpers.
+The `sync` module exposes blocking APIs backed by the same runtime. Events,
+invocations, and RPC results share the `Payload` parsing helpers.
 
 ## Features
 
 | Feature | Purpose |
 | --- | --- |
 | `async` | Async client, router, WebSocket and RawSocket transports |
+| `sync` | Blocking client and router adapters; enabled by default with `async` |
 
 `stream()` starts an owned progressive RPC call. Progressive input and results
 are configured independently with `StreamOptions`. These RPCs are distinct
