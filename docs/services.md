@@ -1,6 +1,7 @@
 # Reusable services and application ownership
 
-Enable `xconn-core`'s optional `services` feature to use RPC bridging. The separate `crypto` feature
+Enable `xconn-core`'s optional `services` feature to use RPC bridging and
+attachment supervision. The separate `crypto` feature
 re-exports portable packet encryption. Ordinary WAMP clients and routers do not
 need either feature.
 
@@ -8,6 +9,7 @@ need either feature.
 | --- | --- |
 | WAMP protocol, clients, routers, transport connections and TLS | XConn Core |
 | RPC forwarding, cancellation and owned caller-session cleanup | XConn Core |
+| Attachment retry/backoff and detachment supervision | XConn Core |
 | Packet encryption and key-agreement primitives | XConn Core |
 | Enrollment protocol and credential issuance/revocation | Application or service provider |
 | Credential storage, machine identifiers, roles and permissions | Application |
@@ -34,6 +36,17 @@ A forwarded progressive call remains correlated until its source invocation
 finishes writing the final reply or is interrupted. Trailing input chunks cannot
 reopen an already-completed backend invocation. Tests cover this race, independent
 input/results options, and cancellation of the backend handler.
+
+## Attachment lifecycle
+
+`async_::services::attachment::supervise` runs application-provided attachment
+cycles with bounded exponential retry backoff. A disconnected established
+attachment resets backoff. A detached outcome returns control to the application
+so it can apply enrollment and credential policy.
+
+Dropping the supervisor future cancels its current cycle or retry wait. A cycle
+must own and release its resources when cancelled. The supervisor does not issue
+credentials or prescribe an enrollment RPC or storage format.
 
 ## Packet encryption
 

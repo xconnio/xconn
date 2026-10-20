@@ -3,7 +3,8 @@
 Reusable connectivity technology implemented in Rust, with language bindings.
 
 The workspace contains the sans-I/O WAMP engine and its Rust networking runtime.
-Optional services provide RPC bridging. Language bindings will follow in separate milestones.
+Optional services provide RPC bridging and attachment
+supervision. Language bindings will follow in separate milestones.
 
 ## Workspace
 
