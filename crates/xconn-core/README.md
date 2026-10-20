@@ -50,6 +50,7 @@ invocations, and RPC results share the `Payload` parsing helpers.
 | --- | --- |
 | `async` | Async client, router, WebSocket and RawSocket transports |
 | `sync` | Blocking client and router adapters; enabled by default with `async` |
+| `router` | Configurable `xconn-router` executable, including TLS listeners |
 | `quic` | QUIC connections and multiplexed byte streams |
 | `webtransport` | WebTransport connections and multiplexed byte streams |
 
@@ -57,6 +58,17 @@ invocations, and RPC results share the `Payload` parsing helpers.
 are configured independently with `StreamOptions`. These RPCs are distinct
 from transport byte streams. Close unfinished calls to cancel remote work.
 See the workspace guide at `docs/streaming.md` for ownership and buffering rules.
+
+## Router executable
+
+```sh
+cargo run -p xconn-core --features router --bin xconn-router -- init
+cargo run -p xconn-core --features router --bin xconn-router -- check
+cargo run -p xconn-core --features router --bin xconn-router -- start
+```
+
+`init` creates `.nxt/config.yaml` without overwriting an existing file. Pass
+`--config-file` to use another configuration file.
 
 ## Verification
 

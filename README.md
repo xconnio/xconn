@@ -8,7 +8,7 @@ Reusable services, WebRTC, and language bindings will follow in separate milesto
 ## Workspace
 
 - [`crates/xconn-core`](crates/xconn-core): async and blocking clients, routers,
-  and transport connections.
+  transport connections, and the optional router executable.
 
 - [`crates/wampproto`](crates/wampproto): protocol messages, codecs,
   authentication, client joining, router acceptance, broker, and dealer.
@@ -25,8 +25,7 @@ cargo test --locked --workspace --all-features
 ```
 
 CI runs these checks on Linux, macOS, and Windows, plus async-only, blocking,
-and protocol-only
-builds. Go is not required for the normal Rust tests.
+and protocol-only builds. Go is not required for the normal Rust tests.
 
 [Progressive RPC APIs](docs/streaming.md) and the
 [WebTransport Retry limitation](docs/webtransport-retry.md) describe runtime behavior.

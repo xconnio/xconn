@@ -28,6 +28,7 @@ jobs:
       - run: cargo check --locked -p xconn-core --no-default-features
       - run: cargo check --locked -p xconn-core --no-default-features --features async
       - run: cargo check --locked -p xconn-core --no-default-features --features sync
+      - run: cargo check --locked -p xconn-core --no-default-features --features router --bin xconn-router
       - run: cargo package --locked -p wampproto
       - run: cargo doc --locked --workspace --no-deps
         env:
