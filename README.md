@@ -7,6 +7,9 @@ Reusable services, WebRTC, and language bindings will follow in separate milesto
 
 ## Workspace
 
+- [`crates/xconn-crypto`](crates/xconn-crypto): portable packet encryption and
+  key agreement for native and browser WASM consumers.
+
 - [`crates/xconn-core`](crates/xconn-core): async and blocking clients, routers,
   transport connections, and the optional router executable.
 

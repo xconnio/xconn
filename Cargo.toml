@@ -2,6 +2,7 @@
 members = [
     "crates/wampproto",
     "crates/xconn-core",
+    "crates/xconn-crypto",
 ]
 resolver = "3"
 

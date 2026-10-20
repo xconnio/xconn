@@ -17,3 +17,6 @@ pub use common::types::*;
 // Keep std::result::Result unambiguous inside the runtime.
 pub(crate) use common::types::Result as RpcResult;
 pub use wampproto;
+
+#[cfg(feature = "crypto")]
+pub use xconn_crypto as crypto;

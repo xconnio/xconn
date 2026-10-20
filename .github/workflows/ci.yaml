@@ -26,6 +26,7 @@ jobs:
       - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --locked --workspace --all-features
       - run: cargo check --locked -p xconn-core --no-default-features
+      - run: cargo check --locked -p xconn-core --no-default-features --features crypto
       - run: cargo check --locked -p xconn-core --no-default-features --features async
       - run: cargo check --locked -p xconn-core --no-default-features --features sync
       - run: cargo check --locked -p xconn-core --no-default-features --features router --bin xconn-router
@@ -33,3 +34,14 @@ jobs:
       - run: cargo doc --locked --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+
+  wasm-crypto:
+    name: Browser-compatible packet encryption
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - run: cargo check --locked -p xconn-crypto --target wasm32-unknown-unknown
