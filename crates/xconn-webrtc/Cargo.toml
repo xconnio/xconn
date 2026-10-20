@@ -4,11 +4,23 @@ version = "0.1.0"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Reusable WebRTC data channels"
+description = "Reusable WebRTC data channels with optional WAMP signaling and sessions"
 readme = "README.md"
 
+[features]
+default = ["wamp"]
+wamp = ["dep:xconn-core"]
+
 [dependencies]
+xconn-core = { version = "0.1.0", path = "../xconn-core", default-features = false, features = ["async"], optional = true }
 webrtc = "0.14"
 tokio = { version = "1", features = ["full"] }
 bytes = "1"
+async-trait = "0.1"
 serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+
+[[example]]
+name = "wamp"
+required-features = ["wamp"]

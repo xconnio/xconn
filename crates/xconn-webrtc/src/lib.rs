@@ -1,4 +1,6 @@
-//! Reusable WebRTC data transport.
+//! Reusable WebRTC data transport. WAMP integration is an optional layer.
 pub mod transport;
 
+#[cfg(feature = "wamp")]
+pub mod wamp;
 pub use transport::*;

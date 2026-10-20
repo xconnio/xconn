@@ -7,8 +7,8 @@ Reusable services and language bindings will follow in separate milestones.
 
 ## Workspace
 
-- [`crates/xconn-webrtc`](crates/xconn-webrtc): reusable WebRTC data channels
-  and trickle ICE.
+- [`crates/xconn-webrtc`](crates/xconn-webrtc): reusable WebRTC data channels,
+  trickle ICE, timeouts, and optional WAMP signaling and sessions.
 
 - [`crates/xconn-crypto`](crates/xconn-crypto): portable packet encryption and
   key agreement for native and browser WASM consumers.

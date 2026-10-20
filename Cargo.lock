@@ -3187,10 +3187,14 @@ dependencies = [
 name = "xconn-webrtc"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "bytes",
  "serde",
+ "serde_json",
  "tokio",
+ "uuid",
  "webrtc",
+ "xconn-core",
 ]
 
 [[package]]

@@ -25,6 +25,7 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --locked --workspace --all-features
+      - run: cargo check --locked -p xconn-webrtc --no-default-features
       - run: cargo check --locked -p xconn-core --no-default-features
       - run: cargo check --locked -p xconn-core --no-default-features --features crypto
       - run: cargo check --locked -p xconn-core --no-default-features --features async
