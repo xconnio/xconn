@@ -12,6 +12,9 @@ default = ["async", "sync"]
 sync = ["mio", "async"]
 async = ["tokio", "tokio-tungstenite", "futures-util", "async-trait"]
 
+quic = ["async", "dep:quinn", "dep:rcgen"]
+webtransport = ["async", "dep:webtrans-quion", "dep:rcgen"]
+
 [dependencies]
 # base dependencies
 wampproto = { version = "0.1.0", path = "../wampproto" }
@@ -27,6 +30,11 @@ tokio-tungstenite = { version = "0.27.0", features = ["rustls-tls-native-roots"]
 futures-util = { version = "0.3.31", optional = true }
 async-trait = { version = "0.1.88", optional = true }
 
+quinn = { version = "0.11", default-features = false, features = ["runtime-tokio", "rustls-ring"], optional = true }
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rcgen = { version = "0.13", optional = true }
+webtrans-quion = { version = "0.6", optional = true }
+
 [[example]]
 name = "sync_example"
 path = "examples/sync/main.rs"
@@ -39,6 +47,8 @@ required-features = ["async"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["test-util"] }
+rcgen = "0.13"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [[example]]
 name = "streaming_peer"

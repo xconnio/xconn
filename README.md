@@ -28,7 +28,8 @@ CI runs these checks on Linux, macOS, and Windows, plus async-only, blocking,
 and protocol-only
 builds. Go is not required for the normal Rust tests.
 
-[Progressive RPC APIs](docs/streaming.md) describe runtime behavior.
+[Progressive RPC APIs](docs/streaming.md) and the
+[WebTransport Retry limitation](docs/webtransport-retry.md) describe runtime behavior.
 
 ## License
 

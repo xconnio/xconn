@@ -50,6 +50,8 @@ invocations, and RPC results share the `Payload` parsing helpers.
 | --- | --- |
 | `async` | Async client, router, WebSocket and RawSocket transports |
 | `sync` | Blocking client and router adapters; enabled by default with `async` |
+| `quic` | QUIC connections and multiplexed byte streams |
+| `webtransport` | WebTransport connections and multiplexed byte streams |
 
 `stream()` starts an owned progressive RPC call. Progressive input and results
 are configured independently with `StreamOptions`. These RPCs are distinct
@@ -61,5 +63,11 @@ See the workspace guide at `docs/streaming.md` for ownership and buffering rules
 ```sh
 cargo test --locked -p xconn-core --all-features
 ```
+
+Tests requiring an external Go reference are explicitly ignored in the normal
+suite. They accept `XCONN_REFERENCE_GO_BIN` or `XCONN_GO_INTEROP_BIN`; Go reference
+build automation will arrive with the cross-language validation milestone.
+The manual WebTransport Retry test documents a known upstream backend issue;
+normal builds use the tested Retry-disabled configuration.
 
 MIT. Copyright XConnIO Ltd.

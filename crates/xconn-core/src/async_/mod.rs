@@ -11,6 +11,15 @@ pub use types::*;
 pub mod router;
 pub mod server;
 
+#[cfg(any(feature = "quic", feature = "webtransport"))]
+mod multiplex;
+
+#[cfg(feature = "quic")]
+pub mod quic;
+
+#[cfg(feature = "webtransport")]
+pub mod webtransport;
+
 pub mod management;
 
 pub mod call;

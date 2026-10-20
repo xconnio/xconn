@@ -2,7 +2,8 @@
 
 //! WAMP client and router runtime built on the sans-I/O `wampproto` engine.
 //!
-//! Async APIs live in [`async_`]; blocking APIs live in [`sync`].
+//! Async APIs live in [`async_`]; blocking APIs live in [`sync`]. Optional
+//! features enable QUIC and WebTransport transports.
 #[cfg(feature = "async")]
 pub mod async_;
 
