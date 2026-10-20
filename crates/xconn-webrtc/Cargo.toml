@@ -1,0 +1,14 @@
+[package]
+name = "xconn-webrtc"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Reusable WebRTC data channels"
+readme = "README.md"
+
+[dependencies]
+webrtc = "0.14"
+tokio = { version = "1", features = ["full"] }
+bytes = "1"
+serde = { version = "1", features = ["derive"] }
