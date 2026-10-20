@@ -25,3 +25,6 @@ pub mod management;
 pub mod call;
 mod ping;
 pub mod requests;
+
+#[cfg(feature = "services")]
+pub mod services;

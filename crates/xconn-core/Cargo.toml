@@ -8,6 +8,7 @@ description = "Async and blocking WAMP clients, routers, and transports"
 readme = "README.md"
 
 [features]
+services = ["async"]
 crypto = ["dep:xconn-crypto"]
 default = ["async", "sync"]
 sync = ["mio", "async"]

@@ -3,9 +3,12 @@
 Reusable connectivity technology implemented in Rust, with language bindings.
 
 The workspace contains the sans-I/O WAMP engine and its Rust networking runtime.
-Reusable services and language bindings will follow in separate milestones.
+Optional services provide RPC bridging. Language bindings will follow in separate milestones.
 
 ## Workspace
+
+- [`docs/services.md`](docs/services.md): service contracts, resource ownership,
+  and the boundary between reusable technology and application policy.
 
 - [`crates/xconn-webrtc`](crates/xconn-webrtc): reusable WebRTC data channels,
   trickle ICE, timeouts, and optional WAMP signaling and sessions.
