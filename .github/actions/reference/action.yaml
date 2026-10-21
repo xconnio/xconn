@@ -1,0 +1,33 @@
+name: Prepare independent Go reference
+description: Build pinned original implementations without Rust bindings
+outputs:
+  binary:
+    description: Path to the reference executable
+    value: ${{ steps.build.outputs.binary }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v6
+      with:
+        repository: xconnio/xconn-go
+        ref: 191a086e99b94bcfb50e2c8ee3667c9cd23015b4
+        path: target/reference-sources/xconn-go
+    - uses: actions/checkout@v6
+      with:
+        repository: xconnio/xconn-webrtc-go
+        ref: 68c1489ee71c51d06153832010d6b420a4a313c9
+        path: target/reference-sources/xconn-webrtc-go
+    - uses: actions/checkout@v6
+      with:
+        repository: xconnio/wampproto-go
+        ref: ecb54c6c2318d7d3184f77ca95cf5f49c779edae
+        path: target/reference-sources/wampproto-go
+    - uses: actions/setup-go@v6
+      with:
+        go-version: '1.26.8'
+        cache: false
+    - id: build
+      shell: bash
+      run: |
+        python3 tests/go-interop/prepare_reference.py "$RUNNER_TEMP/reference" --sources target/reference-sources
+        echo "binary=$RUNNER_TEMP/reference/xconn-go-reference" >> "$GITHUB_OUTPUT"
