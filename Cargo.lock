@@ -3143,6 +3143,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "xconn-binding-runtime"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "base64 0.22.1",
+ "futures-util",
+ "hex",
+ "tokio",
+ "xconn-core",
+]
+
+[[package]]
 name = "xconn-core"
 version = "0.1.0"
 dependencies = [

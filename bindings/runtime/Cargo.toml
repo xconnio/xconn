@@ -1,0 +1,17 @@
+[package]
+name = "xconn-binding-runtime"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+[features]
+default = []
+
+[dependencies]
+xconn-core = { version = "0.1.0", path = "../../crates/xconn-core", default-features = false, features = ["async", "services", "crypto"] }
+tokio = { version = "1", features = ["full"] }
+futures-util = "0.3"
+async-trait = "0.1.88"
+hex = "0.4"
+base64 = "0.22"

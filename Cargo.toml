@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "bindings/runtime",
     "crates/wampproto",
     "crates/xconn-core",
     "crates/xconn-crypto",
