@@ -1,7 +1,7 @@
 # Reusable services and application ownership
 
-Enable `xconn-core`'s optional `services` feature to use RPC bridging and
-attachment supervision. The separate `crypto` feature
+Enable `xconn-core`'s optional `services` feature to use RPC bridging,
+attachment supervision, and endpoint discovery. The separate `crypto` feature
 re-exports portable packet encryption. Ordinary WAMP clients and routers do not
 need either feature.
 
@@ -10,6 +10,7 @@ need either feature.
 | WAMP protocol, clients, routers, transport connections and TLS | XConn Core |
 | RPC forwarding, cancellation and owned caller-session cleanup | XConn Core |
 | Attachment retry/backoff and detachment supervision | XConn Core |
+| Endpoint directory, validation, ownership and presence cleanup | XConn Core |
 | Packet encryption and key-agreement primitives | XConn Core |
 | Enrollment protocol and credential issuance/revocation | Application or service provider |
 | Credential storage, machine identifiers, roles and permissions | Application |
@@ -47,6 +48,46 @@ so it can apply enrollment and credential policy.
 Dropping the supervisor future cancels its current cycle or retry wait. A cycle
 must own and release its resources when cancelled. The supervisor does not issue
 credentials or prescribe an enrollment RPC or storage format.
+
+## Endpoint discovery
+
+`DiscoveryService::start(session, prefix, policy)` hosts an in-memory directory
+over ordinary WAMP RPC. It requires an explicit authorization callback. Enable
+caller disclosure and session meta events on the hosting realm; realm permissions
+remain the application's responsibility.
+
+An endpoint is a service, application, or device. A record contains:
+
+- `id`: nonempty string.
+- `addresses`: array of connection hints.
+- `capabilities`: string array.
+- `metadata`: dictionary visible to authorized readers; omit credentials.
+
+| Procedure suffix | Positional arguments | First result argument |
+| --- | --- | --- |
+| `.advertise` | Endpoint record | Normalized endpoint record |
+| `.get` | Endpoint ID | Endpoint record |
+| `.list` | None | Endpoints sorted by ID |
+| `.withdraw` | Endpoint ID | Removed endpoint record |
+
+Every operation applies host policy, including filtering list results per caller.
+Another authid cannot overwrite or withdraw an existing record. Advertisements
+belong to the announcing session and disappear when it leaves. Refreshing a
+record from a new session of the same identity transfers its session ownership.
+
+`DiscoveryClient` provides the Rust client API. Discovery does not authenticate
+an advertised address or connect automatically. The directory currently supports
+queries, not pushed availability subscriptions or persistent storage.
+
+Run the example host:
+
+```sh
+cargo run -p xconn-core --features services --example discovery
+```
+
+It prints a WebSocket URI and serves realm `example` with prefix `example.peers`.
+Its example policy permits public discovery/advertising; production hosts supply
+their own authorization policy.
 
 ## Packet encryption
 

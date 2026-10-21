@@ -4,7 +4,10 @@ use xconn_core::_SerializerSpec as _;
 use std::{collections::HashMap, sync::Arc, time::Duration};
 use xconn_core::async_::{
     router::{RealmConfig, Router},
-    services::bridge::{Bridge, BridgeRoute},
+    services::{
+        bridge::{Bridge, BridgeRoute},
+        discovery::{DiscoveryClient, DiscoveryService, Endpoint},
+    },
     types::RegisterRequest,
 };
 use xconn_core::{CBORSerializerSpec, CallRequest, JSONSerializerSpec, Result as RpcResult, Value};
@@ -80,6 +83,61 @@ async fn bridge_preserves_errors_payloads_and_releases_registrations() {
 }
 
 #[tokio::test]
+async fn directory_policy_is_application_supplied_and_empty_prefix_is_rejected() {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        let router = Router::new();
+        router
+            .add_realm(
+                "lab",
+                RealmConfig {
+                    disclose_caller: true,
+                    meta_api: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        let host = router
+            .connect_internal("lab", "registry", "trusted", Box::new(JSONSerializerSpec))
+            .await
+            .unwrap();
+        let session = router
+            .connect_internal("lab", "alice", "trusted", Box::new(JSONSerializerSpec))
+            .await
+            .unwrap();
+        assert!(DiscoveryClient::new(session.clone(), "").is_err());
+        let service = DiscoveryService::start(
+            host,
+            "lab.registry",
+            Arc::new(|caller, _, endpoint| endpoint.metadata.get("owner") == Some(&Value::Str(caller.authid.clone()))),
+        )
+        .await
+        .unwrap();
+        let client = DiscoveryClient::new(session, "lab.registry").unwrap();
+        let endpoint = Endpoint {
+            id: "sensor".into(),
+            addresses: vec!["quic://localhost:443".into()],
+            capabilities: vec!["telemetry".into()],
+            metadata: HashMap::from([("owner".into(), Value::Str("alice".into()))]),
+        };
+        client.request("advertise", vec![endpoint.to_value()]).await.unwrap();
+        assert_eq!(
+            client.request("get", vec![Value::Str("sensor".into())]).await.unwrap(),
+            endpoint.to_value()
+        );
+        assert!(
+            client
+                .request("advertise", vec![Value::Dict(HashMap::new())])
+                .await
+                .is_err()
+        );
+        service.close().await.unwrap();
+        router.close();
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
 async fn a_partial_bridge_start_rolls_back_only_its_own_registrations() {
     tokio::time::timeout(Duration::from_secs(5), async {
         let router = Router::new();
@@ -127,6 +185,29 @@ async fn a_partial_bridge_start_rolls_back_only_its_own_registrations() {
     })
     .await
     .unwrap();
+}
+
+#[tokio::test]
+async fn malformed_discovery_responses_do_not_cross_the_native_boundary() {
+    let router = Router::new();
+    router.add_realm("lab", RealmConfig::default()).unwrap();
+    let host = router
+        .connect_internal("lab", "host", "trusted", Box::new(JSONSerializerSpec))
+        .await
+        .unwrap();
+    let session = router
+        .connect_internal("lab", "client", "trusted", Box::new(JSONSerializerSpec))
+        .await
+        .unwrap();
+    host.execute_register(RegisterRequest::new("broken.list", |_| async {
+        RpcResult::arg("not an endpoint list")
+    }))
+    .await
+    .unwrap();
+    let client = DiscoveryClient::new(session, "broken").unwrap();
+    let error = client.request("list", Vec::new()).await.unwrap_err();
+    assert!(error.to_string().contains("invalid endpoint list"));
+    router.close();
 }
 
 #[tokio::test]
