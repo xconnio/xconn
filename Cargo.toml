@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "bindings/ffi",
     "bindings/runtime",
     "crates/wampproto",
     "crates/xconn-core",
@@ -12,3 +13,10 @@ resolver = "3"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/xconnio/xconn-core"
+
+# Size-focused builds retain unwinding for the native FFI panic boundary.
+[profile.native]
+inherits = "release"
+opt-level = "z"
+lto = "thin"
+codegen-units = 1
