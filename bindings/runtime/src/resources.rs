@@ -1,4 +1,6 @@
 //! Resource handles, transfer ownership and compensating cleanup.
+#[cfg(feature = "webrtc")]
+use crate::webrtc;
 use crate::{
     Result, Value,
     callbacks::ForeignCallbacks,
@@ -45,6 +47,8 @@ pub(super) enum Resource {
     Quic(crate::quic::Resource),
     #[cfg(feature = "webtransport")]
     WebTransport(crate::webtransport::Resource),
+    #[cfg(feature = "webrtc")]
+    WebRTC(webrtc::Resource),
     Router {
         router: Router,
         _management: Option<Box<xconn_core::async_::management::Management>>,
@@ -78,6 +82,8 @@ impl Resource {
             Self::Quic(resource) => resource.close(),
             #[cfg(feature = "webtransport")]
             Self::WebTransport(resource) => resource.close(),
+            #[cfg(feature = "webrtc")]
+            Self::WebRTC(resource) => resource.close(),
             Self::Router { router, .. } => router.close(),
             Self::Session(s) => {
                 if let Some(heartbeat) = s.heartbeat.lock().unwrap().take() {
@@ -197,6 +203,8 @@ impl ForeignSession {
 }
 
 pub(super) enum Cleanup {
+    #[cfg(feature = "webrtc")]
+    Handles(Vec<u64>),
     Handle(u64),
     Registration(Arc<ForeignSession>, i64),
     Subscription(Arc<ForeignSession>, u64),
@@ -222,6 +230,26 @@ impl Output {
         }
     }
 
+    #[cfg(feature = "webrtc")]
+    pub(super) fn with_resource(mut self, key: &str, resource: Resource) -> Self {
+        let handle = id();
+        resources().lock().unwrap().insert(handle, Arc::new(resource));
+
+        if let Value::Dict(fields) = &mut self.value {
+            fields.insert(key.into(), Value::UInt(handle));
+        }
+
+        let mut handles = match self.owned.take() {
+            Some(Cleanup::Handle(handle)) => vec![handle],
+            Some(Cleanup::Handles(handles)) => handles,
+            None => Vec::new(),
+            _ => unreachable!("only resource outputs can acquire resources"),
+        };
+        handles.push(handle);
+        self.owned = Some(Cleanup::Handles(handles));
+        self
+    }
+
     pub(super) fn take(mut self) -> Value {
         self.owned = None;
         std::mem::replace(&mut self.value, Value::Null)
@@ -233,6 +261,12 @@ impl Drop for Output {
         if let Some(cleanup) = self.owned.take() {
             match cleanup {
                 Cleanup::Handle(handle) => close(handle),
+                #[cfg(feature = "webrtc")]
+                Cleanup::Handles(handles) => {
+                    for handle in handles {
+                        close(handle);
+                    }
+                }
                 Cleanup::Registration(s, id) => {
                     runtime().spawn(async move {
                         let _ = s.session.unregister(id).await;

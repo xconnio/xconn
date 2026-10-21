@@ -3155,6 +3155,7 @@ dependencies = [
  "rustls-native-certs",
  "tokio",
  "xconn-core",
+ "xconn-webrtc",
 ]
 
 [[package]]

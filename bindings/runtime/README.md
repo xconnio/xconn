@@ -14,6 +14,7 @@ signaling and transport remain in `xconn-webrtc`.
 | `router.rs` | Router realms, authorization policy and listeners |
 | `values.rs` | Request-field conversion and result/error representations |
 | `protocol/` | Internal adapters over the shared protocol implementation |
+| `webrtc.rs` | Optional WebRTC resource adapters |
 
 Only the existing crate entry points are public; the new modules are internal.
 An `Output` owns newly created resources until its result is claimed. Cancelling

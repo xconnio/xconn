@@ -13,6 +13,8 @@ mod values;
 #[cfg(feature = "webtransport")]
 mod webtransport;
 
+#[cfg(feature = "webrtc")]
+mod webrtc;
 pub use jobs::{cancel, execute, ready, submit, submit_with_completion, take};
 pub use resources::close;
 use std::sync::{
@@ -43,6 +45,11 @@ fn id() -> u64 {
 async fn dispatch(request_value: Value) -> Result<resources::Output> {
     let f = values::dictionary(&request_value)?;
     let method = values::string_field(&f, "method")?;
+
+    #[cfg(feature = "webrtc")]
+    if method.starts_with("webrtc_") {
+        return webrtc::dispatch(&method, f).await;
+    }
 
     #[cfg(feature = "webtransport")]
     if method.starts_with("webtransport_") {
