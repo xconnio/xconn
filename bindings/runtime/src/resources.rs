@@ -41,6 +41,10 @@ pub(super) fn get_base(handle: u64) -> Result<Arc<ForeignBase>> {
 pub(super) enum Resource {
     Discovery(Arc<xconn_core::async_::services::discovery::DiscoveryService>),
     Bridge(Arc<xconn_core::async_::services::bridge::Bridge>),
+    #[cfg(feature = "quic")]
+    Quic(crate::quic::Resource),
+    #[cfg(feature = "webtransport")]
+    WebTransport(crate::webtransport::Resource),
     Router {
         router: Router,
         _management: Option<Box<xconn_core::async_::management::Management>>,
@@ -70,6 +74,10 @@ impl Resource {
                     let _ = bridge.close().await;
                 });
             }
+            #[cfg(feature = "quic")]
+            Self::Quic(resource) => resource.close(),
+            #[cfg(feature = "webtransport")]
+            Self::WebTransport(resource) => resource.close(),
             Self::Router { router, .. } => router.close(),
             Self::Session(s) => {
                 if let Some(heartbeat) = s.heartbeat.lock().unwrap().take() {

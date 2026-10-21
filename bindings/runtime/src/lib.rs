@@ -4,10 +4,14 @@ mod client;
 mod crypto;
 mod jobs;
 pub mod protocol;
+#[cfg(feature = "quic")]
+mod quic;
 mod resources;
 mod router;
 mod services;
 mod values;
+#[cfg(feature = "webtransport")]
+mod webtransport;
 
 pub use jobs::{cancel, execute, ready, submit, submit_with_completion, take};
 pub use resources::close;
@@ -39,6 +43,15 @@ fn id() -> u64 {
 async fn dispatch(request_value: Value) -> Result<resources::Output> {
     let f = values::dictionary(&request_value)?;
     let method = values::string_field(&f, "method")?;
+
+    #[cfg(feature = "webtransport")]
+    if method.starts_with("webtransport_") {
+        return webtransport::dispatch(&method, f).await;
+    }
+    #[cfg(feature = "quic")]
+    if method.starts_with("quic_") {
+        return quic::dispatch(&method, f).await;
+    }
 
     if method.starts_with("service_") {
         return services::dispatch(&method, f).await;
