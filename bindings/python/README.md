@@ -29,8 +29,8 @@ operations use fluent `call`/`register`/`subscribe`/`publish` builders with an
 explicit `execute()` terminal. Application callbacks, progress and custom
 transport/codec adapters remain available.
 
-Embedded router, server, `start_router` and in-memory router conveniences
-have been removed.
+`App`/`Component` helpers remain optional client composition APIs. Embedded router,
+server, `start_router` and in-memory router conveniences have been removed.
 
 Install the matching prebuilt ABI3 wheel with `python -m pip install /path/to/xconn_core-*.whl`.
 The wheel contains the native extension; users need no Rust toolchain or separate
