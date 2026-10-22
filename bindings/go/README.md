@@ -65,6 +65,13 @@ Native SDK artifacts support installation outside the workspace; public release
 publication remains pending. Unsupported exposed tuning options return errors.
 See [binding scope](../README.md).
 
+## WebRTC
+
+The [webrtc subpackage](webrtc/README.md) uses the same native library and Rust
+runtime for WAMP sessions and raw channels. Run the local example with
+`go -C bindings/go run ./examples/webrtc` from the workspace root after building
+`xconn-ffi`. No Pion dependency is required.
+
 Fluent request terminals are `Execute()` and, for calls with a context,
 `ExecuteContext(ctx)`. The former `Do()` / `DoContext(ctx)` names have been removed.
 
