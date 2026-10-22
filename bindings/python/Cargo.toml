@@ -1,0 +1,14 @@
+[package]
+name = "xconn-python"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+[lib]
+name = "xconn_native"
+crate-type = ["cdylib"]
+[dependencies]
+xconn-binding-runtime = { path = "../runtime" }
+pyo3 = { version = "0.28", features = ["abi3-py310"] }
+pyo3-async-runtimes = { version = "0.28", features = ["tokio-runtime"] }

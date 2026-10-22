@@ -1,0 +1,96 @@
+[build-system]
+requires = ["maturin>=1.12,<2"]
+build-backend = "maturin"
+[project]
+name = "xconn-core"
+version = "0.1.0"
+description = "Blocking and asyncio Python client APIs backed by the shared Rust XConn runtime"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [{ name = "Code Mistri", email = "mistri@xconn.io" }]
+license-files = ["LICENSE"]
+dependencies = []
+[tool.maturin]
+python-source = "python"
+module-name = "xconn_core._native"
+features = ["pyo3/extension-module"]
+
+[tool.ruff]
+# Exclude a variety of commonly ignored directories.
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".git-rewrite",
+    ".hg",
+    ".ipynb_checkpoints",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pyenv",
+    ".pytest_cache",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    ".vscode",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "site-packages",
+    "venv",
+]
+
+line-length = 120
+indent-width = 4
+
+target-version = "py310"
+
+[tool.ruff.lint]
+# Pyflakes (`F`), a subset of pycodestyle (`E`), import sorting (`I`), pyupgrade (`UP`) and bugbear (`B`).
+select = ["E4", "E7", "E9", "F", "E501", "I", "UP", "B"]
+ignore = []
+
+# Allow fix for all enabled rules (when `--fix`) is provided.
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+[tool.ruff.format]
+quote-style = "double"
+
+indent-style = "space"
+
+skip-magic-trailing-comma = false
+
+line-ending = "auto"
+
+# Enable auto-formatting of code examples in docstrings. Markdown,
+# reStructuredText code/literal blocks and doctests are all supported.
+#
+# This is currently disabled by default, but it is planned for this
+# to be opt-out in the future.
+docstring-code-format = false
+
+# Set the line length limit used when formatting code snippets in
+# docstrings.
+#
+# This only has an effect when the `docstring-code-format` setting is
+# enabled.
+docstring-code-line-length = "dynamic"
+
+[project.optional-dependencies]
+framework = ["pydantic", "pyyaml", "python-dotenv"]
+capnproto = ["wampproto-messages-capnproto @ git+https://github.com/xconnio/wampproto-messages-capnproto@main#subdirectory=python"]
+test = ["pytest", "pytest-asyncio", "ruff==0.17.1"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["tests"]

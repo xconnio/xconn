@@ -46,6 +46,7 @@ MIT. Copyright XConnIO Ltd.
 
 ## Language bindings
 
+- [Python](bindings/python): protocol, payload and crypto modules.
 - [Go](bindings/go): context-aware clients, routers, transports, and WebRTC.
 
 Go imports `github.com/xconnio/xconn-core/bindings/go` using package name `xconn`.
