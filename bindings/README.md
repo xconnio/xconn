@@ -5,7 +5,7 @@ routing, cryptography, and lifecycle management to the shared binding runtime.
 
 | Binding | Package | Supported APIs |
 | --- | --- | --- |
-| [Python](python) | `xconn-core` / `xconn_core` | Protocol, payload and crypto modules |
+| [Python](python) | `xconn-core` / `xconn_core` | Blocking and asyncio clients |
 | [Go](go) | `github.com/xconnio/xconn-core/bindings/go` | Client, router/server, WebRTC |
 
 `runtime` implements shared handle, job, and callback ownership. `ffi` exposes

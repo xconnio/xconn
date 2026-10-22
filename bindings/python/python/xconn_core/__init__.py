@@ -3,6 +3,10 @@
 from xconn_core.auth import AnonymousAuthenticator, CryptoSignAuthenticator, TicketAuthenticator, WAMPCRAAuthenticator
 from xconn_core.serializers import CBORSerializer, JSONSerializer, MsgPackSerializer
 
+from .async_client import AsyncClient, AsyncSession
+from .call import AsyncCall, Call
+from .client import Client, Session, connect_anonymous
+from .discovery import AsyncDiscovery, Discovery, Endpoint
 from .exception import ApplicationError
 from .payload import PayloadError
 from .types import Event, Invocation, Result
@@ -17,6 +21,12 @@ except ImportError:
 
 
 __all__ = [
+    "Endpoint",
+    "Discovery",
+    "AsyncDiscovery",
+    "Client",
+    "AsyncClient",
+    "AsyncSession",
     "AnonymousAuthenticator",
     "TicketAuthenticator",
     "WAMPCRAAuthenticator",
@@ -30,4 +40,8 @@ __all__ = [
     "Event",
     "Invocation",
     "Result",
+    "Call",
+    "AsyncCall",
+    "Session",
+    "connect_anonymous",
 ]
