@@ -46,7 +46,7 @@ MIT. Copyright XConnIO Ltd.
 
 ## Language bindings
 
-- [Go](bindings/go): context-aware clients and routers.
+- [Go](bindings/go): context-aware clients, routers, and transports.
 
 Go imports `github.com/xconnio/xconn-core/bindings/go` using package name `xconn`.
 Build the native SDK first; see [native installation](docs/native-install.md).

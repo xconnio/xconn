@@ -74,6 +74,99 @@ with explicit defaults and consistent numeric/binary conversion rules.
 Result construction and received values use one payload
 type for handler replies, progressive results and completed calls.
 
+## Initial QUIC transport API
+
+The default native SDK now includes QUIC. `Router.ListenQUIC(ctx, "127.0.0.1:0")`
+creates a listener with a generated localhost certificate.
+`ListenQUICWithCertificate(ctx, address, tls.Certificate)` instead accepts an
+application-supplied DER certificate chain and exportable private key. Pass its DER
+`Certificate` to `DialQUIC(ctx, listener.Address, "localhost", certificate)`;
+certificate and hostname verification remain enabled. Configure trust through a
+trusted channel rather than downloading a certificate from an untrusted endpoint.
+
+A `QUICConnection` opens WAMP sessions with `OpenSession(ctx, realm, client)` and
+raw streams with `OpenStream(ctx)`. `QUICListener.AcceptStream(ctx)` returns the
+stream and the identity authenticated by WAMP on that connection. Authenticate a
+WAMP session before sending raw data. Raw classification uses the existing Rust
+transport convention: the first byte must differ from the RawSocket magic byte
+`0x7f`; the receiver accepts a raw stream after its first data arrives.
+
+Streams implement `io.Reader` and `io.Writer`, context-aware reads/writes,
+`CloseWrite()`/`CloseWriteContext(ctx)`, and `Close()`. Individual bridge reads and
+writes are bounded to 1 MiB. Close resources explicitly. Closing the connection
+closes its sessions and streams; closing a session or stream leaves siblings
+open. Router closure also closes its QUIC listeners.
+
+`ConnectQUIC(ctx, address, realm, config)` and `ConnectWebTransport(ctx, url,
+realm, config)` retain the multiplexed-session convenience API. Their raw streams
+implement `net.Conn`, including real endpoint addresses and read/write deadlines.
+Updating a deadline preserves pending native I/O; clearing it permits new I/O.
+Closing a session leaves its independently owned connection open.
+
+Server `KeepAliveInterval` and `KeepAliveTimeout` configure native transport
+PING probes; peers that do not answer are disconnected. Network queue tuning,
+TLS client certificates and arbitrary TLS algorithm configuration remain
+unsupported. QUIC and WebTransport WAMP interoperability is tested in both
+directions against pinned original Go peers across all three codecs. QUIC raw
+byte echo is also tested against the original Go server.
+
+Cancellation of a write can leave a partial payload on the wire; applications
+must close that stream rather than retry the payload blindly.
+
+`AcceptConnection(ctx)` returns the connection and its first authenticated WAMP
+identity. The accepted handle can open reverse streams toward the client, which
+receives them with `QUICConnection.AcceptStream(ctx)`. `Wait(ctx)` observes
+transport disconnection, allowing relay connection maps to remove stale entries.
+Closing any connection handle closes the shared connection. Listener connection
+notifications use a bounded queue; consumers should drain it continuously.
+
+Rust listeners opt into these notifications with
+`enable_connection_notifications()` before clients connect. The Go bridge enables
+them automatically. Existing Rust listeners retain their previous behavior.
+The notification identity is the first authenticated session; raw stream identity
+continues to follow the existing transport's authentication watch. Authorization
+for multi-realm/multi-identity connection reuse needs review before cloud rollout.
+
+Raw WebRTC channels now preserve text/binary metadata through
+`ReadDataPacketContext` and `OnMessage`, including legacy classification packets.
+`SendText`, `BufferedAmount`, `SetBufferedAmountLowThreshold`,
+`OnBufferedAmountLow`, and `OnError` support DeskConn's channel adapter.
+Application low-buffer notifications are monitored by Rust only after a send
+crosses the configured threshold; idle channels do not poll. Internal bounded-send
+backpressure remains independent of the application's threshold. Channel failures
+and receive-queue overflow are retained for error callbacks; ordinary closure
+is not reported as a failure.
+
+WAMP WebRTC providers deliver raw application channels only after a WAMP session
+on the connection has authenticated. A failed initial join cannot expose a raw
+channel. An authenticated channel may outlive its initial WAMP session. The
+lower-level Rust `Connection` transport remains usable without WAMP.
+
+`DialQUICWithOptions` supports DNS names with staggered IPv4/IPv6 connection
+attempts and uses platform trust roots when no DER roots are supplied.
+`DialQUICWithTLS` supports Go certificate pools, verification time, hostname
+verification, explicit development verification settings, and certificate
+verification callbacks. Custom Go trust callbacks run before a connection is
+returned or WAMP application data is sent. Connection-state callbacks receive
+certificate chains, verified chains, SNI, ALPN and TLS version; other Go TLS
+connection-state fields are not synthesized. TLS client certificates are not
+supported. Default dialing keeps TLS verification entirely in Rust.
+
+### Native WebTransport
+
+`DialWebTransport(ctx, "https://host:port/wamp", tlsConfig)` opens an HTTP/3
+connection backed by Rust. `OpenSession` joins independent WAMP sessions;
+`OpenStream` and `AcceptStream` carry application bytes alongside them.
+`Server.ListenWebTransport(ctx, address, path, certificate)` serves authenticated
+WAMP sessions and exposes incoming raw streams with their WAMP identity.
+
+TLS trust uses Go certificate pools and verification callbacks before the
+connection is returned or WAMP data is sent. Rust verifies handshake signatures.
+The listener rejects CONNECT requests for other paths. Streams reuse the bounded
+native QUIC stream adapter, including context cancellation and `CloseWrite`.
+The native SDK's default features include WebTransport; custom SDK builds must
+enable the `webtransport` feature.
+
 ## Static Linux linking
 
 The native crate also produces `libxconn_ffi.a`. To stage a static SDK:

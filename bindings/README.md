@@ -5,7 +5,7 @@ routing, cryptography, and lifecycle management to the shared binding runtime.
 
 | Binding | Package | Supported APIs |
 | --- | --- | --- |
-| [Go](go) | `github.com/xconnio/xconn-core/bindings/go` | Client, router/server |
+| [Go](go) | `github.com/xconnio/xconn-core/bindings/go` | Client, router/server, QUIC, WebTransport |
 
 `runtime` implements shared handle, job, and callback ownership. `ffi` exposes
 owned buffers through a C ABI. Build the [native SDK](../docs/native-install.md)
