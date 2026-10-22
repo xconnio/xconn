@@ -189,6 +189,14 @@ changes to external native archives in its build cache (use `go build -a`). Stat
 Linux on the build host architecture. Certificates and any glibc runtime modules
 remain system resources; this is not a hermetic cross-distribution build.
 
+## Reusable services
+
+Generic `Session.Bridge`, `RunAttachment`, and `Session.Discovery` delegate to
+Rust services. Directory hosts use `Session.ServeDiscovery` with an explicit
+authorization callback. Portable packet encryption lives in the `crypto` subpackage.
+See [ownership and service contracts](../../docs/services.md). DeskConn orchestration
+previously under `bindings/go/xconn` now lives in DeskConn’s `internal/connectivity`.
+
 ## Progressive RPC
 
 Use `Stream()` or `StreamContext(ctx)` to receive owned progressive results.
