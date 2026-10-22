@@ -4,7 +4,7 @@ Reusable connectivity technology implemented in Rust, with language bindings.
 
 The workspace contains the sans-I/O WAMP engine and its Rust networking runtime.
 Optional services provide RPC bridging, endpoint discovery, and attachment
-supervision. Language bindings will follow in separate milestones.
+supervision. Language bindings live under [`bindings`](bindings).
 
 ## Workspace
 
@@ -43,3 +43,10 @@ and protocol-only builds. Go is not required for the normal Rust tests.
 ## License
 
 MIT. Copyright XConnIO Ltd.
+
+## Language bindings
+
+- [Go](bindings/go): context-aware clients and routers.
+
+Go imports `github.com/xconnio/xconn-core/bindings/go` using package name `xconn`.
+Build the native SDK first; see [native installation](docs/native-install.md).

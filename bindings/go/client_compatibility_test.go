@@ -1,0 +1,447 @@
+// Original client scenarios adapted to the shared runtime and unified Result API.
+package xconn_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"math/rand/v2"
+	"os"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/xconnio/xconn-core/bindings/go"
+	"github.com/xconnio/xconn-core/bindings/go/serializers"
+	"github.com/xconnio/xconn-core/bindings/go/util"
+)
+
+const (
+	realmName   = "realm"
+	trustedRole = "trusted"
+)
+
+func forEachSerializer(fn func(name string, spec xconn.SerializerSpec)) {
+	serializersToTest := []struct {
+		name string
+		spec xconn.SerializerSpec
+	}{
+		{"json", xconn.JSONSerializerSpec},
+		{"cbor", xconn.CBORSerializerSpec},
+		{"msgpack", xconn.MsgPackSerializerSpec},
+	}
+
+	for _, s := range serializersToTest {
+		fn(s.name, s.spec)
+	}
+}
+
+func connectInMemory(t *testing.T, router *xconn.Router, serializer serializers.Serializer) *xconn.Session {
+	authID := fmt.Sprintf("%012x", rand.Uint64())[:12]
+	authRole := trustedRole
+
+	base, err := xconn.ConnectInMemoryBase(router, realmName, authID, authRole, serializer, 0)
+	require.NoError(t, err)
+
+	session, err := xconn.NewSession(base, base.Serializer())
+	require.NoError(t, err)
+
+	return session
+}
+
+func connectedLocalSessions(t *testing.T, serializer serializers.Serializer) (*xconn.Session, *xconn.Session) {
+	router, err := xconn.NewRouter(nil)
+	require.NoError(t, err)
+	err = router.AddRealm(realmName, xconn.DefaultRealmConfig())
+	require.NoError(t, err)
+
+	callee := connectInMemory(t, router, serializer)
+
+	caller := connectInMemory(t, router, serializer)
+	return callee, caller
+}
+
+func TestCall(t *testing.T) {
+	forEachSerializer(func(name string, spec xconn.SerializerSpec) {
+		t.Run("With"+name, func(t *testing.T) {
+			session, _ := connectedLocalSessions(t, spec.Serializer())
+			t.Run("CallNoProc", func(t *testing.T) {
+				callResponse := session.Call("foo.bar").Execute()
+				require.Error(t, callResponse.Err)
+
+				var er *xconn.Error
+				errors.As(callResponse.Err, &er)
+				require.Equal(t, "wamp.error.no_such_procedure", er.URI)
+			})
+		})
+	})
+}
+
+func TestRegisterCall(t *testing.T) {
+	forEachSerializer(func(name string, spec xconn.SerializerSpec) {
+		t.Run("With"+name, func(t *testing.T) {
+			callee, caller := connectedLocalSessions(t, spec.Serializer())
+			regResp := callee.Register("io.xconn.test",
+				func(ctx context.Context, invocation *xconn.Invocation) *xconn.Result {
+					return xconn.NewResult("hello")
+				}).Execute()
+			require.NoError(t, regResp.Err)
+			var wg sync.WaitGroup
+			for i := 0; i < 16; i++ {
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					callResponse := caller.Call("io.xconn.test").Execute()
+					require.NoError(t, callResponse.Err)
+					require.NotNil(t, callResponse)
+					require.Equal(t, "hello", callResponse.ArgStringOr(0, ""))
+				}()
+			}
+			wg.Wait()
+
+			require.NoError(t, regResp.Unregister())
+
+			callResp := caller.Call("io.xconn.test").Execute()
+			require.EqualError(t, callResp.Err, "wamp.error.no_such_procedure")
+		})
+	})
+}
+
+func TestPublishSubscribe(t *testing.T) {
+	forEachSerializer(func(name string, serializerSpec xconn.SerializerSpec) {
+		t.Run("With"+name, func(t *testing.T) {
+			subscriber, publisher := connectedLocalSessions(t, serializerSpec.Serializer())
+			eventCh := make(chan *xconn.Event, 100)
+
+			subResp := subscriber.Subscribe("foo.bar",
+				func(event *xconn.Event) {
+					eventCh <- event
+				}).Execute()
+			require.NoError(t, subResp.Err)
+
+			for i := 0; i < 16; i++ {
+				go func() {
+					pubResp := publisher.Publish("foo.bar").ExcludeMe(false).Execute()
+					require.NoError(t, pubResp.Err)
+				}()
+			}
+
+			for i := 0; i < 16; i++ {
+				ev := <-eventCh
+				require.NotNil(t, ev)
+			}
+
+			require.NoError(t, subResp.Unsubscribe())
+
+			pubResp := publisher.Publish("foo.bar").Execute()
+			require.NoError(t, pubResp.Err)
+
+			select {
+			case <-eventCh:
+				t.Fatal("received event after unsubscribe")
+			case <-time.After(100 * time.Millisecond):
+			}
+		})
+	})
+}
+
+func TestProgressiveCallResults(t *testing.T) {
+	forEachSerializer(func(name string, serializerSpec xconn.SerializerSpec) {
+		t.Run("With"+name, func(t *testing.T) {
+			callee, caller := connectedLocalSessions(t, serializerSpec.Serializer())
+			registerResponse := callee.Register("foo.bar.progress",
+				func(ctx context.Context, invocation *xconn.Invocation) *xconn.Result {
+					// Send progress
+					for i := 1; i <= 3; i++ {
+						err := invocation.SendProgress([]any{i}, nil)
+						require.NoError(t, err)
+					}
+
+					// Return final result
+					return xconn.NewResult("done")
+				}).Execute()
+			require.NoError(t, registerResponse.Err)
+
+			t.Run("ProgressiveCall", func(t *testing.T) {
+				// Store received progress updates
+				progressUpdates := make([]int, 0)
+
+				callResponse := caller.Call("foo.bar.progress").
+					ProgressReceiver(func(progressiveResult *xconn.Result) {
+						progress, _ := util.AsInt(progressiveResult.Args[0])
+						// Collect received progress
+						progressUpdates = append(progressUpdates, progress)
+					}).
+					Execute()
+				require.NoError(t, callResponse.Err)
+
+				// Verify progressive updates received correctly
+				require.Equal(t, []int{1, 2, 3}, progressUpdates)
+
+				// Verify the final result
+				require.Equal(t, "done", callResponse.ArgStringOr(0, ""))
+			})
+		})
+	})
+}
+
+func TestProgressiveCallInvocation(t *testing.T) {
+	forEachSerializer(func(name string, serializerSpec xconn.SerializerSpec) {
+		t.Run("With"+name, func(t *testing.T) {
+			callee, caller := connectedLocalSessions(t, serializerSpec.Serializer())
+			// Store progress updates
+			progressUpdates := make([]int, 0)
+			registerResponse := callee.Register("foo.bar.progress",
+				func(ctx context.Context, invocation *xconn.Invocation) *xconn.Result {
+					progress, _ := util.AsInt(invocation.Args()[0])
+					progressUpdates = append(progressUpdates, progress)
+					if invocation.Progress() {
+						return xconn.NewResultError(xconn.ErrNoResult)
+					}
+
+					return xconn.NewResult("done")
+				}).Execute()
+			require.NoError(t, registerResponse.Err)
+
+			t.Run("ProgressiveCall", func(t *testing.T) {
+				totalChunks := 6
+				chunkIndex := 1
+
+				callResponse := caller.Call("foo.bar.progress").
+					ProgressSender(func(ctx context.Context) *xconn.Progress {
+						defer func() { chunkIndex++ }()
+
+						time.Sleep(10 * time.Millisecond)
+
+						if chunkIndex == totalChunks-1 {
+							return xconn.NewFinalProgress(chunkIndex)
+						} else {
+							return xconn.NewProgress(chunkIndex)
+						}
+					}).Execute()
+				require.NoError(t, callResponse.Err)
+
+				// Verify progressive updates received correctly
+				require.Equal(t, []int{1, 2, 3, 4, 5}, progressUpdates)
+
+				// Verify the final result
+				require.Equal(t, "done", callResponse.ArgStringOr(0, ""))
+			})
+		})
+	})
+}
+
+func TestCallProgressiveProgress(t *testing.T) {
+	forEachSerializer(func(name string, serializerSpec xconn.SerializerSpec) {
+		t.Run("With"+name, func(t *testing.T) {
+			callee, caller := connectedLocalSessions(t, serializerSpec.Serializer())
+			// Store progress updates
+			progressUpdates := make([]int, 0)
+			registerResponse := callee.Register("foo.bar.progress",
+				func(ctx context.Context, invocation *xconn.Invocation) *xconn.Result {
+					progress, _ := util.AsInt(invocation.Args()[0])
+					progressUpdates = append(progressUpdates, progress)
+
+					if invocation.Progress() {
+						err := invocation.SendProgress([]any{progress}, nil)
+						require.NoError(t, err)
+						return xconn.NewResultError(xconn.ErrNoResult)
+					}
+
+					return xconn.NewResult(progress)
+				}).Execute()
+
+			require.NoError(t, registerResponse.Err)
+
+			t.Run("ProgressiveCall", func(t *testing.T) {
+				receivedProgressBack := make([]int, 0)
+				totalChunks := 6
+				chunkIndex := 1
+
+				callResponse := caller.Call("foo.bar.progress").
+					ProgressSender(func(ctx context.Context) *xconn.Progress {
+						defer func() { chunkIndex++ }()
+
+						time.Sleep(10 * time.Millisecond)
+
+						if chunkIndex == totalChunks-1 {
+							return xconn.NewFinalProgress(chunkIndex)
+						} else {
+							return xconn.NewProgress(chunkIndex)
+						}
+					}).
+					ProgressReceiver(func(result *xconn.Result) {
+						progress, _ := util.AsInt(result.Args[0])
+						receivedProgressBack = append(receivedProgressBack, progress)
+					}).Execute()
+
+				require.NoError(t, callResponse.Err)
+
+				finalResult, _ := util.AsInt(callResponse.Args[0])
+				receivedProgressBack = append(receivedProgressBack, finalResult)
+
+				// Verify progressive updates received correctly
+				require.Equal(t, []int{1, 2, 3, 4, 5}, progressUpdates)
+
+				// Verify progressive updates mirrored correctly
+				require.Equal(t, progressUpdates, receivedProgressBack)
+			})
+		})
+	})
+}
+
+func TestInMemorySession(t *testing.T) {
+	forEachSerializer(func(name string, serializerSpec xconn.SerializerSpec) {
+		t.Run(name, func(t *testing.T) {
+			role := trustedRole
+			procedure := "com.hello"
+
+			router, err := xconn.NewRouter(nil)
+			require.NoError(t, err)
+			err = router.AddRealm(realmName, xconn.DefaultRealmConfig())
+			require.NoError(t, err)
+
+			session, err := xconn.ConnectInMemory(router, realmName)
+			require.NoError(t, err)
+
+			response := session.Register(
+				procedure,
+				func(ctx context.Context, invocation *xconn.Invocation) *xconn.Result {
+					return xconn.NewResult("hello")
+				},
+			).Execute()
+			require.NoError(t, response.Err)
+
+			cResponse := session.Call(procedure).Execute()
+			require.NoError(t, cResponse.Err)
+
+			require.Equal(t, realmName, session.Details().Realm())
+			require.Equal(t, role, session.Details().AuthRole())
+		})
+	})
+}
+
+func createUnixPath(t *testing.T) string {
+	tmpFile, err := os.CreateTemp("", "unix-*.sock")
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(tmpFile.Name()))
+	return tmpFile.Name()
+}
+
+func TestUnixSocket(t *testing.T) {
+	forEachSerializer(func(name string, serializerSpec xconn.SerializerSpec) {
+		t.Run("UnixSocketWith"+name, func(t *testing.T) {
+			router, err := xconn.NewRouter(nil)
+			require.NoError(t, err)
+			err = router.AddRealm("unix", &xconn.RealmConfig{})
+			require.NoError(t, err)
+			server := xconn.NewServer(router, nil, nil)
+
+			t.Run("websocket-over-unix", func(t *testing.T) {
+				tmpFile := createUnixPath(t)
+				path := "unix+ws://" + tmpFile
+
+				closer, err := server.ListenAndServeWebSocket("unix", tmpFile)
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = closer.Close() })
+
+				session, err := xconn.ConnectAnonymous(context.Background(), path, "unix")
+				require.NoError(t, err)
+				require.NotNil(t, session)
+			})
+
+			t.Run("rawsocket-over-unix", func(t *testing.T) {
+				tmpFile := createUnixPath(t)
+				closer, err := server.ListenAndServeRawSocket("unix", tmpFile)
+				require.NoError(t, err)
+				t.Cleanup(func() { _ = closer.Close() })
+
+				path := "unix://" + tmpFile
+				session, err := xconn.ConnectAnonymous(context.Background(), path, "unix")
+				require.NoError(t, err)
+				require.NotNil(t, session)
+
+				path = "unix+rs://" + tmpFile
+				session, err = xconn.ConnectAnonymous(context.Background(), path, "unix")
+				require.NoError(t, err)
+				require.NotNil(t, session)
+			})
+		})
+	})
+}
+
+func TestAddRealm(t *testing.T) {
+	router, err := xconn.NewRouter(nil)
+	require.NoError(t, err)
+	err = router.AddRealm(realmName, xconn.DefaultRealmConfig())
+	require.NoError(t, err)
+
+	// adding same realm twice should return error
+	err = router.AddRealm(realmName, xconn.DefaultRealmConfig())
+	require.EqualError(t, err, fmt.Sprintf("realm '%s' already registered", realmName))
+}
+
+func TestPerformance(t *testing.T) {
+	router, err := xconn.NewRouter(nil)
+	require.NoError(t, err)
+	err = router.AddRealm("realm1", &xconn.RealmConfig{})
+	require.NoError(t, err)
+
+	err = router.AddRealmRole("realm1", xconn.RealmRole{Name: "anonymous", Permissions: []xconn.Permission{{
+		URI:            "",
+		MatchPolicy:    "prefix",
+		AllowCall:      true,
+		AllowRegister:  true,
+		AllowPublish:   true,
+		AllowSubscribe: true,
+	}}})
+	require.NoError(t, err)
+
+	server := xconn.NewServer(router, nil, nil)
+	closer, err := server.ListenAndServeRawSocket("tcp", "127.0.0.1:9000")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = closer.Close() })
+
+	data := make([]byte, 1024*1024)
+	for i := range data {
+		data[i] = byte(rand.IntN(256))
+	}
+
+	callerClient := xconn.Client{
+		SerializerSpec: xconn.CBORSerializerSpec,
+	}
+
+	caller, err := callerClient.Connect(context.Background(), "rs://localhost:9000", "realm1")
+	require.NoError(t, err)
+	require.NotNil(t, caller)
+
+	calleeClient := xconn.Client{
+		SerializerSpec: xconn.CBORSerializerSpec,
+	}
+
+	callee, err := calleeClient.Connect(context.Background(), "rs://localhost:9000", "realm1")
+	require.NoError(t, err)
+	require.NotNil(t, callee)
+
+	response := callee.Register(
+		"io.xconn.proto",
+		func(ctx context.Context, invocation *xconn.Invocation) *xconn.Result {
+			return xconn.NewResult(invocation.Args()...)
+		},
+	).Execute()
+	require.NoError(t, response.Err)
+
+	var wg sync.WaitGroup
+
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			caller.Call("io.xconn.proto").Arg(data).Option("x_payload_raw", true).Execute()
+		}()
+	}
+
+	wg.Wait()
+}

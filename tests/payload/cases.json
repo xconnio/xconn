@@ -1,0 +1,163 @@
+[
+  {
+    "name": "text",
+    "tag": "string",
+    "value": "hello",
+    "accept": [
+      "string"
+    ]
+  },
+  {
+    "name": "boolean",
+    "tag": "bool",
+    "value": true,
+    "accept": [
+      "bool"
+    ]
+  },
+  {
+    "name": "signed",
+    "tag": "int",
+    "value": "-42",
+    "accept": [
+      "int",
+      "float"
+    ]
+  },
+  {
+    "name": "zero",
+    "tag": "int",
+    "value": "0",
+    "accept": [
+      "int",
+      "uint",
+      "float"
+    ]
+  },
+  {
+    "name": "whole float",
+    "tag": "float",
+    "value": 42.0,
+    "accept": [
+      "int",
+      "uint",
+      "float"
+    ]
+  },
+  {
+    "name": "fraction",
+    "tag": "float",
+    "value": 1.25,
+    "accept": [
+      "float"
+    ]
+  },
+  {
+    "name": "numeric string",
+    "tag": "string",
+    "value": "42",
+    "accept": [
+      "string"
+    ]
+  },
+  {
+    "name": "null",
+    "tag": "null",
+    "value": null,
+    "accept": []
+  },
+  {
+    "name": "binary",
+    "tag": "bytes",
+    "value": [
+      0,
+      255
+    ],
+    "accept": [
+      "bytes"
+    ]
+  },
+  {
+    "name": "list",
+    "tag": "list",
+    "value": [
+      1,
+      "hello"
+    ],
+    "accept": [
+      "list"
+    ]
+  },
+  {
+    "name": "dictionary",
+    "tag": "dict",
+    "value": {
+      "name": "hello"
+    },
+    "accept": [
+      "dict"
+    ]
+  },
+  {
+    "name": "i64 min",
+    "tag": "int",
+    "value": "-9223372036854775808",
+    "accept": [
+      "int",
+      "float"
+    ]
+  },
+  {
+    "name": "i64 max",
+    "tag": "int",
+    "value": "9223372036854775807",
+    "accept": [
+      "int",
+      "uint",
+      "float"
+    ]
+  },
+  {
+    "name": "u64 max",
+    "tag": "uint",
+    "value": "18446744073709551615",
+    "accept": [
+      "uint",
+      "float"
+    ]
+  },
+  {
+    "name": "float i64 overflow",
+    "tag": "float",
+    "value": 9.223372036854776e+18,
+    "accept": [
+      "float"
+    ]
+  },
+  {
+    "name": "float u64 overflow",
+    "tag": "float",
+    "value": 1.8446744073709552e+19,
+    "accept": [
+      "float"
+    ]
+  },
+  {
+    "name": "nan",
+    "tag": "special",
+    "value": "nan",
+    "accept": []
+  },
+  {
+    "name": "infinity",
+    "tag": "special",
+    "value": "infinity",
+    "accept": []
+  },
+  {
+    "name": "negative infinity",
+    "tag": "special",
+    "value": "-infinity",
+    "accept": []
+  }
+]
