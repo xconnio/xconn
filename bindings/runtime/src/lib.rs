@@ -9,6 +9,8 @@ mod quic;
 mod resources;
 mod router;
 mod services;
+#[cfg(feature = "quic")]
+mod tls;
 mod values;
 #[cfg(feature = "webtransport")]
 mod webtransport;
@@ -17,6 +19,7 @@ mod webtransport;
 mod webrtc;
 pub use jobs::{cancel, execute, ready, submit, submit_with_completion, take};
 pub use resources::close;
+use std::collections::HashMap;
 use std::sync::{
     OnceLock,
     atomic::{AtomicU64, Ordering},
@@ -44,6 +47,16 @@ fn id() -> u64 {
 
 async fn dispatch(request_value: Value) -> Result<resources::Output> {
     let f = values::dictionary(&request_value)?;
+    let timeout = values::duration_field(&f, "operation_timeout", None)?;
+    match timeout.filter(|duration| !duration.is_zero()) {
+        Some(timeout) => tokio::time::timeout(timeout, dispatch_fields(f))
+            .await
+            .map_err(|_| "operation timed out".to_string())?,
+        None => dispatch_fields(f).await,
+    }
+}
+
+async fn dispatch_fields(f: HashMap<String, Value>) -> Result<resources::Output> {
     let method = values::string_field(&f, "method")?;
 
     #[cfg(feature = "webrtc")]

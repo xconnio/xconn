@@ -176,7 +176,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                         .map_err(|e| e.to_string())?;
                 }
             } else {
-                roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
+                roots.add_parsable_certificates(crate::tls::trusted_certificates());
             }
             let mut tls =
                 rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))

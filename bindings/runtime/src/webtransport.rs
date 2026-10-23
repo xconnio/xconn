@@ -87,15 +87,27 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
             ))
         }
         "webtransport_dial" => {
-            // Go validates the captured chain before exposing the handle or joining WAMP.
-            // Rust still verifies the TLS handshake signatures.
-            let verifier = Arc::new(HostVerification::new());
-            let tls = rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-                .with_safe_default_protocol_versions()
-                .map_err(|e| e.to_string())?
-                .dangerous()
-                .with_custom_certificate_verifier(verifier.clone())
-                .with_no_client_auth();
+            let builder =
+                rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+                    .with_safe_default_protocol_versions()
+                    .map_err(|e| e.to_string())?;
+            let tls = if fields.get("verify_server") == Some(&Value::Bool(true)) {
+                let mut roots = rustls::RootCertStore::empty();
+                if let Some(Value::Bytes(certificate)) = fields.get("certificate") {
+                    roots
+                        .add(rustls::pki_types::CertificateDer::from(certificate.0.clone()))
+                        .map_err(|e| e.to_string())?;
+                } else {
+                    roots.add_parsable_certificates(crate::tls::trusted_certificates());
+                }
+                builder.with_root_certificates(roots).with_no_client_auth()
+            } else {
+                // The existing Go adapter verifies this captured chain itself.
+                builder
+                    .dangerous()
+                    .with_custom_certificate_verifier(Arc::new(HostVerification::new()))
+                    .with_no_client_auth()
+            };
             let connected = Connection::connect_with_tls(&string_field(&fields, "url")?, tls)
                 .await
                 .map_err(|e| e.to_string())?;

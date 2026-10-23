@@ -84,9 +84,26 @@ fn ice_servers(f: &HashMap<String, Value>) -> Result<Vec<RTCIceServer>> {
     let Some(value) = f.get("ice_servers") else {
         return Ok(Vec::new());
     };
+    let Value::List(servers) = value else {
+        return Err("ice_servers must be a list".into());
+    };
+    let mut servers = servers.clone();
+    for server in &mut servers {
+        let Value::Dict(fields) = server else {
+            return Err("each ICE server must be a dictionary".into());
+        };
+        // STUN servers normally have only URLs. webrtc-rs requires these
+        // optional credential fields during deserialization, even for STUN.
+        fields
+            .entry("username".into())
+            .or_insert_with(|| Value::Str(String::new()));
+        fields
+            .entry("credential".into())
+            .or_insert_with(|| Value::Str(String::new()));
+    }
     let codec = xconn_core::wampproto::serializers::codec::Codec::Json;
     codec
-        .decode(&codec.encode(value).map_err(|e| e.to_string())?)
+        .decode(&codec.encode(&Value::List(servers)).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())
 }
 
@@ -380,5 +397,50 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
             plain(Value::Null)
         }
         _ => Err("unknown WebRTC operation".into()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn configuration(server: HashMap<String, Value>) -> HashMap<String, Value> {
+        HashMap::from([("ice_servers".into(), Value::List(vec![Value::Dict(server)]))])
+    }
+
+    #[test]
+    fn stun_servers_do_not_require_credentials() {
+        let fields = configuration(HashMap::from([(
+            "urls".into(),
+            Value::List(vec![Value::Str("stun:127.0.0.1:9".into())]),
+        )]));
+        let servers = ice_servers(&fields).unwrap();
+        assert_eq!(servers[0].urls, ["stun:127.0.0.1:9"]);
+        assert!(servers[0].username.is_empty());
+        assert!(servers[0].credential.is_empty());
+    }
+
+    #[test]
+    fn turn_credentials_are_preserved() {
+        let fields = configuration(HashMap::from([
+            (
+                "urls".into(),
+                Value::List(vec![Value::Str("turn:127.0.0.1:3478".into())]),
+            ),
+            ("username".into(), Value::Str("test-user".into())),
+            ("credential".into(), Value::Str("test-credential".into())),
+        ]));
+        let servers = ice_servers(&fields).unwrap();
+        assert_eq!(servers[0].username, "test-user");
+        assert_eq!(servers[0].credential, "test-credential");
+    }
+
+    #[test]
+    fn invalid_credential_types_are_rejected() {
+        let fields = configuration(HashMap::from([
+            ("urls".into(), Value::List(vec![Value::Str("stun:127.0.0.1:9".into())])),
+            ("credential".into(), Value::Bool(true)),
+        ]));
+        assert!(ice_servers(&fields).is_err());
     }
 }
