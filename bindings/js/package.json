@@ -1,0 +1,45 @@
+{
+  "name": "@xconnio/core",
+  "version": "0.1.0",
+  "description": "Browser WAMP client backed by the shared Rust protocol engine",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "bash scripts/build.sh",
+    "lint": "eslint src tests",
+    "typecheck": "tsc --project tests/tsconfig.json",
+    "test": "node tests/run.mjs",
+    "prepack": "npm run build",
+    "format": "prettier --write src scripts tests package.json tsconfig.json eslint.config.js",
+    "format:check": "prettier --check src scripts tests package.json tsconfig.json eslint.config.js"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "globals": "^17.13.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.5.3",
+    "typescript-eslint": "^8.72.0"
+  },
+  "engines": {
+    "node": ">=20.11"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xconnio/xconn-core.git",
+    "directory": "bindings/js"
+  }
+}

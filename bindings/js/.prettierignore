@@ -1,0 +1,4 @@
+src/wasm/
+src/constants.ts
+dist/
+node_modules/

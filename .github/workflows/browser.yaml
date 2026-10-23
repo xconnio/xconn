@@ -1,0 +1,33 @@
+name: Browser binding
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: ./.github/actions/reference
+        id: reference
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: bindings/js/package-lock.json
+      - uses: browser-actions/setup-chrome@v2
+        id: chrome
+        with:
+          chrome-version: stable
+          install-dependencies: true
+      - run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - run: sudo apt-get update && sudo apt-get install -y binaryen
+      - run: ci/test-browser.sh "${{ steps.reference.outputs.binary }}"
+        env:
+          CHROMIUM_BIN: ${{ steps.chrome.outputs.chrome-path }}

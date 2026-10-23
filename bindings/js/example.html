@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>XConn browser client</title>
+<style>
+body { font: 16px system-ui; max-width: 40rem; margin: 3rem auto; padding: 0 1rem; }
+label { display: block; margin: 1rem 0; } input { width: 100%; box-sizing: border-box; padding: .5rem; }
+button { padding: .5rem 1rem; } pre { white-space: pre-wrap; }
+</style>
+<h1>XConn browser client</h1>
+<form id="connection">
+<label>Router WebSocket URL <input name="uri" value="ws://localhost:8080/ws" required></label>
+<label>Realm <input name="realm" value="realm1" required></label>
+<label>Procedure <input name="procedure" value="echo" required></label>
+<button>Connect and call</button>
+<button id="disconnect" type="button" disabled>Disconnect</button>
+</form>
+<pre id="output" role="status">Ready</pre>
+<script type="module">
+import {connectAnonymous} from "./dist/index.js";
+const form = document.querySelector("#connection");
+const output = document.querySelector("#output");
+const disconnect = document.querySelector("#disconnect");
+let session;
+form.addEventListener("submit", async event => {
+    event.preventDefault();
+    try {
+        if (session) await session.close();
+        const data = new FormData(form);
+        session = await connectAnonymous(String(data.get("uri")), String(data.get("realm")));
+        disconnect.disabled = false;
+        session.onDisconnect(async reason => { disconnect.disabled = true; output.textContent = `Disconnected: ${reason}`; });
+        const result = await session.call(String(data.get("procedure"))).arg("Hello from the browser").execute();
+        output.textContent = `Session ${session.details.sessionID}: ${String(result.args)}`;
+    } catch (error) { output.textContent = String(error); }
+});
+disconnect.addEventListener("click", async () => { if (session) await session.close(); });
+</script>
+</html>
