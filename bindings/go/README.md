@@ -74,11 +74,12 @@ runtime for WAMP sessions and raw channels. Run the local example with
 
 Fluent request terminals are `Execute()` and, for calls with a context,
 `ExecuteContext(ctx)`. The former `Do()` / `DoContext(ctx)` names have been removed.
+See the [shared execution contract](../../docs/fluent-api.md).
 
-Invocation, Event and Result share strict typed payload accessors
+Invocation, Event and Result share [strict typed payload accessors](../../docs/payload.md)
 with explicit defaults and consistent numeric/binary conversion rules.
 
-Result construction and received values use one payload
+[Result construction and received values](../../docs/results.md) use one payload
 type for handler replies, progressive results and completed calls.
 
 ## Initial QUIC transport API

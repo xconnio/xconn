@@ -71,3 +71,27 @@ The runtime allocates and sends new call IDs under an ordering guard. An
 exhausted or wrapped call ID sequence requires a new session.
 
 Progressive RPCs are separate from multiplexed transport byte streams.
+
+## Language bindings
+
+All bindings use `stream()` as the execution terminal, with independent input
+and result controls. Do not append `execute()`. Progressive input is off by
+default; progressive results are on. Final-only streams still receive a terminal
+success or application error.
+
+| Binding | Default stream | Progressive input with final result only |
+| --- | --- | --- |
+| Python asyncio | `await request.stream()` | `await request.stream(progressive_input=True, progressive_results=False)` |
+| Python blocking | `request.stream()` | `request.stream(progressive_input=True, progressive_results=False)` |
+| Go | `request.Stream()` / `request.StreamContext(ctx)` | `request.Stream(xconn.StreamOptions{ProgressiveInput: true, Results: xconn.ResultsFinalOnly})` |
+| Dart | `await request.stream()` | `await request.stream(progressiveInput: true, progressiveResults: false)` |
+| JavaScript | `await request.stream()` | `await request.stream({progressiveInput: true, progressiveResults: false})` |
+
+Go accepts zero or one variadic `StreamOptions` value. Its zero-value result mode
+requests progress; `ResultsFinalOnly` disables it. Enable progressive results
+alongside progressive input for a duplex call.
+
+Python supports context managers; Go callers should defer `call.Close()`.
+Dart and JS expose async result iteration and explicit `close()` methods. Close
+unfinished calls when stopping consumption. Per-language examples and cancellation
+rules live in the [binding READMEs](../bindings).

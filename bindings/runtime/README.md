@@ -37,5 +37,5 @@ cargo clippy --locked -p xconn-binding-runtime --all-features --all-targets -- -
 ```
 
 Integration coverage comes from `ci/test-bindings.sh`, `ci/test-dart.sh` and the
-packaged consumer checks. The browser WASM binding calls
+[packaged consumer checks](../../docs/releases.md). The browser WASM binding calls
 `wampproto` directly and does not use this native runtime.

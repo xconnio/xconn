@@ -35,7 +35,7 @@ server, `start_router` and in-memory router conveniences have been removed.
 Install the matching prebuilt ABI3 wheel with `python -m pip install /path/to/xconn_core-*.whl`.
 The wheel contains the native extension; users need no Rust toolchain or separate
 SDK. Linux release wheels are built in manylinux containers and repaired to bundle
-external TLS libraries.
+external TLS libraries. See [binding packaging](../../docs/releases.md).
 
 For source development, build from the workspace root:
 
@@ -56,12 +56,12 @@ Fluent requests use `execute()` exclusively: for example,
 `session.call("echo").arg("hello").execute()`, or
 `await session.call("echo").arg("hello").execute()` with AsyncSession.
 The former `do()` spelling has been removed. See the
-shared execution contract.
+[shared execution contract](../../docs/fluent-api.md).
 
-Invocation, Event and Result share strict typed payload accessors
+Invocation, Event and Result share [strict typed payload accessors](../../docs/payload.md)
 with explicit defaults and consistent numeric/binary conversion rules.
 
-Result construction and received values use one payload
+[Result construction and received values](../../docs/results.md) use one payload
 type for handler replies, progressive results and completed calls.
 
 Progressive RPCs use the fluent `stream()` terminal (`Stream()`/`StreamContext()` in Go).

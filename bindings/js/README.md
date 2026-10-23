@@ -103,9 +103,9 @@ idempotent. Custom base sessions extend `BaseSession` and use the raw send/recei
 interface; custom serializers/authenticators retain structural interfaces. The
 WebSocket-specific `WebSocketBaseSession` does not preserve the old peer-based constructor.
 
-Invocation, Event and Result expose the same strict payload accessors.
+Invocation, Event and Result expose the same [strict payload accessors](../../docs/payload.md).
 JS `argInt64` / `kwargInt64` return BigInt; typed defaults use names such as
-`argStringOr(0, "fallback")`.
+`argStringOr(0, "fallback")`. See the [cross-language API contract](../../docs/fluent-api.md).
 
 ## Build and package
 
@@ -152,7 +152,7 @@ profile and --no-sandbox for the local test process.
 [Size measurements](../../benchmarks/browser-wasm/README.md) include WASM,
 generated glue and all high-level client modules.
 
-Result construction and received values use one payload
+[Result construction and received values](../../docs/results.md) use one payload
 type for handler replies, progressive results and completed calls.
 
 Progressive RPCs use the fluent `stream()` terminal (`Stream()`/`StreamContext()` in Go).
