@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "bindings/js/wasm",
     "bindings/python",
     "bindings/ffi",
     "bindings/runtime",
@@ -21,3 +22,11 @@ inherits = "release"
 opt-level = "z"
 lto = "thin"
 codegen-units = 1
+
+[profile.browser]
+inherits = "release"
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

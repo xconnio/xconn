@@ -1,0 +1,25 @@
+[package]
+name = "xconn-browser"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = ["binary-codecs", "wampcra", "cryptosign", "packet-crypto"]
+binary-codecs = []
+wampcra = []
+cryptosign = []
+packet-crypto = ["dep:xconn-crypto"]
+
+[dependencies]
+xconn-crypto = { path = "../../../crates/xconn-crypto", optional = true }
+wampproto = { path = "../../../crates/wampproto" }
+wasm-bindgen = "=0.2.129"
+serde-wasm-bindgen = "0.6"
+js-sys = "=0.3.106"
+getrandom = { version = "0.2", features = ["js"] }
