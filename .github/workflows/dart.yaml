@@ -1,0 +1,33 @@
+name: Dart binding
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dart:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/reference
+        id: reference
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.13.5'
+      - run: cargo build --locked --release -p xconn-ffi
+      - run: cargo build --locked -p xconn-core --features router,services --bin xconn-router --example discovery
+      - run: dart pub get --enforce-lockfile
+        working-directory: bindings/dart
+      - run: dart format --output=none --set-exit-if-changed --line-length 120 .
+        working-directory: bindings/dart
+      - run: dart analyze --fatal-infos
+        working-directory: bindings/dart
+      - run: dart test
+        working-directory: bindings/dart
+        env:
+          XCONN_REFERENCE_GO_BIN: ${{ steps.reference.outputs.binary }}
+          XCONN_DISCOVERY_BIN: ${{ github.workspace }}/target/debug/examples/discovery
+          XCONN_LIBRARY: ${{ github.workspace }}/target/release/libxconn_ffi.so
