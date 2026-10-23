@@ -5,6 +5,7 @@ routing, cryptography, and lifecycle management to the shared binding runtime.
 
 | Binding | Package | Supported APIs |
 | --- | --- | --- |
+| [Dart / Flutter](dart) | `xconn_core` | Future-based clients |
 | [Python](python) | `xconn-core` / `xconn_core` | Blocking and asyncio clients |
 | [Go](go) | `github.com/xconnio/xconn-core/bindings/go` | Client, router/server, WebRTC |
 

@@ -46,6 +46,7 @@ MIT. Copyright XConnIO Ltd.
 
 ## Language bindings
 
+- [Dart / Flutter](bindings/dart): Future-based clients; `package:xconn_core/xconn_core.dart`.
 - [Python](bindings/python): blocking and asyncio clients; `from xconn_core import Client`.
 - [Go](bindings/go): context-aware clients, routers, transports, and WebRTC.
 
