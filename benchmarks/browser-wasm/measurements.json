@@ -1,0 +1,132 @@
+{
+  "scope": "Actual bindings/js package: WASM, generated glue and all compiled browser client modules",
+  "toolchain": [
+    "rustc 1.99.0 (b940084d7 2026-09-28)",
+    "wasm-bindgen 0.2.129",
+    "wasm-opt version 117 (version_117)"
+  ],
+  "compression": {
+    "gzipLevel": 9,
+    "brotliQuality": 11,
+    "totals": "Sum of independently compressed runtime files; unbundled and unminified"
+  },
+  "results": [
+    {
+      "variant": "json",
+      "wasm": {
+        "raw": 184678,
+        "gzip": 74834,
+        "brotli": 63439
+      },
+      "javascript": {
+        "raw": 95043,
+        "gzip": 21085,
+        "brotli": 18197
+      },
+      "total": {
+        "raw": 279721,
+        "gzip": 95919,
+        "brotli": 81636
+      },
+      "sha256": {
+        "wasm/xconn_browser_bg.wasm": "3d6535bf2f3a6685a7617ff80fb3a985d97731d7aa154dd4dd479b084e3a5aed",
+        "auth.js": "adc4bd57a4a040d6145ced1b9dfcbc5df57faf0e2fa5726ae3368d628d11523a",
+        "call.js": "582924f042336c9b1e7e9fbbf594d740fcfee3a81c55627ce22fd83034c6c2e3",
+        "client.js": "a1afb1b21a3bc88477297d9133146db86cd549d9d5535d78478d966715e0a935",
+        "constants.js": "7642334a70cde5515388d483eaf018bea1e8ed27f0de5414ba82f2451d9d3429",
+        "crypto.js": "34e444a3695ff470a2d24f6c458b0a4fb681b10ab6d6a3c3bd7211f30768231e",
+        "discovery.js": "a4fb175632f4d18ebb085ccecc160c5e5ccfa44f1b661a7e82046817813736d6",
+        "exception.js": "ed5bb7bae091f819ed1cedb175e173300965b4abdca4753470a32626af702a51",
+        "index.js": "11d1554202bfab7353141273399a1fe1c298f93c61a0a92dbe783248a31ac025",
+        "message.js": "00ba9b1201ef7235559dd66006fac4439e9e0c8fb1aa4b53043e0ec800c3f45a",
+        "native.js": "4652ea047acd9311ab9386d165fbe135300b14b0d55c849f6772dbe22f971b1a",
+        "payload.js": "f526638de18d383c93bffe0dae9246ebe3828ce468ffeeb9f5a5220282539ee0",
+        "requests.js": "bc7c127755dc42e65d9d88b74659d3ced21d971e83ec4251c46c99b1ddd4b458",
+        "serializers.js": "a8960c192146f9a8666dea6673931da5ba8722f026c1fb066a45f9533b1669f0",
+        "session.js": "4bf526be004aaa758612e8f78604fcbc70b5033ceffe516009a01e57df3ea941",
+        "transport.js": "b3463e9ab8db972dd13f4cb3fad51995738f3b1dd29c8267f999c77b8cced7fa",
+        "types.js": "a5f95e07363c631bd22f93f2f6ad29c0156a004d30e713a71ff9019283ddb08d",
+        "util.js": "35daeb329345b6ee39fc842a0f46d46a23626150c545c870e720b3dd0040cb87",
+        "wasm/xconn_browser.js": "bf0583a46cd1cd01297d47be75be0b087de903c4fcfab7a71edc210b4dd64b3a"
+      }
+    },
+    {
+      "variant": "codecs",
+      "wasm": {
+        "raw": 252314,
+        "gzip": 94775,
+        "brotli": 79370
+      },
+      "javascript": {
+        "raw": 95043,
+        "gzip": 21085,
+        "brotli": 18197
+      },
+      "total": {
+        "raw": 347357,
+        "gzip": 115860,
+        "brotli": 97567
+      },
+      "sha256": {
+        "wasm/xconn_browser_bg.wasm": "49ae0ac8faa927ed0a3b616bb9e2c1c4d61695f6c3f2c7c45207d99cca21ee45",
+        "auth.js": "adc4bd57a4a040d6145ced1b9dfcbc5df57faf0e2fa5726ae3368d628d11523a",
+        "call.js": "582924f042336c9b1e7e9fbbf594d740fcfee3a81c55627ce22fd83034c6c2e3",
+        "client.js": "a1afb1b21a3bc88477297d9133146db86cd549d9d5535d78478d966715e0a935",
+        "constants.js": "7642334a70cde5515388d483eaf018bea1e8ed27f0de5414ba82f2451d9d3429",
+        "crypto.js": "34e444a3695ff470a2d24f6c458b0a4fb681b10ab6d6a3c3bd7211f30768231e",
+        "discovery.js": "a4fb175632f4d18ebb085ccecc160c5e5ccfa44f1b661a7e82046817813736d6",
+        "exception.js": "ed5bb7bae091f819ed1cedb175e173300965b4abdca4753470a32626af702a51",
+        "index.js": "11d1554202bfab7353141273399a1fe1c298f93c61a0a92dbe783248a31ac025",
+        "message.js": "00ba9b1201ef7235559dd66006fac4439e9e0c8fb1aa4b53043e0ec800c3f45a",
+        "native.js": "4652ea047acd9311ab9386d165fbe135300b14b0d55c849f6772dbe22f971b1a",
+        "payload.js": "f526638de18d383c93bffe0dae9246ebe3828ce468ffeeb9f5a5220282539ee0",
+        "requests.js": "bc7c127755dc42e65d9d88b74659d3ced21d971e83ec4251c46c99b1ddd4b458",
+        "serializers.js": "a8960c192146f9a8666dea6673931da5ba8722f026c1fb066a45f9533b1669f0",
+        "session.js": "4bf526be004aaa758612e8f78604fcbc70b5033ceffe516009a01e57df3ea941",
+        "transport.js": "b3463e9ab8db972dd13f4cb3fad51995738f3b1dd29c8267f999c77b8cced7fa",
+        "types.js": "a5f95e07363c631bd22f93f2f6ad29c0156a004d30e713a71ff9019283ddb08d",
+        "util.js": "35daeb329345b6ee39fc842a0f46d46a23626150c545c870e720b3dd0040cb87",
+        "wasm/xconn_browser.js": "bf0583a46cd1cd01297d47be75be0b087de903c4fcfab7a71edc210b4dd64b3a"
+      }
+    },
+    {
+      "variant": "full",
+      "wasm": {
+        "raw": 340023,
+        "gzip": 149006,
+        "brotli": 127515
+      },
+      "javascript": {
+        "raw": 104662,
+        "gzip": 21989,
+        "brotli": 18953
+      },
+      "total": {
+        "raw": 444685,
+        "gzip": 170995,
+        "brotli": 146468
+      },
+      "sha256": {
+        "wasm/xconn_browser_bg.wasm": "4362482a02de4276744f57d1d98f710c535d47c380b0985ac0f6c4d5f9e9030f",
+        "auth.js": "adc4bd57a4a040d6145ced1b9dfcbc5df57faf0e2fa5726ae3368d628d11523a",
+        "call.js": "582924f042336c9b1e7e9fbbf594d740fcfee3a81c55627ce22fd83034c6c2e3",
+        "client.js": "a1afb1b21a3bc88477297d9133146db86cd549d9d5535d78478d966715e0a935",
+        "constants.js": "7642334a70cde5515388d483eaf018bea1e8ed27f0de5414ba82f2451d9d3429",
+        "crypto.js": "34e444a3695ff470a2d24f6c458b0a4fb681b10ab6d6a3c3bd7211f30768231e",
+        "discovery.js": "a4fb175632f4d18ebb085ccecc160c5e5ccfa44f1b661a7e82046817813736d6",
+        "exception.js": "ed5bb7bae091f819ed1cedb175e173300965b4abdca4753470a32626af702a51",
+        "index.js": "11d1554202bfab7353141273399a1fe1c298f93c61a0a92dbe783248a31ac025",
+        "message.js": "00ba9b1201ef7235559dd66006fac4439e9e0c8fb1aa4b53043e0ec800c3f45a",
+        "native.js": "4652ea047acd9311ab9386d165fbe135300b14b0d55c849f6772dbe22f971b1a",
+        "payload.js": "f526638de18d383c93bffe0dae9246ebe3828ce468ffeeb9f5a5220282539ee0",
+        "requests.js": "bc7c127755dc42e65d9d88b74659d3ced21d971e83ec4251c46c99b1ddd4b458",
+        "serializers.js": "a8960c192146f9a8666dea6673931da5ba8722f026c1fb066a45f9533b1669f0",
+        "session.js": "4bf526be004aaa758612e8f78604fcbc70b5033ceffe516009a01e57df3ea941",
+        "transport.js": "b3463e9ab8db972dd13f4cb3fad51995738f3b1dd29c8267f999c77b8cced7fa",
+        "types.js": "a5f95e07363c631bd22f93f2f6ad29c0156a004d30e713a71ff9019283ddb08d",
+        "util.js": "35daeb329345b6ee39fc842a0f46d46a23626150c545c870e720b3dd0040cb87",
+        "wasm/xconn_browser.js": "fd1141e6c55c0464093996dba1193794ff8821862348e5de47fb2b12ea67c413"
+      }
+    }
+  ]
+}

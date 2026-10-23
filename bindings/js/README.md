@@ -149,6 +149,9 @@ without Chromium browser tests are skipped. CI requires both and also installs
 and tests the packed package outside the checkout. Chromium tests use an isolated
 profile and --no-sandbox for the local test process.
 
+[Size measurements](../../benchmarks/browser-wasm/README.md) include WASM,
+generated glue and all high-level client modules.
+
 Result construction and received values use one payload
 type for handler replies, progressive results and completed calls.
 

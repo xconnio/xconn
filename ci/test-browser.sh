@@ -14,6 +14,11 @@ npm --prefix bindings/js run typecheck
 npm --prefix bindings/js run lint
 npm --prefix bindings/js run format:check
 npm --prefix bindings/js test
+benchmarks/browser-wasm/build.sh
+for variant in json codecs; do
+  node bindings/js/tests/run.mjs "$PWD/target/browser-wasm/pkg/$variant" "$variant"
+done
+cmp bindings/js/dist/wasm/xconn_browser_bg.wasm target/browser-wasm/pkg/full/wasm/xconn_browser_bg.wasm
 mkdir -p target/browser-package
 package_archive="$(cd bindings/js && npm pack --json --ignore-scripts --pack-destination ../../target/browser-package | node -e 'let data=""; process.stdin.on("data", chunk => data += chunk); process.stdin.on("end", () => console.log(JSON.parse(data)[0].filename));')"
 consumer="$(mktemp -d)"
