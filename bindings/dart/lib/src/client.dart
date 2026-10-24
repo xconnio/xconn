@@ -7,6 +7,7 @@ import "package:xconn_core/messages.dart";
 import "package:xconn_core/serializers.dart";
 import "package:xconn_core/src/callbacks.dart";
 import "package:xconn_core/src/native.dart" as native;
+import "package:xconn_core/src/native_transport.dart";
 import "package:xconn_core/src/session.dart";
 import "package:xconn_core/src/types.dart";
 
@@ -40,12 +41,9 @@ class Client {
   final ClientConfig _config;
 
   /// Timing out this returned Future also releases the underlying connection attempt.
-  Future<Session> connect(String url, String realm) {
-    final attempt = _ConnectionAttempt();
-    return _ConnectionFuture(_connect(url, realm, attempt), attempt.cancel);
-  }
+  Future<Session> connect(String url, String realm) => connectNative(this, "connect", {"uri": url, "realm": realm});
 
-  Future<Session> _connect(String url, String realm, _ConnectionAttempt attempt) async {
+  Future<Session> _connect(String method, Map<String, Object?> request, _ConnectionAttempt attempt) async {
     final serializer = _config.serializer;
     final name = serializerName(serializer);
     final authenticator = _config.authenticator;
@@ -63,9 +61,8 @@ class Client {
     var retained = false;
 
     try {
-      final operation = native.NativeOperation("connect", {
-        "uri": url,
-        "realm": realm,
+      final operation = native.NativeOperation(method, {
+        ...request,
         "auth": {
           "method": authenticator.authMethod,
           "authid": authenticator.authID,
@@ -114,6 +111,12 @@ Future<Session> connectCRA(String uri, String realm, String authid, String secre
 Future<Session> connectCryptosign(String uri, String realm, String authid, String privateKey) =>
     Client(config: ClientConfig(authenticator: CryptoSignAuthenticator(authid, privateKey))).connect(uri, realm);
 
+/// Internal adapter entry point; public callers use transport connection methods.
+Future<Session> connectNative(Client client, String method, Map<String, Object?> request) {
+  final attempt = _ConnectionAttempt();
+  return CancellableFuture<Session>(client._connect(method, request, attempt), attempt.cancel);
+}
+
 class _ConnectionAttempt {
   native.NativeOperation? operation;
   Session? session;
@@ -124,39 +127,4 @@ class _ConnectionAttempt {
     operation?.cancel();
     session?.close().ignore();
   }
-}
-
-// Future.timeout normally leaves its source running. A connect attempt owns native
-// resources, so direct timeouts must relinquish that ownership as well.
-class _ConnectionFuture implements Future<Session> {
-  _ConnectionFuture(this._future, this._cancel);
-
-  final Future<Session> _future;
-  final void Function() _cancel;
-
-  @override
-  Stream<Session> asStream() => _future.asStream();
-
-  @override
-  Future<Session> catchError(Function onError, {bool Function(Object)? test}) =>
-      _future.catchError(onError, test: test);
-
-  @override
-  Future<R> then<R>(FutureOr<R> Function(Session) onValue, {Function? onError}) =>
-      _future.then(onValue, onError: onError);
-
-  @override
-  Future<Session> whenComplete(FutureOr<void> Function() action) => _future.whenComplete(action);
-
-  @override
-  Future<Session> timeout(Duration timeLimit, {FutureOr<Session> Function()? onTimeout}) => _future.timeout(
-    timeLimit,
-    onTimeout: () {
-      _cancel();
-      if (onTimeout != null) {
-        return onTimeout();
-      }
-      throw TimeoutException("Connection timed out", timeLimit);
-    },
-  );
 }

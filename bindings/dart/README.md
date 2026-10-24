@@ -88,3 +88,26 @@ try {
 
 Enable input chunks with `stream(progressiveInput: true)`, then `send(args, kwargs)`
 and `finish(args, kwargs)`. Consume results concurrently for long producers.
+
+## QUIC
+
+```dart
+import 'package:xconn_core/quic.dart';
+
+final connection = await QUICConnection.connect('host:443', serverName: 'host');
+try {
+  final session = await connection.openSession('realm');
+  try {
+    print((await session.call('echo').arg('hello').execute()).args);
+  } finally {
+    await session.close();
+  }
+} finally {
+  await connection.close();
+}
+```
+
+TLS verifies the hostname and system roots, or an explicit DER `certificate`.
+`openStream` and `acceptStream` provide independent byte streams with `read`,
+`write`, `writeAll`, `writeEof`, and `close`. Closing a WAMP session leaves sibling
+sessions and streams open. Connection timeouts cancel native attempts.
