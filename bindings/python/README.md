@@ -96,3 +96,23 @@ provides the same operations with `await` and `async with`. Connections own thei
 sessions and byte streams. Closing a session leaves the connection usable.
 `open_stream()`/`accept_stream()` return independent byte streams with `read`,
 `write`, `write_all`, `write_eof`, and `close`.
+
+## WebTransport
+
+`xconn_core.webtransport.WebTransportConnection` and
+`AsyncWebTransportConnection` provide the same session and byte-stream operations
+as QUIC. Connect using an HTTPS URL:
+
+```python
+from xconn_core.webtransport import AsyncWebTransportConnection
+
+async with await AsyncWebTransportConnection.connect("https://host:443/wamp") as connection:
+    session = await connection.open_session("realm")
+    try:
+        print((await session.call("echo").arg("hello").execute()).args)
+    finally:
+        await session.close()
+```
+
+Rust verifies the server hostname and certificate chain using system roots, or
+an explicitly supplied DER `certificate`. Certificate verification is mandatory.
