@@ -487,3 +487,6 @@ class _SessionCleanup {
     }
   }
 }
+
+/// Internal bridge access for transport adapters; not exported by the public barrel.
+int nativeSessionHandle(Session session) => session._handle;

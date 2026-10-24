@@ -43,7 +43,12 @@ class Client {
   /// Timing out this returned Future also releases the underlying connection attempt.
   Future<Session> connect(String url, String realm) => connectNative(this, "connect", {"uri": url, "realm": realm});
 
-  Future<Session> _connect(String method, Map<String, Object?> request, _ConnectionAttempt attempt) async {
+  Future<Session> _connect(
+    String method,
+    Map<String, Object?> request,
+    _ConnectionAttempt attempt,
+    Session Function(Map<String, dynamic>, HostCallbacks?)? sessionFactory,
+  ) async {
     final serializer = _config.serializer;
     final name = serializerName(serializer);
     final authenticator = _config.authenticator;
@@ -77,13 +82,19 @@ class Client {
       });
       attempt.operation = operation;
       final response = fields(await operation.future);
+      attempt.connectionHandle = response["connection"] as int?;
       if (attempt.cancelled) {
         native.execute("close", {"handle": response["handle"]});
+        if (attempt.connectionHandle != null) {
+          native.execute("close", {"handle": attempt.connectionHandle});
+        }
         throw StateError("Connection attempt cancelled");
       }
 
       retained = customSerializer(serializer);
-      final session = Session.fromNative(response, callbacks: retained ? callbacks : null);
+      final session =
+          sessionFactory?.call(response, retained ? callbacks : null) ??
+          Session.fromNative(response, callbacks: retained ? callbacks : null);
       attempt.session = session;
       return session;
     } on Object {
@@ -112,19 +123,31 @@ Future<Session> connectCryptosign(String uri, String realm, String authid, Strin
     Client(config: ClientConfig(authenticator: CryptoSignAuthenticator(authid, privateKey))).connect(uri, realm);
 
 /// Internal adapter entry point; public callers use transport connection methods.
-Future<Session> connectNative(Client client, String method, Map<String, Object?> request) {
+Future<T> connectNative<T extends Session>(
+  Client client,
+  String method,
+  Map<String, Object?> request, {
+  Session Function(Map<String, dynamic>, HostCallbacks?)? sessionFactory,
+}) {
   final attempt = _ConnectionAttempt();
-  return CancellableFuture<Session>(client._connect(method, request, attempt), attempt.cancel);
+  return CancellableFuture<T>(
+    client._connect(method, request, attempt, sessionFactory).then((session) => session as T),
+    attempt.cancel,
+  );
 }
 
 class _ConnectionAttempt {
   native.NativeOperation? operation;
+  int? connectionHandle;
   Session? session;
   bool cancelled = false;
 
   void cancel() {
     cancelled = true;
     operation?.cancel();
+    if (connectionHandle != null) {
+      native.execute("close", {"handle": connectionHandle});
+    }
     session?.close().ignore();
   }
 }

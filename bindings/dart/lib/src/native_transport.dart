@@ -2,6 +2,7 @@ import "dart:async";
 
 import "package:xconn_core/src/callbacks.dart";
 import "package:xconn_core/src/native.dart" as native;
+import "package:xconn_core/src/session.dart";
 
 final _finalizer = Finalizer<int>((handle) {
   native.execute("close", {"handle": handle});
@@ -94,4 +95,11 @@ class CancellableFuture<T> implements Future<T> {
       throw TimeoutException("Connection timed out", timeLimit);
     },
   );
+}
+
+/// A live session retains its transport even if the caller drops the parent variable.
+class NativeTransportSession extends Session {
+  NativeTransportSession(super.response, this.owner, {super.callbacks}) : super.fromNative();
+
+  final NativeTransportResource owner;
 }

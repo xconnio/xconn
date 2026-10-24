@@ -118,3 +118,40 @@ Import `package:xconn_core/webtransport.dart` and use
 `WebTransportConnection.connect('https://host:443/wamp')`. The connection exposes
 `openSession`, `openStream`, `acceptStream`, and `close`, like QUIC. Rust verifies
 the server identity using system roots or an explicit DER `certificate`.
+
+## WebRTC
+
+```dart
+import 'dart:typed_data';
+import 'package:xconn_core/webrtc.dart';
+import 'package:xconn_core/xconn_core.dart';
+
+final signaling = await Client().connect('wss://router/ws', 'realm');
+try {
+  final peer = await WebRTCConnection.connect(signaling, 'realm', const WebRTCOptions(
+    offerProcedure: 'offer',
+    remoteCandidatesTopic: 'to-client',
+    localCandidatesTopic: 'to-provider',
+  ));
+  try {
+    print((await peer.call('echo').arg('hello').execute()).args);
+    final channel = await peer.connection.openChannel('files');
+    try {
+      await channel.writeMessage(Uint8List.fromList([1, 2, 3]));
+    } finally {
+      await channel.close();
+    }
+  } finally {
+    await peer.close();
+    await peer.connection.close();
+  }
+} finally {
+  await signaling.close();
+}
+```
+
+ICE servers and connection/open/handshake deadlines are configurable. Rust owns
+signaling, trickle ICE and chunk framing. WAMP sessions and raw channels share a
+connection; closing one session leaves its siblings open. Raw `send`/`receive`
+preserve strings versus bytes; `writeMessage`/`readMessage` use ordered, reliable
+chunk framing. The Dart binding is client-only.

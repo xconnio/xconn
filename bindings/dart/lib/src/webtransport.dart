@@ -21,12 +21,16 @@ class WebTransportConnection extends NativeTransportResource {
     (response) => WebTransportConnection._(response["handle"] as int),
   );
 
-  Future<Session> openSession(String realm, {Client? client}) =>
-      connectNative(client ?? Client(), "webtransport_session", {"handle": handle, "realm": realm});
+  Future<Session> openSession(String realm, {Client? client}) => connectNative(
+    client ?? Client(),
+    "webtransport_session",
+    {"handle": handle, "realm": realm},
+    sessionFactory: (response, callbacks) => NativeTransportSession(response, this, callbacks: callbacks),
+  );
 
   Future<ByteStream> openStream() async =>
-      ByteStream.fromNative(fields(await request("webtransport_open"))["handle"] as int);
+      ByteStream.fromNative(fields(await request("webtransport_open"))["handle"] as int, connection: this);
 
   Future<ByteStream> acceptStream() async =>
-      ByteStream.fromNative(fields(await request("webtransport_accept_remote"))["handle"] as int);
+      ByteStream.fromNative(fields(await request("webtransport_accept_remote"))["handle"] as int, connection: this);
 }

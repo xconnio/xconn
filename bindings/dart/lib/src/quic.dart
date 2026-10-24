@@ -7,7 +7,9 @@ import "package:xconn_core/src/session.dart";
 
 /// Independent bidirectional stream. Closing its write half still permits reads.
 class ByteStream extends NativeTransportResource {
-  ByteStream.fromNative(super.handle);
+  ByteStream.fromNative(super.handle, {required this.connection});
+
+  final NativeTransportResource connection;
 
   Future<Uint8List> read([int size = 65536]) async => (await request("quic_read", {"size": size}))! as Uint8List;
 
@@ -46,11 +48,14 @@ class QUICConnection extends NativeTransportResource {
     (response) => QUICConnection._(response["handle"] as int),
   );
 
-  Future<Session> openSession(String realm, {Client? client}) =>
-      connectNative(client ?? Client(), "quic_session", {"handle": handle, "realm": realm});
+  Future<Session> openSession(String realm, {Client? client}) => connectNative(client ?? Client(), "quic_session", {
+    "handle": handle,
+    "realm": realm,
+  }, sessionFactory: (response, callbacks) => NativeTransportSession(response, this, callbacks: callbacks));
 
-  Future<ByteStream> openStream() async => ByteStream.fromNative(fields(await request("quic_open"))["handle"] as int);
+  Future<ByteStream> openStream() async =>
+      ByteStream.fromNative(fields(await request("quic_open"))["handle"] as int, connection: this);
 
   Future<ByteStream> acceptStream() async =>
-      ByteStream.fromNative(fields(await request("quic_accept_remote"))["handle"] as int);
+      ByteStream.fromNative(fields(await request("quic_accept_remote"))["handle"] as int, connection: this);
 }

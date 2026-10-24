@@ -27,6 +27,9 @@ class ProtocolError implements Exception {
   ProtocolError(this.message);
 
   final String message;
+
+  @override
+  String toString() => message;
 }
 
 class PeerClosedException implements Exception {

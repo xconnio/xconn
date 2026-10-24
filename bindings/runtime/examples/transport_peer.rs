@@ -84,13 +84,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
     let p = provider.clone();
     tokio::spawn(async move {
-        while let Some(channel) = p.accept_channel().await {
+        while let Some(raw) = p.accept_raw().await {
+            let connection = raw.connection.clone();
+            let channel = raw.into_channel().await;
             tokio::spawn(async move {
-                while let Ok(message) = channel.read_message().await {
-                    if channel.write_message(&message).await.is_err() {
-                        break;
-                    }
+                if channel.label() == "trigger-remote"
+                    && let Ok(remote) = connection.open_raw_channel("remote", Default::default()).await
+                    && remote.wait_open(std::time::Duration::from_secs(5)).await.is_ok()
+                {
+                    let _ = remote.write_message(b"server first").await;
+                    tokio::spawn(echo_channel(remote));
                 }
+                echo_channel(channel).await;
             });
         }
     });
@@ -107,4 +112,28 @@ async fn echo_stream(stream: impl AsyncRead + AsyncWrite) {
     let (mut read, mut write) = tokio::io::split(stream);
     let _ = tokio::io::copy(&mut read, &mut write).await;
     let _ = write.shutdown().await;
+}
+
+async fn echo_channel(channel: Arc<xconn_webrtc::DataChannel>) {
+    if channel.label() == "packets" {
+        while let Ok(packet) = channel.read_data_packet().await {
+            let result = if packet.is_string {
+                let Ok(text) = std::str::from_utf8(&packet.data) else {
+                    break;
+                };
+                channel.send_text(text).await
+            } else {
+                channel.send_packet(packet.data).await
+            };
+            if result.is_err() {
+                break;
+            }
+        }
+    } else {
+        while let Ok(message) = channel.read_message().await {
+            if channel.write_message(&message).await.is_err() {
+                break;
+            }
+        }
+    }
 }
