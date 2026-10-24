@@ -356,6 +356,12 @@ class Client:
         if self.config.tcp_nodelay:
             raise NotImplementedError("tcp_nodelay configuration is not exposed by the native binding yet")
 
+        fields = {
+            "open_timeout": self.config.open_timeout,
+            "ping_interval": self.config.ping_interval,
+            "ping_timeout": self.config.ping_timeout,
+            **fields,
+        }
         callbacks = None
 
         try:
@@ -367,9 +373,6 @@ class Client:
                 **fields,
                 auth=callbacks.fields() if callbacks else bridge.credentials(self.authenticator),
                 serializer=bridge.serializer_fields(self.serializer, callbacks),
-                open_timeout=self.config.open_timeout,
-                ping_interval=self.config.ping_interval,
-                ping_timeout=self.config.ping_timeout,
             )
             session = session_factory(response, self.config)
 

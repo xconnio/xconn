@@ -116,3 +116,41 @@ async with await AsyncWebTransportConnection.connect("https://host:443/wamp") as
 
 Rust verifies the server hostname and certificate chain using system roots, or
 an explicitly supplied DER `certificate`. Certificate verification is mandatory.
+
+## WebRTC
+
+```python
+from xconn_core import AsyncClient
+from xconn_core.webrtc import WebRTCOptions, connect_async
+
+signaling = await AsyncClient().connect("wss://router/ws", "realm")
+try:
+    peer = await connect_async(
+        signaling,
+        "realm",
+        WebRTCOptions(
+            offer_procedure="offer",
+            remote_candidates_topic="to-client",
+            local_candidates_topic="to-provider",
+        ),
+    )
+    async with peer.connection as connection:
+        try:
+            print((await peer.call("echo").arg("hello").execute()).args)
+            async with await connection.open_channel("files") as channel:
+                await channel.write_message(b"file contents")
+        finally:
+            await peer.close()
+finally:
+    await signaling.close()
+```
+
+`connect` is the blocking equivalent. ICE servers and connection, session-open,
+and handshake deadlines are configured through `WebRTCOptions`. Rust handles
+trickle ICE, candidate ordering, signaling, and channel framing. A connection can
+open additional WAMP sessions and accept remote channels. Closing a WAMP session
+leaves its connection and other channels open; close the connection explicitly.
+Raw `send`/`receive` preserve text versus binary packets. `write_message` and
+`read_message` use the shared chunk framing for larger messages; use the same
+framing mode at both ends. Packet channels may be configured as ordered or
+unreliable; chunked messages require ordered, reliable channels.
