@@ -360,6 +360,13 @@ class AsyncClient:
         self.ws_config = TransportConfig() if ws_config is None else ws_config
 
     async def connect(self, uri, realm, connect_callback=None, disconnect_callback=None):
+        return await self._connect_native(
+            "connect", {"uri": uri, "realm": realm}, connect_callback, disconnect_callback
+        )
+
+    async def _connect_native(
+        self, method, fields, connect_callback=None, disconnect_callback=None, session_factory=AsyncSession
+    ):
         if self.ws_config.tcp_nodelay:
             raise NotImplementedError("tcp_nodelay configuration is not exposed by the native binding yet")
 
@@ -370,16 +377,15 @@ class AsyncClient:
                 callbacks = bridge.AuthCallbacks(self.authenticator, self.serializer)
 
             response = await bridge.execute_async(
-                "connect",
-                uri=uri,
-                realm=realm,
+                method,
+                **fields,
                 auth=callbacks.fields() if callbacks else bridge.credentials(self.authenticator),
                 serializer=bridge.serializer_fields(self.serializer, callbacks),
                 open_timeout=self.ws_config.open_timeout,
                 ping_interval=self.ws_config.ping_interval,
                 ping_timeout=self.ws_config.ping_timeout,
             )
-            session = AsyncSession(response, self.ws_config)
+            session = session_factory(response, self.ws_config)
 
             if bridge.custom_serializer(self.serializer):
                 session._host_callbacks = callbacks

@@ -33,8 +33,10 @@ jobs:
         env:
           PKG_CONFIG_PATH: ${{ github.workspace }}/target/native/lib/pkgconfig
       - run: maturin develop --locked --manifest-path bindings/python/Cargo.toml
+      - run: cargo build --locked -p xconn-binding-runtime --all-features --example transport_peer
       - run: pytest bindings/python/tests -q
         env:
+          XCONN_TRANSPORT_PEER: ${{ github.workspace }}/target/debug/examples/transport_peer
           XCONN_REFERENCE_GO_BIN: ${{ steps.reference.outputs.binary }}
           XCONN_DISCOVERY_BIN: ${{ github.workspace }}/target/debug/examples/discovery
           XCONN_STREAM_GO_TEST_BIN: ${{ github.workspace }}/target/streaming-interop/go.test

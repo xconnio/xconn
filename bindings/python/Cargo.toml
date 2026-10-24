@@ -9,6 +9,6 @@ publish = false
 name = "xconn_native"
 crate-type = ["cdylib"]
 [dependencies]
-xconn-binding-runtime = { path = "../runtime" }
+xconn-binding-runtime = { path = "../runtime", features = ["quic"] }
 pyo3 = { version = "0.28", features = ["abi3-py310"] }
 pyo3-async-runtimes = { version = "0.28", features = ["tokio-runtime"] }

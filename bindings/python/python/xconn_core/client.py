@@ -350,6 +350,9 @@ class Client:
         self.config = TransportConfig() if config is None else config
 
     def connect(self, uri, realm, connect_callback=None, disconnect_callback=None):
+        return self._connect_native("connect", {"uri": uri, "realm": realm}, connect_callback, disconnect_callback)
+
+    def _connect_native(self, method, fields, connect_callback=None, disconnect_callback=None, session_factory=Session):
         if self.config.tcp_nodelay:
             raise NotImplementedError("tcp_nodelay configuration is not exposed by the native binding yet")
 
@@ -360,16 +363,15 @@ class Client:
                 callbacks = bridge.AuthCallbacks(self.authenticator, self.serializer)
 
             response = bridge.execute(
-                "connect",
-                uri=uri,
-                realm=realm,
+                method,
+                **fields,
                 auth=callbacks.fields() if callbacks else bridge.credentials(self.authenticator),
                 serializer=bridge.serializer_fields(self.serializer, callbacks),
                 open_timeout=self.config.open_timeout,
                 ping_interval=self.config.ping_interval,
                 ping_timeout=self.config.ping_timeout,
             )
-            session = Session(response, self.config)
+            session = session_factory(response, self.config)
 
             if bridge.custom_serializer(self.serializer):
                 session._host_callbacks = callbacks

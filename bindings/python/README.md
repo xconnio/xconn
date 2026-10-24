@@ -77,3 +77,22 @@ with session.call("example.process").arg("input").stream(timeout=30) as call:
 
 With asyncio, use `async with await ...stream()` and `async for`. Enable input
 chunks with `stream(progressive_input=True)`, then `send(...)` and `finish(...)`.
+
+## QUIC connections
+
+```python
+from xconn_core.quic import QUICConnection
+
+with QUICConnection.connect("host:443", server_name="host") as connection:
+    session = connection.open_session("realm")
+    try:
+        print(session.call("echo").arg("hello").execute().args)
+    finally:
+        session.close()
+```
+
+TLS uses system roots, or an explicit DER `certificate`. `AsyncQUICConnection`
+provides the same operations with `await` and `async with`. Connections own their
+sessions and byte streams. Closing a session leaves the connection usable.
+`open_stream()`/`accept_stream()` return independent byte streams with `read`,
+`write`, `write_all`, `write_eof`, and `close`.
