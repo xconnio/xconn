@@ -12,6 +12,7 @@ default = ["wamp"]
 wamp = ["dep:xconn-core"]
 
 [dependencies]
+xconn-framing = { version = "0.1.0", path = "../xconn-framing" }
 xconn-core = { version = "0.1.0", path = "../xconn-core", default-features = false, features = ["async"], optional = true }
 webrtc = "0.14"
 tokio = { version = "1", features = ["full"] }

@@ -13,10 +13,7 @@ use webrtc::{
 };
 
 /// Explicit raw channels can be accepted before either peer sends a packet.
-pub const RAW_CHANNEL_PROTOCOL: &str = "xconn.raw";
-pub const MTU: usize = 16 * 1024;
-pub const MAX_PACKET_SIZE: usize = 65535;
-pub const DEFAULT_MAX_MESSAGE: usize = 16 * 1024 * 1024;
+pub use xconn_framing::{DEFAULT_MAX_MESSAGE, MAX_PACKET_SIZE, MTU, RAW_CHANNEL_PROTOCOL};
 
 #[derive(Debug)]
 pub struct Error(pub String);
@@ -34,51 +31,20 @@ impl From<webrtc::Error> for Error {
     }
 }
 
-/// Go-compatible chunk framing, with bounded memory and strict flag validation.
-pub struct Assembler {
-    buffer: Vec<u8>,
-    max_message: usize,
-}
+/// Go-compatible framing shared with browser WASM through xconn-framing.
+pub struct Assembler(xconn_framing::Assembler);
 
 impl Assembler {
     pub fn new(max_message: usize) -> Self {
-        Self {
-            buffer: Vec::new(),
-            max_message,
-        }
+        Self(xconn_framing::Assembler::new(max_message))
     }
 
-    pub fn feed(&mut self, chunk: &[u8]) -> std::result::Result<Option<Vec<u8>>, Error> {
-        if chunk.is_empty() || chunk.len() > MTU || chunk[0] > 1 {
-            self.buffer.clear();
-            return Err(Error("invalid WebRTC chunk".into()));
-        }
-
-        if self.buffer.len().saturating_add(chunk.len() - 1) > self.max_message {
-            self.buffer.clear();
-            return Err(Error("message exceeds receive limit".into()));
-        }
-
-        self.buffer.extend_from_slice(&chunk[1..]);
-
-        if chunk[0] == 1 {
-            Ok(Some(std::mem::take(&mut self.buffer)))
-        } else {
-            Ok(None)
-        }
+    pub fn feed(&mut self, chunk: &[u8]) -> Result<Option<Vec<u8>>, Error> {
+        self.0.feed(chunk).map_err(|error| Error(error.to_string()))
     }
 
     pub fn chunks(message: &[u8]) -> impl Iterator<Item = Bytes> + '_ {
-        // Even an empty message needs a final marker.
-        let total = message.len().div_ceil(MTU - 1).max(1);
-        (0..total).map(move |index| {
-            let start = index * (MTU - 1);
-            let end = (start + MTU - 1).min(message.len());
-            let mut chunk = Vec::with_capacity(end - start + 1);
-            chunk.push(u8::from(index + 1 == total));
-            chunk.extend_from_slice(&message[start..end]);
-            Bytes::from(chunk)
-        })
+        xconn_framing::Assembler::chunks(message)
     }
 }
 
@@ -274,7 +240,7 @@ impl DataChannel {
     }
 
     pub async fn set_receive_limit(&self, limit: usize) {
-        self.assembler.lock().await.max_message = limit;
+        self.assembler.lock().await.0.set_limit(limit);
     }
 
     pub async fn read_packet(&self) -> std::result::Result<Bytes, Error> {

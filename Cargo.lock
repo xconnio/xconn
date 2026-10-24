@@ -3311,6 +3311,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "xconn-framing"
+version = "0.1.0"
+dependencies = [
+ "bytes",
+]
+
+[[package]]
 name = "xconn-python"
 version = "0.1.0"
 dependencies = [
@@ -3331,6 +3338,7 @@ dependencies = [
  "uuid",
  "webrtc",
  "xconn-core",
+ "xconn-framing",
 ]
 
 [[package]]

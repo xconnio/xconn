@@ -14,6 +14,9 @@ supervision. Language bindings live under [`bindings`](bindings).
 - [`crates/xconn-webrtc`](crates/xconn-webrtc): reusable WebRTC data channels,
   trickle ICE, timeouts, and optional WAMP signaling and sessions.
 
+- [`crates/xconn-framing`](crates/xconn-framing): bounded data-channel message
+  framing shared by native WebRTC and browser WASM.
+
 - [`crates/xconn-crypto`](crates/xconn-crypto): portable packet encryption and
   key agreement for native and browser WASM consumers.
 

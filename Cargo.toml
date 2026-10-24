@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/xconn-framing",
     "bindings/js/wasm",
     "bindings/python",
     "bindings/ffi",
