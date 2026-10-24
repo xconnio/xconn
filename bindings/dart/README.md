@@ -111,3 +111,10 @@ TLS verifies the hostname and system roots, or an explicit DER `certificate`.
 `openStream` and `acceptStream` provide independent byte streams with `read`,
 `write`, `writeAll`, `writeEof`, and `close`. Closing a WAMP session leaves sibling
 sessions and streams open. Connection timeouts cancel native attempts.
+
+## WebTransport
+
+Import `package:xconn_core/webtransport.dart` and use
+`WebTransportConnection.connect('https://host:443/wamp')`. The connection exposes
+`openSession`, `openStream`, `acceptStream`, and `close`, like QUIC. Rust verifies
+the server identity using system roots or an explicit DER `certificate`.
