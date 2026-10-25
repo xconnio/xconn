@@ -49,9 +49,12 @@ MIT. Copyright XConnIO Ltd.
 
 ## Language bindings
 
-- [Browser JS / TypeScript](bindings/js): `import { Client } from "@xconnio/core"`.
-- [Dart](bindings/dart): Future-based clients; `package:xconn_core/xconn_core.dart`.
-- [Python](bindings/python): blocking and asyncio clients; `from xconn_core import Client`.
+- [Browser JS / TypeScript](bindings/js): WebSocket, WebTransport and WebRTC;
+  `import { Client } from "@xconnio/core"`.
+- [Dart](bindings/dart): Future-based clients with QUIC, WebTransport and WebRTC;
+  `package:xconn_core/xconn_core.dart`.
+- [Python](bindings/python): blocking and asyncio clients with QUIC, WebTransport
+  and WebRTC; `from xconn_core import Client`.
 - [Go](bindings/go): context-aware clients, routers, transports, and WebRTC.
 
 Go imports `github.com/xconnio/xconn-core/bindings/go` using package name `xconn`.
