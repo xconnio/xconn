@@ -168,3 +168,20 @@ signaling, trickle ICE and chunk framing. WAMP sessions and raw channels share a
 connection; closing one session leaves its siblings open. Raw `send`/`receive`
 preserve strings versus bytes; `writeMessage`/`readMessage` use ordered, reliable
 chunk framing. The Dart binding is client-only.
+
+## Reusing a host native build
+
+By default, the build hook compiles the Rust library. To reuse a library built
+from the same revision for the current host, configure the root pubspec:
+
+```yaml
+hooks:
+  user_defines:
+    xconn_core:
+      native_library: ../../target/release/libxconn_ffi.so
+```
+
+The path is relative to that pubspec. The hook tracks the library as a build
+dependency and bundles it as usual. Cross-compilation continues to use the
+source build path. CI uses this option to share one native build across Go,
+Python interoperability tests, and Dart.
