@@ -66,11 +66,16 @@ def stage(destination, static=False, profile="release"):
     else:
         libraries = '-L"${libdir}" -lxconn_ffi -Wl,-rpath,"${libdir}"'
 
-    (destination / f"lib/pkgconfig/{name}.pc").write_text(
+    pkg_config = destination / f"lib/pkgconfig/{name}.pc"
+    pkg_config.write_text(
         "prefix=${pcfiledir}/../..\nlibdir=${prefix}/lib\nincludedir=${prefix}/include\n\n"
         f"Name: xconn\nDescription: XConn native runtime (C ABI {abi})\nVersion: {version}\n"
         f'Libs: {libraries}\nCflags: -I"${{includedir}}"\n'
     )
+    readme = destination / "README.md"
+    license_file = destination / "LICENSE"
+    shutil.copy2(ROOT / "docs/native-install.md", readme)
+    shutil.copy2(ROOT / "LICENSE", license_file)
     dependencies = ""
     if not static:
         dependencies = output("otool", "-L", str(installed)) if system == "Darwin" else output("ldd", str(installed))
@@ -88,10 +93,12 @@ def stage(destination, static=False, profile="release"):
         "linkage": "static" if static else "dynamic",
         "link_libraries": libraries if static else "",
         "runtime_dependencies": dependencies,
-        "files": {str(path.relative_to(destination)): digest(path) for path in (installed, header)},
+        "files": {
+            str(path.relative_to(destination)): digest(path)
+            for path in (installed, header, pkg_config, readme, license_file)
+        },
     }
     (destination / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    shutil.copy2(ROOT / "docs/native-install.md", destination / "README.md")
     return f"xconn-native-{version}-{target}" + ("-static" if static else "")
 
 
