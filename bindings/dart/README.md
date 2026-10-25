@@ -1,6 +1,12 @@
 # Dart client binding
 
-The package provides Future-based WAMP clients over Rust networking:
+The package provides Future-based WAMP clients over Rust networking.
+
+Install with `dart pub add xconn_core` or `flutter pub add xconn_core`.
+The first build downloads the native library automatically; see the supported
+platforms and requirements below.
+
+Connect to a WAMP router and call a registered `example.echo` procedure:
 
 ```dart
 import "package:xconn_core/xconn_core.dart";

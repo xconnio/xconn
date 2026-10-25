@@ -1,8 +1,19 @@
 name: xconn_core
-description: Dart clients for the shared Rust XConn Core runtime.
-repository: https://github.com/xconnio/xconn-core
+description: WAMP clients with Rust networking, authentication, progressive RPCs, and direct WebRTC and QUIC connections.
+repository: https://github.com/xconnio/xconn-core/tree/main/bindings/dart
+issue_tracker: https://github.com/xconnio/xconn-core/issues
 version: 0.1.0
-publish_to: none
+
+platforms:
+  android:
+  linux:
+  macos:
+
+topics:
+  - wamp
+  - rpc
+  - pubsub
+  - networking
 
 environment:
   sdk: '>=3.10.0 <4.0.0'
