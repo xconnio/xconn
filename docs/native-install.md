@@ -27,13 +27,14 @@ automatically download or install native code during a build.
 Download SDK archives from the [Core releases](https://github.com/xconnio/xconn-core/releases).
 Assets inherit repository visibility: public downloads require a public
 repository; private releases require authenticated repository access.
-For each version, the release workflow builds these host targets:
+The release workflow builds these targets:
 
 | Target | Build host | Archives |
 | --- | --- | --- |
 | `x86_64-unknown-linux-gnu` | Ubuntu 22.04 | Shared and static |
 | `aarch64-unknown-linux-gnu` | Ubuntu 22.04 ARM64 | Shared and static |
 | `aarch64-apple-darwin` | macOS 15 ARM64 | Shared |
+| `aarch64-linux-android` | Ubuntu 22.04 + NDK r28c | Shared, Android API 24+ |
 
 Each archive has its own `.sha256` file; `SHA256SUMS` covers all archives.
 For example, verify a Linux SDK before extracting it:
@@ -43,12 +44,12 @@ sha256sum --check xconn-native-0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
 tar -xzf xconn-native-0.1.0-x86_64-unknown-linux-gnu.tar.gz
 ```
 
-Native SDKs are host builds, not manylinux packages. The default shared SDK
+Linux/macOS SDKs are host builds, not manylinux packages. The default shared SDK
 requires the system libraries recorded in `manifest.json`; use a compatible
 distribution. TLS uses rustls with native certificate roots. Static Linux linking
 is available separately below. The archive target describes architecture/OS;
 the manifest describes the build host.
-Intel macOS, Windows, Android and iOS SDK packaging are not included in this first release path.
+Intel macOS, Windows and iOS SDK packaging are not included in this release path.
 
 For source development from the repository root:
 
@@ -92,3 +93,25 @@ Relink Go applications after rebuilding the Rust archive: Go does not track
 changes to external native archives in its build cache (use `go build -a`). Static packaging currently supports
 Linux on the build host architecture. Certificates and any glibc runtime modules
 remain system resources; this is not a hermetic cross-distribution build.
+
+## Android ARM64
+
+The Android archive contains `lib/libxconn_ffi.so` for `arm64-v8a`, targeting
+Android API 24 or newer. It uses NDK r28c (`28.2.13676358`) and supports 16 KB
+page alignment. The manifest records the Android API level, NDK revision,
+build host, and runtime dependencies. The Android library requires Bionic;
+it cannot run on a Linux desktop despite both platforms using ELF files.
+
+To build and validate the archive on a Linux x86-64 host with that NDK installed:
+
+```sh
+rustup target add aarch64-linux-android
+export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+ci/build-android-sdk.sh target/android-native-dist
+ci/test-android-sdk.sh target/android-native-dist
+```
+
+The check validates ARM64 exports, 16 KB load-segment alignment, and linking an
+Android C consumer. It does not execute the library on an Android device.
+Android SDK packaging is separate from teaching the Dart build hook to download
+and bundle these release assets; the hook currently still builds from source.
