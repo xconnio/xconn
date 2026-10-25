@@ -8,6 +8,8 @@ cargo build --locked -p xconn-core --features services --example discovery
 export XCONN_DISCOVERY_BIN="$PWD/target/debug/examples/discovery"
 cargo build --locked -p xconn-core --example streaming_peer
 export XCONN_STREAM_RUST_BIN="$PWD/target/debug/examples/streaming_peer"
+cargo build --locked -p xconn-binding-runtime --all-features --example transport_peer
+export XCONN_TRANSPORT_PEER="$PWD/target/debug/examples/transport_peer"
 npm --prefix bindings/js ci --ignore-scripts
 npm --prefix bindings/js run build
 npm --prefix bindings/js run typecheck

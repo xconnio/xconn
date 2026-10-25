@@ -17,6 +17,7 @@ use wampproto::{
         types::{Error, Value},
     },
     serializers::{helpers::to_message, json::JSONSerializer, serializer::Serializer},
+    transports::rawsocket,
 };
 use wasm_bindgen::{JsCast, prelude::*};
 
@@ -378,5 +379,66 @@ impl PacketCrypto {
 
     pub fn decrypt(packet: &[u8], key: &[u8], additional_data: &[u8]) -> Result<Vec<u8>, JsValue> {
         xconn_crypto::decrypt(packet, key, additional_data).map_err(error)
+    }
+}
+
+/// RawSocket negotiation and bounded headers shared by browser transports.
+#[wasm_bindgen]
+pub struct RawSocketFraming {
+    serializer: rawsocket::SerializerID,
+    send_limit: usize,
+}
+
+#[wasm_bindgen]
+impl RawSocketFraming {
+    #[wasm_bindgen(constructor)]
+    pub fn new(codec: &str) -> Result<RawSocketFraming, JsValue> {
+        let serializer = match codec {
+            "json" => rawsocket::SerializerID::JSON,
+            "msgpack" => rawsocket::SerializerID::MSGPACK,
+            "cbor" => rawsocket::SerializerID::CBOR,
+            _ => return Err(error("unsupported RawSocket codec")),
+        };
+        Ok(Self {
+            serializer,
+            send_limit: 0,
+        })
+    }
+
+    pub fn handshake(&self) -> Result<Vec<u8>, JsValue> {
+        rawsocket::send_handshake(&rawsocket::Handshake::new(
+            self.serializer,
+            rawsocket::DEFAULT_MAX_MSG_SIZE,
+        ))
+        .map_err(error)
+    }
+
+    pub fn accept_handshake(&mut self, data: &[u8]) -> Result<(), JsValue> {
+        let handshake = rawsocket::receive_handshake(data).map_err(error)?;
+        if handshake.serializer_id() as u8 != self.serializer as u8 {
+            return Err(error("server selected another serializer"));
+        }
+        self.send_limit = handshake.max_message_size();
+        Ok(())
+    }
+
+    pub fn send_limit(&self) -> usize {
+        self.send_limit
+    }
+
+    pub fn header(&self, kind: u8, length: usize) -> Result<Vec<u8>, JsValue> {
+        if length > self.send_limit {
+            return Err(error("message exceeds peer limit"));
+        }
+        let kind = rawsocket::Message::from_u8(kind).ok_or_else(|| error("invalid RawSocket frame kind"))?;
+        rawsocket::try_send_message_header(&rawsocket::MessageHeader::new(kind, length)).map_err(error)
+    }
+
+    pub fn parse_header(&self, data: &[u8]) -> Result<Vec<u32>, JsValue> {
+        let header = rawsocket::receive_message_header(data).map_err(error)?;
+        if header.length() > rawsocket::DEFAULT_MAX_MSG_SIZE {
+            return Err(error("message exceeds receive limit"));
+        }
+        Ok(vec![header.kind() as u32, header.length() as u32])
     }
 }

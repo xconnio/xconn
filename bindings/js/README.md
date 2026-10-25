@@ -165,3 +165,30 @@ release their WASM storage immediately. Reusing the adapter allocates fresh nati
 storage lazily. A session releases its default serializer on disconnect; connection
 setup releases its default authenticator on success or failure. Supplied adapters
 remain caller-owned, so free them when all connections using them have finished.
+
+## Browser QUIC connectivity through WebTransport
+
+```typescript
+import { WebTransportConnection } from "@xconnio/core";
+
+const connection = await WebTransportConnection.connect("https://router:443/wamp");
+try {
+    const session = await connection.openSession("realm");
+    try {
+        console.log((await session.call("echo").arg("hello").execute()).args);
+    } finally {
+        await session.close();
+    }
+} finally {
+    await connection.close();
+}
+```
+
+Networking uses the browser's native WebTransport API; WAMP joining, codecs and
+RawSocket framing use Rust/WASM. A WebTransport listener is required; arbitrary
+QUIC listeners cannot accept browser connections. Browser certificate validation
+is mandatory. For development certificates, pass the standard
+`serverCertificateHashes` option with SHA-256 hashes obtained through a trusted
+channel. WAMP sessions are independent of sibling byte streams. `openStream()`
+and `acceptStream()` expose `read`, `write`, `writeEof`, and `close`; EOF is
+`undefined`. `connectTimeout` and `signal` bound connection setup.

@@ -61,7 +61,20 @@ async function startRustPeer() {
     throw new Error("Rust streaming peer did not announce its address");
 }
 
-async function browser(uri, discoveryUri, rustURI) {
+async function startTransportPeer() {
+    const binary = process.env.XCONN_TRANSPORT_PEER;
+    if (!binary) return undefined;
+    const child = spawn(binary, [], { stdio: ["pipe", "pipe", "inherit"] });
+    children.push(child);
+    const lines = createInterface({ input: child.stdout });
+    for await (const line of lines) {
+        lines.close();
+        return JSON.parse(line);
+    }
+    throw new Error("transport peer did not announce its addresses");
+}
+
+async function browser(uri, discoveryUri, rustURI, transportPeer) {
     const executable = process.env.CHROMIUM_BIN;
     if (!executable) return [];
     server = createServer(async (request, response) => {
@@ -80,6 +93,7 @@ async function browser(uri, discoveryUri, rustURI) {
                 "/crypto.mjs",
                 "/streaming.mjs",
                 "/streaming-interop.mjs",
+                "/webtransport.mjs",
             ].includes(url.pathname);
             const file = testFile
                 ? path.join(import.meta.dirname, url.pathname.slice(1))
@@ -180,6 +194,10 @@ async function browser(uri, discoveryUri, rustURI) {
             const {exerciseDiscovery} = await import(${JSON.stringify(`${base}/discovery.mjs`)});
             result.discovery = await exerciseDiscovery(module, ${JSON.stringify(discoveryUri)});
         }
+        if (${JSON.stringify(transportPeer)} !== undefined) {
+            const {exerciseWebTransport} = await import(${JSON.stringify(`${base}/webtransport.mjs`)});
+            result.webtransport = await exerciseWebTransport(module, ${JSON.stringify(transportPeer)}, ${JSON.stringify(variant)});
+        }
         return result;
     })()`;
     const result = await call("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true }, sessionId);
@@ -205,6 +223,7 @@ try {
     const uri = await startReference();
     const discoveryUri = await startDiscovery();
     const rustURI = await startRustPeer();
+    const transportPeer = await startTransportPeer();
 
     const module = await import(pathToFileURL(path.join(artifacts, "index.js")));
     await module.initializeWasm(await readFile(path.join(artifacts, "wasm/xconn_browser_bg.wasm")));
@@ -218,7 +237,7 @@ try {
     if (variant === "full") result.crypto = exerciseCrypto(module, cryptoFixture);
     if (discoveryUri) result.discovery = await exerciseDiscovery(module, discoveryUri);
     console.log("Node:", result);
-    for (const result of await browser(uri, discoveryUri, rustURI)) console.log("Chromium:", result);
+    for (const result of await browser(uri, discoveryUri, rustURI, transportPeer)) console.log("Chromium:", result);
 } finally {
     clearTimeout(deadline);
     for (const child of children) {

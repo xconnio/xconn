@@ -20,3 +20,5 @@ export type { Endpoint } from "./discovery.js";
 export * as crypto from "./crypto.js";
 export { Call } from "./call.js";
 export type { StreamOptions, CallTransport } from "./call.js";
+export { ByteStream, WebTransportConnection } from "./webtransport.js";
+export type { WebTransportOptions } from "./webtransport.js";
