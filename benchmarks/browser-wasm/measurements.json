@@ -14,118 +14,130 @@
     {
       "variant": "json",
       "wasm": {
-        "raw": 184678,
-        "gzip": 74834,
-        "brotli": 63439
+        "raw": 193703,
+        "gzip": 78520,
+        "brotli": 66694
       },
       "javascript": {
-        "raw": 95043,
-        "gzip": 21085,
-        "brotli": 18197
+        "raw": 144268,
+        "gzip": 30606,
+        "brotli": 26588
       },
       "total": {
-        "raw": 279721,
-        "gzip": 95919,
-        "brotli": 81636
+        "raw": 337971,
+        "gzip": 109126,
+        "brotli": 93282
       },
       "sha256": {
-        "wasm/xconn_browser_bg.wasm": "3d6535bf2f3a6685a7617ff80fb3a985d97731d7aa154dd4dd479b084e3a5aed",
+        "wasm/xconn_browser_bg.wasm": "1abbc243e1b0c5e48e051d038c5a323809ad9e987aaf34afdefe2d2eaf5b5a69",
         "auth.js": "adc4bd57a4a040d6145ced1b9dfcbc5df57faf0e2fa5726ae3368d628d11523a",
         "call.js": "582924f042336c9b1e7e9fbbf594d740fcfee3a81c55627ce22fd83034c6c2e3",
-        "client.js": "a1afb1b21a3bc88477297d9133146db86cd549d9d5535d78478d966715e0a935",
+        "client.js": "279791524cfd4ae9da0498735f5f557c15a49e59f8e3bc26ca32e07641fa5246",
         "constants.js": "7642334a70cde5515388d483eaf018bea1e8ed27f0de5414ba82f2451d9d3429",
         "crypto.js": "34e444a3695ff470a2d24f6c458b0a4fb681b10ab6d6a3c3bd7211f30768231e",
         "discovery.js": "a4fb175632f4d18ebb085ccecc160c5e5ccfa44f1b661a7e82046817813736d6",
         "exception.js": "ed5bb7bae091f819ed1cedb175e173300965b4abdca4753470a32626af702a51",
-        "index.js": "11d1554202bfab7353141273399a1fe1c298f93c61a0a92dbe783248a31ac025",
+        "inbox.js": "b7937e7ed780f00c81fb527f71fc497c74c39397564143e001e2f3e66549ebfc",
+        "index.js": "e1ef7e0443b9a7c2aae556afb13ec31b9c32184eb5ee38fd9f8a5c2e2e742a61",
         "message.js": "00ba9b1201ef7235559dd66006fac4439e9e0c8fb1aa4b53043e0ec800c3f45a",
         "native.js": "4652ea047acd9311ab9386d165fbe135300b14b0d55c849f6772dbe22f971b1a",
         "payload.js": "f526638de18d383c93bffe0dae9246ebe3828ce468ffeeb9f5a5220282539ee0",
+        "peer.js": "8c1ddbe3d8884f7ce72012ac198cbd94dce8bd74f18b29ac3a1637890116c64e",
         "requests.js": "bc7c127755dc42e65d9d88b74659d3ced21d971e83ec4251c46c99b1ddd4b458",
         "serializers.js": "a8960c192146f9a8666dea6673931da5ba8722f026c1fb066a45f9533b1669f0",
-        "session.js": "4bf526be004aaa758612e8f78604fcbc70b5033ceffe516009a01e57df3ea941",
-        "transport.js": "b3463e9ab8db972dd13f4cb3fad51995738f3b1dd29c8267f999c77b8cced7fa",
-        "types.js": "a5f95e07363c631bd22f93f2f6ad29c0156a004d30e713a71ff9019283ddb08d",
+        "session.js": "1d0a813750d4f8dc6deb6a83fbe27a3db82b71b0f8e285c10c0ba6fc376a05d2",
+        "transport.js": "da4cec72d45c9b7f59b08b809e24d24771bb0a3923d0f7606ee3f137d700674c",
+        "types.js": "b3e53f576a9f99966993ccbcc1f8504a62d485a9e1e193cf9447ba6912e738ad",
         "util.js": "35daeb329345b6ee39fc842a0f46d46a23626150c545c870e720b3dd0040cb87",
-        "wasm/xconn_browser.js": "bf0583a46cd1cd01297d47be75be0b087de903c4fcfab7a71edc210b4dd64b3a"
+        "wasm/xconn_browser.js": "f75b3dbedc28a572fb1ca81ab07f55827acc6898ac86861f33aa8404a8ed305d",
+        "webrtc.js": "5909a667bd654a705c51f3020e3023e54193d5ad35dc8b2aef72d6882a5814b4",
+        "webtransport.js": "0dc568e532f2d94e76e44d3c91c2b6d9f08c6d7fbe9400545ee42d7a04661e77"
       }
     },
     {
       "variant": "codecs",
       "wasm": {
-        "raw": 252314,
-        "gzip": 94775,
-        "brotli": 79370
+        "raw": 260958,
+        "gzip": 98422,
+        "brotli": 82440
       },
       "javascript": {
-        "raw": 95043,
-        "gzip": 21085,
-        "brotli": 18197
+        "raw": 144268,
+        "gzip": 30606,
+        "brotli": 26588
       },
       "total": {
-        "raw": 347357,
-        "gzip": 115860,
-        "brotli": 97567
+        "raw": 405226,
+        "gzip": 129028,
+        "brotli": 109028
       },
       "sha256": {
-        "wasm/xconn_browser_bg.wasm": "49ae0ac8faa927ed0a3b616bb9e2c1c4d61695f6c3f2c7c45207d99cca21ee45",
+        "wasm/xconn_browser_bg.wasm": "b288b494c54000b8464d8290053fd01a702fb9097a205b4cf8b5a98f841c312b",
         "auth.js": "adc4bd57a4a040d6145ced1b9dfcbc5df57faf0e2fa5726ae3368d628d11523a",
         "call.js": "582924f042336c9b1e7e9fbbf594d740fcfee3a81c55627ce22fd83034c6c2e3",
-        "client.js": "a1afb1b21a3bc88477297d9133146db86cd549d9d5535d78478d966715e0a935",
+        "client.js": "279791524cfd4ae9da0498735f5f557c15a49e59f8e3bc26ca32e07641fa5246",
         "constants.js": "7642334a70cde5515388d483eaf018bea1e8ed27f0de5414ba82f2451d9d3429",
         "crypto.js": "34e444a3695ff470a2d24f6c458b0a4fb681b10ab6d6a3c3bd7211f30768231e",
         "discovery.js": "a4fb175632f4d18ebb085ccecc160c5e5ccfa44f1b661a7e82046817813736d6",
         "exception.js": "ed5bb7bae091f819ed1cedb175e173300965b4abdca4753470a32626af702a51",
-        "index.js": "11d1554202bfab7353141273399a1fe1c298f93c61a0a92dbe783248a31ac025",
+        "inbox.js": "b7937e7ed780f00c81fb527f71fc497c74c39397564143e001e2f3e66549ebfc",
+        "index.js": "e1ef7e0443b9a7c2aae556afb13ec31b9c32184eb5ee38fd9f8a5c2e2e742a61",
         "message.js": "00ba9b1201ef7235559dd66006fac4439e9e0c8fb1aa4b53043e0ec800c3f45a",
         "native.js": "4652ea047acd9311ab9386d165fbe135300b14b0d55c849f6772dbe22f971b1a",
         "payload.js": "f526638de18d383c93bffe0dae9246ebe3828ce468ffeeb9f5a5220282539ee0",
+        "peer.js": "8c1ddbe3d8884f7ce72012ac198cbd94dce8bd74f18b29ac3a1637890116c64e",
         "requests.js": "bc7c127755dc42e65d9d88b74659d3ced21d971e83ec4251c46c99b1ddd4b458",
         "serializers.js": "a8960c192146f9a8666dea6673931da5ba8722f026c1fb066a45f9533b1669f0",
-        "session.js": "4bf526be004aaa758612e8f78604fcbc70b5033ceffe516009a01e57df3ea941",
-        "transport.js": "b3463e9ab8db972dd13f4cb3fad51995738f3b1dd29c8267f999c77b8cced7fa",
-        "types.js": "a5f95e07363c631bd22f93f2f6ad29c0156a004d30e713a71ff9019283ddb08d",
+        "session.js": "1d0a813750d4f8dc6deb6a83fbe27a3db82b71b0f8e285c10c0ba6fc376a05d2",
+        "transport.js": "da4cec72d45c9b7f59b08b809e24d24771bb0a3923d0f7606ee3f137d700674c",
+        "types.js": "b3e53f576a9f99966993ccbcc1f8504a62d485a9e1e193cf9447ba6912e738ad",
         "util.js": "35daeb329345b6ee39fc842a0f46d46a23626150c545c870e720b3dd0040cb87",
-        "wasm/xconn_browser.js": "bf0583a46cd1cd01297d47be75be0b087de903c4fcfab7a71edc210b4dd64b3a"
+        "wasm/xconn_browser.js": "f75b3dbedc28a572fb1ca81ab07f55827acc6898ac86861f33aa8404a8ed305d",
+        "webrtc.js": "5909a667bd654a705c51f3020e3023e54193d5ad35dc8b2aef72d6882a5814b4",
+        "webtransport.js": "0dc568e532f2d94e76e44d3c91c2b6d9f08c6d7fbe9400545ee42d7a04661e77"
       }
     },
     {
       "variant": "full",
       "wasm": {
-        "raw": 340023,
-        "gzip": 149006,
-        "brotli": 127515
+        "raw": 348562,
+        "gzip": 152664,
+        "brotli": 130649
       },
       "javascript": {
-        "raw": 104662,
-        "gzip": 21989,
-        "brotli": 18953
+        "raw": 153887,
+        "gzip": 31509,
+        "brotli": 27321
       },
       "total": {
-        "raw": 444685,
-        "gzip": 170995,
-        "brotli": 146468
+        "raw": 502449,
+        "gzip": 184173,
+        "brotli": 157970
       },
       "sha256": {
-        "wasm/xconn_browser_bg.wasm": "4362482a02de4276744f57d1d98f710c535d47c380b0985ac0f6c4d5f9e9030f",
+        "wasm/xconn_browser_bg.wasm": "345df5d3b429dd181247cb0b4bb68be990e064ca139b9503581d8b04be1cbcd9",
         "auth.js": "adc4bd57a4a040d6145ced1b9dfcbc5df57faf0e2fa5726ae3368d628d11523a",
         "call.js": "582924f042336c9b1e7e9fbbf594d740fcfee3a81c55627ce22fd83034c6c2e3",
-        "client.js": "a1afb1b21a3bc88477297d9133146db86cd549d9d5535d78478d966715e0a935",
+        "client.js": "279791524cfd4ae9da0498735f5f557c15a49e59f8e3bc26ca32e07641fa5246",
         "constants.js": "7642334a70cde5515388d483eaf018bea1e8ed27f0de5414ba82f2451d9d3429",
         "crypto.js": "34e444a3695ff470a2d24f6c458b0a4fb681b10ab6d6a3c3bd7211f30768231e",
         "discovery.js": "a4fb175632f4d18ebb085ccecc160c5e5ccfa44f1b661a7e82046817813736d6",
         "exception.js": "ed5bb7bae091f819ed1cedb175e173300965b4abdca4753470a32626af702a51",
-        "index.js": "11d1554202bfab7353141273399a1fe1c298f93c61a0a92dbe783248a31ac025",
+        "inbox.js": "b7937e7ed780f00c81fb527f71fc497c74c39397564143e001e2f3e66549ebfc",
+        "index.js": "e1ef7e0443b9a7c2aae556afb13ec31b9c32184eb5ee38fd9f8a5c2e2e742a61",
         "message.js": "00ba9b1201ef7235559dd66006fac4439e9e0c8fb1aa4b53043e0ec800c3f45a",
         "native.js": "4652ea047acd9311ab9386d165fbe135300b14b0d55c849f6772dbe22f971b1a",
         "payload.js": "f526638de18d383c93bffe0dae9246ebe3828ce468ffeeb9f5a5220282539ee0",
+        "peer.js": "8c1ddbe3d8884f7ce72012ac198cbd94dce8bd74f18b29ac3a1637890116c64e",
         "requests.js": "bc7c127755dc42e65d9d88b74659d3ced21d971e83ec4251c46c99b1ddd4b458",
         "serializers.js": "a8960c192146f9a8666dea6673931da5ba8722f026c1fb066a45f9533b1669f0",
-        "session.js": "4bf526be004aaa758612e8f78604fcbc70b5033ceffe516009a01e57df3ea941",
-        "transport.js": "b3463e9ab8db972dd13f4cb3fad51995738f3b1dd29c8267f999c77b8cced7fa",
-        "types.js": "a5f95e07363c631bd22f93f2f6ad29c0156a004d30e713a71ff9019283ddb08d",
+        "session.js": "1d0a813750d4f8dc6deb6a83fbe27a3db82b71b0f8e285c10c0ba6fc376a05d2",
+        "transport.js": "da4cec72d45c9b7f59b08b809e24d24771bb0a3923d0f7606ee3f137d700674c",
+        "types.js": "b3e53f576a9f99966993ccbcc1f8504a62d485a9e1e193cf9447ba6912e738ad",
         "util.js": "35daeb329345b6ee39fc842a0f46d46a23626150c545c870e720b3dd0040cb87",
-        "wasm/xconn_browser.js": "fd1141e6c55c0464093996dba1193794ff8821862348e5de47fb2b12ea67c413"
+        "wasm/xconn_browser.js": "dfa1c3017dbf789819e996acba47d93a81a05a5c39acdc317f882fc44dadee4e",
+        "webrtc.js": "5909a667bd654a705c51f3020e3023e54193d5ad35dc8b2aef72d6882a5814b4",
+        "webtransport.js": "0dc568e532f2d94e76e44d3c91c2b6d9f08c6d7fbe9400545ee42d7a04661e77"
       }
     }
   ]

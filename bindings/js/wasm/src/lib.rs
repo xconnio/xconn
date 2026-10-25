@@ -442,3 +442,73 @@ impl RawSocketFraming {
         Ok(vec![header.kind() as u32, header.length() as u32])
     }
 }
+
+/// The same bounded message assembler used by the native WebRTC transport.
+#[wasm_bindgen]
+pub struct ChannelFraming {
+    assembler: xconn_framing::Assembler,
+    maximum: usize,
+}
+
+#[wasm_bindgen]
+impl ChannelFraming {
+    #[wasm_bindgen(constructor)]
+    pub fn new(maximum: Option<usize>) -> Result<ChannelFraming, JsValue> {
+        let maximum = maximum.unwrap_or(xconn_framing::DEFAULT_MAX_MESSAGE);
+        if maximum == 0 || maximum > xconn_framing::DEFAULT_MAX_MESSAGE {
+            return Err(error("invalid message receive limit"));
+        }
+        Ok(Self {
+            assembler: xconn_framing::Assembler::new(maximum),
+            maximum,
+        })
+    }
+
+    pub fn feed(&mut self, chunk: &[u8]) -> Result<Option<Vec<u8>>, JsValue> {
+        self.assembler.feed(chunk).map_err(error)
+    }
+
+    pub fn encode(&self, message: &[u8]) -> Result<js_sys::Array, JsValue> {
+        if message.len() > self.maximum {
+            return Err(error("message exceeds send limit"));
+        }
+        let chunks = js_sys::Array::new();
+        for chunk in xconn_framing::Assembler::chunks(message) {
+            chunks.push(&js_sys::Uint8Array::from(chunk.as_ref()));
+        }
+        Ok(chunks)
+    }
+}
+
+#[wasm_bindgen]
+pub fn channel_packet_limit() -> usize {
+    xconn_framing::MAX_PACKET_SIZE
+}
+
+#[wasm_bindgen]
+pub fn rawsocket_receive_limit() -> usize {
+    rawsocket::DEFAULT_MAX_MSG_SIZE
+}
+
+/// WebRTC signaling uses Rust JSON, independently of the WAMP session codec.
+#[wasm_bindgen]
+pub fn signaling_encode(value: JsValue) -> Result<String, JsValue> {
+    let value: Value = serde_wasm_bindgen::from_value(value).map_err(error)?;
+    let bytes = wampproto::serializers::codec::Codec::Json
+        .encode(&value)
+        .map_err(error)?;
+    String::from_utf8(bytes).map_err(error)
+}
+
+#[wasm_bindgen]
+pub fn signaling_decode(text: &str) -> Result<JsValue, JsValue> {
+    let value: Value = wampproto::serializers::codec::Codec::Json
+        .decode(text.as_bytes())
+        .map_err(error)?;
+    to_js(&value)
+}
+
+#[wasm_bindgen]
+pub fn raw_channel_protocol() -> String {
+    xconn_framing::RAW_CHANNEL_PROTOCOL.into()
+}

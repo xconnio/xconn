@@ -22,3 +22,5 @@ export { Call } from "./call.js";
 export type { StreamOptions, CallTransport } from "./call.js";
 export { ByteStream, WebTransportConnection } from "./webtransport.js";
 export type { WebTransportOptions } from "./webtransport.js";
+export { DataChannel, WebRTCConnection, WebRTCSession } from "./webrtc.js";
+export type { WebRTCOptions, ChannelOptions } from "./webrtc.js";

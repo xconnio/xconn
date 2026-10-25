@@ -114,3 +114,36 @@ export class CustomSerializer implements Serializer {
         return this.delegate.deserialize(payload);
     }
 }
+
+// Compile the transport surface exactly as an application would consume it.
+export async function transportApi(signaling: Session, url: string, realm: string): Promise<void> {
+    const { WebTransportConnection, WebRTCConnection } = await import("../src/index.js");
+    const transport = await WebTransportConnection.connect(url);
+    try {
+        const session = await transport.openSession(realm);
+        await session.call("echo").arg("WebTransport").execute();
+        await session.close();
+        const stream = await transport.openStream();
+        await stream.write(new Uint8Array([1]));
+        await stream.writeEof();
+        await stream.read();
+        await stream.close();
+    } finally {
+        await transport.close();
+    }
+    const peer = await WebRTCConnection.connect(signaling, realm, {
+        offerProcedure: "offer",
+        remoteCandidatesTopic: "to-client",
+        localCandidatesTopic: "to-provider",
+    });
+    try {
+        await peer.call("echo").arg("WebRTC").execute();
+        const raw = await peer.connection.openChannel("files");
+        await raw.writeMessage(new Uint8Array([1]));
+        await raw.readMessage();
+        await raw.close();
+    } finally {
+        await peer.close();
+        await peer.connection.close();
+    }
+}

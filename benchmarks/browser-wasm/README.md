@@ -7,7 +7,8 @@ The WASM adapter lives in `bindings/js/wasm`, and the public TypeScript API live
 Rust owns joining/authentication, message layouts and validation, request IDs and
 codecs. JavaScript owns browser WebSocket IO, Promise correlation, callbacks,
 cancellation and session lifecycle. The native Tokio runtime, C FFI, router and
-native WebRTC stack are excluded. Browser WebRTC is not implemented yet.
+native WebRTC stack are excluded. Browser WebRTC uses browser networking and
+the shared Rust chunk assembler; WebTransport uses the browser HTTP/3 API.
 
 ## Measured sizes
 
@@ -18,9 +19,9 @@ unbundled and unminified. Declarations, docs and build metadata are excluded.
 
 | Variant | WASM raw | JS raw | Total raw | Total gzip | Total Brotli |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| JSON; anonymous + ticket | 180.3 | 92.8 | 273.2 | 93.7 | 79.7 |
-| JSON + CBOR + MessagePack; anonymous + ticket | 246.4 | 92.8 | 339.2 | 113.1 | 95.3 |
-| All codecs and authentication; packet encryption | 332.1 | 102.2 | 434.3 | 167.0 | 143.0 |
+| JSON; anonymous + ticket | 189.2 | 140.9 | 330.0 | 106.6 | 91.1 |
+| JSON + CBOR + MessagePack; anonymous + ticket | 254.8 | 140.9 | 395.7 | 126.0 | 106.5 |
+| All codecs and authentication; packet encryption | 340.4 | 150.3 | 490.7 | 179.9 | 154.3 |
 
 Exact bytes, per-file SHA-256 hashes and tool versions are recorded in
 [measurements.json](measurements.json). Compression assumes the web server serves

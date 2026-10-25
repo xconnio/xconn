@@ -192,3 +192,49 @@ is mandatory. For development certificates, pass the standard
 channel. WAMP sessions are independent of sibling byte streams. `openStream()`
 and `acceptStream()` expose `read`, `write`, `writeEof`, and `close`; EOF is
 `undefined`. `connectTimeout` and `signal` bound connection setup.
+
+## Browser WebRTC
+
+```typescript
+import { Client, WebRTCConnection } from "@xconnio/core";
+
+const signaling = await new Client().connect("wss://router/ws", "realm");
+try {
+    const peer = await WebRTCConnection.connect(signaling, "realm", {
+        offerProcedure: "offer",
+        remoteCandidatesTopic: "to-client",
+        localCandidatesTopic: "to-provider",
+    });
+    try {
+        console.log((await peer.call("echo").arg("hello").execute()).args);
+        const channel = await peer.connection.openChannel("files");
+        try {
+            await channel.writeMessage(new TextEncoder().encode("file contents"));
+        } finally {
+            await channel.close();
+        }
+    } finally {
+        await peer.close();
+        await peer.connection.close();
+    }
+} finally {
+    await signaling.close();
+}
+```
+
+Configure STUN/TURN servers with the standard `iceServers` option.
+Browser APIs own ICE, DTLS and SCTP. Rust/WASM owns WAMP state, signaling JSON,
+serializer negotiation and the same bounded chunk framing used by native Rust.
+The Rust signaling provider's offer/candidate contract is preserved. Early remote
+candidates are buffered and applied in order; the signaling subscription remains
+active for late trickle candidates until the peer connection closes.
+
+`connectTimeout`, `openTimeout`, `handshakeTimeout` and `signal` bound setup.
+Additional sessions use `peer.connection.openSession`. Closing a session leaves
+its connection and sibling channels open. The signaling session remains owned by
+the application. `openChannel` and `acceptChannel` support remote-initiated raw
+channels. `send`/`receive` preserve text and binary packets; `writeMessage` and
+`readMessage` use chunk framing for ordered, reliable channels. Reads accept an
+optional AbortSignal. Do not mix packet and chunk framing on the same channel.
+Incoming and outgoing queues are bounded; large producers should receive
+concurrently and handle explicit queue-limit errors. Close resources explicitly.

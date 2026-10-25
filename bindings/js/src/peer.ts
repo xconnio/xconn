@@ -9,6 +9,7 @@ import { getNative, initializeWasm, rustCall } from "./native.js";
 import { defaultSerializer, getSubProtocol, JSONSerializer } from "./serializers.js";
 import type { Payload, Serializer } from "./serializers.js";
 import { Session } from "./session.js";
+import type { SessionOptions } from "./session.js";
 import { BaseSession, SessionDetails } from "./types.js";
 import { abortable, timeoutValue } from "./util.js";
 import type { ClientProtocol } from "./wasm/xconn_browser.js";
@@ -74,11 +75,12 @@ class PeerSession extends BaseSession {
 }
 
 /** Common Rust-driven join path for WebSocket, WebTransport and WebRTC. */
-export async function connectPeer(
+export async function connectPeer<T extends Session = Session>(
     factory: (serializer: Serializer, signal: AbortSignal) => Promise<MessagePeer>,
     realm: string,
     options: ClientOptions = {},
-): Promise<Session> {
+    createSession?: (base: BaseSession, options: SessionOptions) => T,
+): Promise<T> {
     const timeout = timeoutValue(options.connectTimeout ?? 20000, "connectTimeout");
     const closeTimeout = timeoutValue(options.closeTimeout ?? 10000, "closeTimeout");
     const controller = new AbortController();
@@ -97,6 +99,7 @@ export async function connectPeer(
     let ownedSerializer: Serializer | undefined;
     let ownedAuthenticator: ClientAuthenticator | undefined;
     let transferred = false;
+    let joining = true;
     try {
         controller.signal.throwIfAborted();
         await abortable(initializeWasm(), controller.signal);
@@ -115,6 +118,12 @@ export async function connectPeer(
         const joiner = protocol;
         // Factories must release transport resources if setup is aborted.
         peer = await factory(serializer, controller.signal);
+        peer.onDisconnect((reason) => {
+            if (joining) {
+                controller.abort(new ProtocolError(reason ?? "Connection closed"));
+            }
+        });
+        controller.signal.throwIfAborted();
         await abortable(
             Promise.resolve(peer.send(serializer.serialize(new WireMessage(rustCall(() => joiner.hello()))))),
             controller.signal,
@@ -142,27 +151,28 @@ export async function connectPeer(
         }
 
         const details = rustCall(() => joiner.details());
-        const session = new Session(
-            new PeerSession(
-                peer,
-                new SessionDetails(
-                    details.sessionID,
-                    details.realm,
-                    details.authid,
-                    details.authrole,
-                    details.authmethod,
-                    details.authextra,
-                    details.roles,
-                ),
-                serializer,
+        const base = new PeerSession(
+            peer,
+            new SessionDetails(
+                details.sessionID,
+                details.realm,
+                details.authid,
+                details.authrole,
+                details.authmethod,
+                details.authextra,
+                details.roles,
             ),
-            { closeTimeout },
+            serializer,
         );
+        const session = createSession
+            ? createSession(base, { closeTimeout })
+            : (new Session(base, { closeTimeout }) as T);
         const codec = ownedSerializer;
         session.onDisconnect(() => codec?.free?.());
         transferred = true;
         return session;
     } finally {
+        joining = false;
         clearTimeout(timer);
         options.signal?.removeEventListener("abort", externalAbort);
         protocol?.free();

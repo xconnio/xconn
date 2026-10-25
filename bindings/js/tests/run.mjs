@@ -94,6 +94,7 @@ async function browser(uri, discoveryUri, rustURI, transportPeer) {
                 "/streaming.mjs",
                 "/streaming-interop.mjs",
                 "/webtransport.mjs",
+                "/webrtc.mjs",
             ].includes(url.pathname);
             const file = testFile
                 ? path.join(import.meta.dirname, url.pathname.slice(1))
@@ -197,6 +198,8 @@ async function browser(uri, discoveryUri, rustURI, transportPeer) {
         if (${JSON.stringify(transportPeer)} !== undefined) {
             const {exerciseWebTransport} = await import(${JSON.stringify(`${base}/webtransport.mjs`)});
             result.webtransport = await exerciseWebTransport(module, ${JSON.stringify(transportPeer)}, ${JSON.stringify(variant)});
+            const {exerciseWebRTC} = await import(${JSON.stringify(`${base}/webrtc.mjs`)});
+            result.webrtc = await exerciseWebRTC(module, ${JSON.stringify(transportPeer)}, ${JSON.stringify(variant)});
         }
         return result;
     })()`;

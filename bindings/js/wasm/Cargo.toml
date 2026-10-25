@@ -17,6 +17,7 @@ cryptosign = []
 packet-crypto = ["dep:xconn-crypto"]
 
 [dependencies]
+xconn-framing = { version = "0.1.0", path = "../../../crates/xconn-framing" }
 xconn-crypto = { path = "../../../crates/xconn-crypto", optional = true }
 wampproto = { path = "../../../crates/wampproto" }
 wasm-bindgen = "=0.2.129"
