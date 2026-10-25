@@ -79,7 +79,7 @@ async fn webtransport_sessions_and_authenticated_raw_stream() {
             .await
             .unwrap();
         let connection = Connection::connect(
-            &format!("https://localhost:{}", server.local_addr.port()),
+            &format!("https://{}", server.local_addr),
             server.client_config().unwrap(),
         )
         .await

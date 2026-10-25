@@ -82,12 +82,13 @@ impl WebSocketPeer {
             stream: Mutex::new(Some(stream.try_clone().map_err(|e| Error::new(e.to_string()))?)),
             closed: AtomicBool::new(false),
         });
-        let stream_copy = stream
-            .try_clone()
-            .map_err(|e| Error::new(format!("clone error: {e}")))?;
-        let mio_stream = MioTcpStream::from_std(stream_copy);
-        let mut mio_stream_b = MioTcpStream::from_std(stream);
+        let mut mio_stream = MioTcpStream::from_std(stream);
+        let mut poll = Poll::new().map_err(|e| Error::new(format!("poll error: {e}")))?;
+        poll.registry()
+            .register(&mut mio_stream, CLIENT, Interest::READABLE | Interest::WRITABLE)
+            .map_err(|e| Error::new(format!("register error: {e}")))?;
 
+        // Readiness tracking belongs to the Mio stream used for I/O, especially on Windows.
         let ws = WebSocket::from_raw_socket(mio_stream, Role::Client, None);
         let ws_conn = Arc::new(Mutex::new(ws));
         let ws_writer = Arc::clone(&ws_conn);
@@ -96,10 +97,6 @@ impl WebSocketPeer {
         let (front_writer, background_reader): (mpsc::Sender<Message>, mpsc::Receiver<Message>) = mpsc::channel();
         let (background_writer, front_reader): (mpsc::Sender<Message>, mpsc::Receiver<Message>) = mpsc::channel();
 
-        let mut poll = Poll::new().map_err(|e| Error::new(format!("poll error: {e}")))?;
-        poll.registry()
-            .register(&mut mio_stream_b, CLIENT, Interest::READABLE | Interest::WRITABLE)
-            .map_err(|e| Error::new(format!("register error: {e}")))?;
         let mut events = Events::with_capacity(1024);
 
         let reader_control = control.clone();

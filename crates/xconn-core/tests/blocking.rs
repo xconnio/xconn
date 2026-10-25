@@ -93,7 +93,7 @@ fn blocking_webtransport_session() {
     router.add_realm("realm", RealmConfig::default()).unwrap();
     let listener = Listener::bind(&router, "127.0.0.1:0".parse().unwrap()).unwrap();
     let connection = Connection::connect(
-        &format!("https://localhost:{}", listener.local_addr().port()),
+        &format!("https://{}", listener.local_addr()),
         listener.client_config().unwrap(),
     )
     .unwrap();
