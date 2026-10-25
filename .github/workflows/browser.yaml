@@ -1,8 +1,6 @@
 name: Browser binding
 on:
-  push:
-  pull_request:
-  workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -14,8 +12,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
-      - uses: ./.github/actions/reference
-        id: reference
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-browser
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
@@ -26,8 +25,22 @@ jobs:
         with:
           chrome-version: stable
           install-dependencies: true
-      - run: cargo install wasm-bindgen-cli --version 0.2.129 --locked
+      - uses: actions/cache@v4
+        id: bindgen
+        with:
+          path: |
+            ~/.cargo/bin/wasm-bindgen
+            ~/.cargo/bin/wasm-bindgen-test-runner
+            ~/.cargo/bin/wasm2es6js
+          key: wasm-bindgen-${{ runner.os }}-${{ runner.arch }}-0.2.129
+      - if: steps.bindgen.outputs.cache-hit != 'true'
+        run: cargo install wasm-bindgen-cli --version 0.2.129 --locked --force
       - run: sudo apt-get update && sudo apt-get install -y binaryen
-      - run: ci/test-browser.sh "${{ steps.reference.outputs.binary }}"
+      - uses: ./.github/actions/ci-artifacts
+        with:
+          reference: 'true'
+          helpers: 'true'
+      - run: ci/test-browser.sh "${{ github.workspace }}/target/reference/xconn-go-reference"
         env:
+          XCONN_PREBUILT_HELPERS: '1'
           CHROMIUM_BIN: ${{ steps.chrome.outputs.chrome-path }}

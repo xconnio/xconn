@@ -42,6 +42,12 @@ cargo test --locked --workspace --all-features
 
 CI runs these checks on Linux, macOS, and Windows, plus async-only, blocking,
 and protocol-only builds. Go is not required for the normal Rust tests.
+CI runs on pull requests and pushes to `main`. The path filters in
+[`.github/filters.yaml`](.github/filters.yaml) select affected checks; shared
+changes run the full suite. Go changes also run Python interoperability tests.
+Linux binding jobs share the native SDK, test helpers, and independent Go
+reference through same-run artifacts. Python still builds its own extension,
+and browser tests build WASM. Lint runs independently of native compilation.
 
 [Progressive RPC APIs](docs/streaming.md) and the
 [WebTransport Retry limitation](docs/webtransport-retry.md) describe runtime behavior.

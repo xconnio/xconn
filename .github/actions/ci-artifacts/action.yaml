@@ -1,0 +1,35 @@
+name: Restore shared CI artifacts
+description: Restore same-run Linux binaries without rebuilding them
+inputs:
+  native:
+    description: Restore the native SDK and Dart host library
+    default: 'false'
+  helpers:
+    description: Restore Rust integration test peers
+    default: 'false'
+  reference:
+    description: Restore the pinned independent Go reference
+    default: 'false'
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@v4
+      if: inputs.native == 'true'
+      with:
+        name: linux-native-sdk
+        path: ${{ runner.temp }}/xconn-artifacts
+    - uses: actions/download-artifact@v4
+      if: inputs.helpers == 'true'
+      with:
+        name: linux-test-helpers
+        path: ${{ runner.temp }}/xconn-artifacts
+    - uses: actions/download-artifact@v4
+      if: inputs.reference == 'true'
+      with:
+        name: independent-go-reference
+        path: ${{ runner.temp }}/xconn-artifacts
+    - shell: bash
+      run: |
+        for archive in "$RUNNER_TEMP"/xconn-artifacts/*.tar; do
+          tar -xf "$archive" -C "$GITHUB_WORKSPACE"
+        done
