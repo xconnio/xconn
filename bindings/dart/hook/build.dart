@@ -2,8 +2,7 @@ import "dart:io";
 
 import "package:code_assets/code_assets.dart";
 import "package:hooks/hooks.dart";
-
-import "src/native_sdk.dart";
+import "package:xconn_core/src/native_sdk.dart";
 
 /// Bundle a verified SDK release without requiring Rust or a source checkout.
 Future<void> main(List<String> args) async {

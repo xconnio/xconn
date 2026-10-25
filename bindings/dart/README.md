@@ -86,7 +86,7 @@ hooks:
 ```
 
 To update the bundled SDK version, update `nativeSdkVersion` and all target
-checksums in `hook/src/native_sdk.dart` together. Never replace release assets.
+checksums in `lib/src/native_sdk.dart` together. Never replace release assets.
 
 For a standalone Dart application, use `dart build cli` (Dart 3.13+) to produce
 an executable **and its bundled native library**. `dart compile exe` alone does
