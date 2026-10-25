@@ -6,6 +6,9 @@ The workspace contains the sans-I/O WAMP engine and its Rust networking runtime.
 Optional services provide RPC bridging, endpoint discovery, and attachment
 supervision. Language bindings live under [`bindings`](bindings).
 
+[From many implementations to XConn Core](CONSOLIDATION.md) describes the
+project’s origins and the work behind this consolidation.
+
 ## Workspace
 
 - [`docs/services.md`](docs/services.md): service contracts, resource ownership,
