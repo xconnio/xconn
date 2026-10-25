@@ -28,8 +28,14 @@ jobs:
       browser: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.browser == 'true' }}
       rust: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.rust == 'true' }}
       interop: ${{ steps.select.outputs.shared }}
-      native: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.native == 'true' }}
-      bindings: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.bindings == 'true' }}
+      sctp: ${{ steps.select.outputs.sctp }}
+      native: >-
+        ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.go == 'true' ||
+            steps.select.outputs.python == 'true' || steps.select.outputs.dart == 'true' }}
+      bindings: >-
+        ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.go == 'true' ||
+            steps.select.outputs.python == 'true' || steps.select.outputs.dart == 'true' ||
+            steps.select.outputs.browser == 'true' }}
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
@@ -53,28 +59,38 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: rustfmt, clippy
+          components: ${{ runner.os == 'Linux' && 'rustfmt,clippy' || 'clippy' }}
+          targets: ${{ runner.os == 'Linux' && 'wasm32-unknown-unknown' || '' }}
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: rust-${{ matrix.os }}
-      - run: cargo fmt --all -- --check
+      - if: runner.os == 'Linux'
+        run: cargo fmt --all -- --check
       - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --locked --workspace --all-features
       - run: cargo check --locked -p xconn-webrtc --no-default-features
-      - run: cargo check --locked -p xconn-core --no-default-features
-      - run: cargo check --locked -p xconn-core --no-default-features --features services
-      - run: cargo check --locked -p xconn-core --no-default-features --features crypto
+      - if: runner.os == 'Linux'
+        run: cargo check --locked -p xconn-core --no-default-features
+      - if: runner.os == 'Linux'
+        run: cargo check --locked -p xconn-core --no-default-features --features services
+      - if: runner.os == 'Linux'
+        run: cargo check --locked -p xconn-core --no-default-features --features crypto
       - run: cargo check --locked -p xconn-core --no-default-features --features async
       - run: cargo check --locked -p xconn-core --no-default-features --features sync
       - run: cargo check --locked -p xconn-core --no-default-features --features router --bin xconn-router
-      - run: cargo package --locked -p wampproto
-      - run: cargo doc --locked --workspace --no-deps
+      - if: runner.os == 'Linux'
+        run: cargo package --locked -p wampproto
+      - if: runner.os == 'Linux'
+        run: cargo doc --locked --workspace --no-deps
         env:
           RUSTDOCFLAGS: -D warnings
+      - name: Check browser-compatible packet encryption
+        if: runner.os == 'Linux'
+        run: cargo check --locked -p xconn-crypto --target wasm32-unknown-unknown
 
   sctp-regression:
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: needs.changes.outputs.sctp == 'true'
     name: SCTP remote-reset regression
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -90,22 +106,6 @@ jobs:
       - run: >-
           cargo test --locked -p webrtc-sctp
           --lib remote_reset_drains_received_messages_before_eof
-
-  wasm-crypto:
-    needs: changes
-    if: needs.changes.outputs.rust == 'true'
-    name: Browser-compatible packet encryption
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: wasm-crypto
-      - run: cargo check --locked -p xconn-crypto --target wasm32-unknown-unknown
 
   reference:
     name: Independent Go interoperability

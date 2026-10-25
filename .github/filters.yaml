@@ -35,12 +35,5 @@ rust:
   - '!**/*.md'
   - '!**/LICENSE'
 
-native:
-  - '{bindings/{go,python,dart}/**,.github/workflows/{go,python,dart}.yaml}'
-  - '!**/*.md'
-  - '!**/LICENSE'
-
-bindings:
-  - '{bindings/{go,python,dart,js}/**,benchmarks/browser-wasm/**,.github/workflows/{go,python,dart,browser}.yaml,ci/test-browser.sh}'
-  - '!**/*.md'
-  - '!**/LICENSE'
+sctp:
+  - '{Cargo.toml,Cargo.lock,.github/workflows/ci.yaml,.github/filters.yaml}'
