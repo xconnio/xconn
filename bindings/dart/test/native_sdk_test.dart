@@ -6,8 +6,7 @@ import "dart:typed_data";
 import "package:archive/archive.dart";
 import "package:crypto/crypto.dart";
 import "package:test/test.dart";
-
-import "../hook/src/native_sdk.dart";
+import "package:xconn_core/src/native_sdk.dart";
 
 const _target = "x86_64-unknown-linux-gnu";
 const _libraryName = "libxconn_ffi.so";
