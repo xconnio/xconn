@@ -44,7 +44,6 @@ MessagePack, all authentication methods, progressive inputs/results, custom
 adapters and concurrent isolates are tested against the original Go router.
 
 ```sh
-cargo build --locked -p xconn-ffi --release
 cd bindings/dart
 dart pub get --enforce-lockfile
 dart format --output=none --set-exit-if-changed --line-length 120 .
@@ -52,14 +51,36 @@ dart analyze --fatal-infos
 XCONN_REFERENCE_GO_BIN=/path/to/original-go-reference dart test
 ```
 
-Dart 3.10+ build hooks compile the shared Rust C ABI and declare a native code
-asset. `dart run`, `dart test`, and Flutter builds bundle it automatically; no
-manual library copying is required. Keep the full Core checkout available when
-using this source package and install Rust plus the matching Rust target.
-For example, Android arm64 needs `rustup target add aarch64-linux-android` and
-the Android NDK; iOS needs Xcode and the device/simulator Rust targets on macOS.
-Linux, macOS, Windows, Android arm64/x64, and iOS device/simulator target mappings
-are included. The hook uses Flutter's NDK linker for Android builds.
+## Native SDK downloads
+
+Dart 3.10+ build hooks download native SDK **0.1.1** from GitHub Releases,
+verify the archive against checksums pinned in this package, and bundle the
+library automatically. Rust, Cargo, and a Core source checkout are not required.
+
+Supported release targets:
+
+- Android ARM64, API 24 or newer.
+- Linux x86-64 and ARM64, using the Ubuntu 22.04 SDK builds.
+- macOS ARM64.
+
+The first build needs network access to GitHub. Verified archives and libraries
+are cached in the hook's shared output directory and can be reused offline.
+Cached archives and libraries are checked again whenever the hook runs;
+corrupt cache entries fail the build rather than loading unverified code.
+Windows, Intel macOS, and iOS do not yet have downloadable SDKs.
+
+For development or CI, an explicitly supplied library takes precedence over
+downloads. It must match the build target and C ABI; no Rust tools are invoked:
+
+```yaml
+hooks:
+  user_defines:
+    xconn_core:
+      native_library: /absolute/path/to/libxconn_ffi.so
+```
+
+To update the bundled SDK version, update `nativeSdkVersion` and all target
+checksums in `hook/src/native_sdk.dart` together. Never replace release assets.
 
 For a standalone Dart application, use `dart build cli` (Dart 3.13+) to produce
 an executable **and its bundled native library**. `dart compile exe` alone does
@@ -67,23 +88,23 @@ not invoke the native-assets hook. `XCONN_LIBRARY` remains an explicit loader
 override for development and tests.
 
 Native-assets loading and packaged CLI execution are verified on Linux x86_64.
-Apple/Android cross-target mappings require their platform toolchains and are
-not a claim of device validation. Browser clients use the JavaScript binding.
+Flutter Android builds use the downloaded ARM64 library. Apple and Android
+device runtime validation remains separate from archive/bundling checks. Browser clients use the JavaScript binding.
 Forced isolate termination still does not guarantee finalizer cleanup.
 
 Fluent requests use `execute()`, for example:
 `await session.call('echo').arg('hello').execute()`.
 The former `do_()` alias has been removed. See the
-[shared execution contract](../../docs/fluent-api.md).
+[shared execution contract](https://github.com/xconnio/xconn-core/blob/main/docs/fluent-api.md).
 
-Invocation, Event and Result share [strict typed payload accessors](../../docs/payload.md)
+Invocation, Event and Result share [strict typed payload accessors](https://github.com/xconnio/xconn-core/blob/main/docs/payload.md)
 with explicit defaults and consistent numeric/binary conversion rules.
 
-[Result construction and received values](../../docs/results.md) use one payload
+[Result construction and received values](https://github.com/xconnio/xconn-core/blob/main/docs/results.md) use one payload
 type for handler replies, progressive results and completed calls.
 
 Progressive RPCs use the fluent `stream()` terminal (`Stream()`/`StreamContext()` in Go).
-See the [cross-language streaming API](../../docs/streaming.md) for examples and lifecycle rules.
+See the [cross-language streaming API](https://github.com/xconnio/xconn-core/blob/main/docs/streaming.md) for examples and lifecycle rules.
 
 ## Progressive results
 
