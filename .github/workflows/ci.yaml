@@ -37,6 +37,20 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
+  sctp-regression:
+    name: SCTP remote-reset regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          repository: xconnio/webrtc
+          ref: b4b91964e91973778c3080e0f403561f6765522b
+      - uses: dtolnay/rust-toolchain@stable
+      - run: >-
+          cargo test --locked -p webrtc-sctp
+          --lib remote_reset_drains_received_messages_before_eof
+
   wasm-crypto:
     name: Browser-compatible packet encryption
     runs-on: ubuntu-latest
