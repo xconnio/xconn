@@ -89,8 +89,15 @@ jobs:
           shared-key: native-release-aarch64-linux-android
       - name: Check release version and build host
         run: ci/check-native-release.sh
-      - name: Install Android NDK
-        run: sdkmanager "ndk;$ANDROID_NDK_VERSION"
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Set up Android SDK and NDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ndk;${{ env.ANDROID_NDK_VERSION }}
       - name: Package Android ARM64 SDK
         run: >-
           ANDROID_NDK_HOME="$ANDROID_HOME/ndk/$ANDROID_NDK_VERSION"
