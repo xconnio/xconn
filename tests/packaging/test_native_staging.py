@@ -80,6 +80,59 @@ class NativeStagingTests(unittest.TestCase):
                 self.assertEqual(PACKAGE.digest(destination / relative), checksum)
             self.assertEqual((destination / "LICENSE").read_bytes(), (PACKAGE.ROOT / "LICENSE").read_bytes())
 
+    def test_android_sdk_uses_cross_target_library_and_ndk_metadata(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            host_library = root / "target/native/libxconn_ffi.so"
+            android_library = root / "target/aarch64-linux-android/native/libxconn_ffi.so"
+            for library, content in [(host_library, b"host library"), (android_library, b"Android library")]:
+                library.parent.mkdir(parents=True)
+                library.write_bytes(content)
+            ndk = root / "ndk"
+            readelf = ndk / "toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+            readelf.parent.mkdir(parents=True)
+            readelf.touch()
+            (ndk / "source.properties").write_text("Pkg.Revision = 28.2.13676358\n")
+            metadata = {
+                "target_directory": str(root / "target"),
+                "packages": [{"name": "xconn-ffi", "version": "0.1.1", "features": {"default": []}}],
+            }
+
+            def output(*command):
+                if command[0] == "cargo":
+                    return json.dumps(metadata)
+                if command == ("rustc", "-vV"):
+                    return "host: x86_64-unknown-linux-gnu"
+                if command[0] in ("ldd", "otool"):
+                    self.fail("Foreign Android libraries must not be inspected with host loader tools")
+                if command[0] == str(readelf):
+                    return "NEEDED libc.so"
+                if command[:2] == ("git", "status"):
+                    return ""
+                return "fixture"
+
+            destination = root / "sdk"
+            with (
+                patch.object(PACKAGE, "output", side_effect=output),
+                patch.object(PACKAGE.platform, "system", return_value="Linux"),
+                patch.dict(PACKAGE.os.environ, {"ANDROID_NDK_HOME": str(ndk)}),
+            ):
+                name = PACKAGE.stage(destination, profile="native", target="aarch64-linux-android")
+                with self.assertRaisesRegex(SystemExit, "native Linux"):
+                    PACKAGE.stage(destination, static=True, target="aarch64-linux-android")
+                with self.assertRaisesRegex(SystemExit, "API level 24"):
+                    PACKAGE.stage(destination, target="aarch64-linux-android", android_api_level=23)
+
+            self.assertEqual(name, "xconn-native-0.1.1-aarch64-linux-android")
+            self.assertEqual((destination / "lib/libxconn_ffi.so").read_bytes(), b"Android library")
+            self.assertNotIn("-rpath", (destination / "lib/pkgconfig/xconn.pc").read_text())
+            manifest = json.loads((destination / "manifest.json").read_text())
+            self.assertEqual(manifest["target"], "aarch64-linux-android")
+            self.assertEqual(manifest["build_host"], "x86_64-unknown-linux-gnu")
+            self.assertEqual(manifest["android_api_level"], 24)
+            self.assertEqual(manifest["android_ndk_version"], "28.2.13676358")
+            self.assertEqual(manifest["runtime_dependencies"], "NEEDED libc.so")
+
     def test_signing_failure_preserves_installed_library(self):
         with tempfile.TemporaryDirectory() as directory:
             source, installed = (

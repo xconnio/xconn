@@ -4,6 +4,7 @@
 import argparse
 import hashlib
 import json
+import os
 import platform
 import re
 import shutil
@@ -38,17 +39,32 @@ def install_library(source, destination, system):
         staged.replace(destination)
 
 
-def stage(destination, static=False, profile="release"):
+def stage(destination, static=False, profile="release", target=None, android_api_level=24):
     metadata = json.loads(output("cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"))
     package = next(package for package in metadata["packages"] if package["name"] == "xconn-ffi")
-    target = output("rustc", "-vV").split("host: ")[1].splitlines()[0]
+    host = output("rustc", "-vV").split("host: ")[1].splitlines()[0]
+    build_target = target
+    target = target or host
+    android = target == "aarch64-linux-android"
     system = platform.system()
     if system not in ("Linux", "Darwin"):
         raise SystemExit("native SDK packaging supports Linux and macOS")
-    if static and system != "Linux":
-        raise SystemExit("static SDK packaging currently supports Linux only")
+    if android:
+        if host != "x86_64-unknown-linux-gnu":
+            raise SystemExit("Android SDK packaging currently requires a Linux x86-64 host")
+        if android_api_level < 24:
+            raise SystemExit("Android SDKs require API level 24 or newer")
+        ndk = Path(os.environ.get("ANDROID_NDK_HOME", ""))
+        readelf = ndk / "toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+        if not readelf.is_file():
+            raise SystemExit("Set ANDROID_NDK_HOME to the Android NDK directory")
+    if static and (system != "Linux" or android):
+        raise SystemExit("static SDK packaging currently supports native Linux targets only")
     filename = "libxconn_ffi.a" if static else ("libxconn_ffi.dylib" if system == "Darwin" else "libxconn_ffi.so")
-    library = Path(metadata["target_directory"]) / profile / filename
+    build_directory = Path(metadata["target_directory"])
+    if build_target:
+        build_directory /= build_target
+    library = build_directory / profile / filename
     if not library.is_file():
         raise SystemExit(f"build first: cargo build --locked --profile {profile} -p xconn-ffi")
     destination.mkdir(parents=True, exist_ok=True)
@@ -63,6 +79,8 @@ def stage(destination, static=False, profile="release"):
     name = "xconn-static" if static else "xconn"
     if static:
         libraries = '"${libdir}/libxconn_ffi.a" -lgcc_eh -lutil -lrt -lpthread -lm -ldl -lc'
+    elif android:
+        libraries = '-L"${libdir}" -lxconn_ffi'
     else:
         libraries = '-L"${libdir}" -lxconn_ffi -Wl,-rpath,"${libdir}"'
 
@@ -77,12 +95,15 @@ def stage(destination, static=False, profile="release"):
     shutil.copy2(ROOT / "docs/native-install.md", readme)
     shutil.copy2(ROOT / "LICENSE", license_file)
     dependencies = ""
-    if not static:
+    if android:
+        dependencies = output(str(readelf), "--dynamic", str(installed))
+    elif not static:
         dependencies = output("otool", "-L", str(installed)) if system == "Darwin" else output("ldd", str(installed))
     manifest = {
         "version": version,
         "abi_version": abi,
         "target": target,
+        "build_host": host,
         "platform": platform.platform(),
         "rustc": output("rustc", "--version"),
         "revision": output("git", "rev-parse", "HEAD"),
@@ -98,6 +119,11 @@ def stage(destination, static=False, profile="release"):
             for path in (installed, header, pkg_config, readme, license_file)
         },
     }
+    if android:
+        revision = re.search(r"^Pkg.Revision\s*=\s*(.+)$", (ndk / "source.properties").read_text(), re.MULTILINE)
+        if revision is None:
+            raise SystemExit("Android NDK source.properties is missing Pkg.Revision")
+        manifest.update(android_api_level=android_api_level, android_ndk_version=revision.group(1))
     (destination / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return f"xconn-native-{version}-{target}" + ("-static" if static else "")
 
@@ -111,22 +137,47 @@ def main():
     )
     parser.add_argument("--static", action="store_true", help="stage the Linux static archive and linker dependencies")
     parser.add_argument("--profile", choices=("release", "native"), default="release", help="Cargo build profile")
+    parser.add_argument("--target", choices=("aarch64-linux-android",), help="cross-compile the Android ARM64 SDK")
+    parser.add_argument("--android-api-level", type=int, default=24, help="minimum Android API level (default: 24)")
     parser.add_argument("destination", type=Path)
     args = parser.parse_args()
+    if args.target and args.static:
+        parser.error("Android SDKs are shared libraries; --static is only supported for native Linux")
     destination = args.destination.resolve()
     if args.stage_only:
-        stage(destination, static=args.static, profile=args.profile)
+        stage(
+            destination,
+            static=args.static,
+            profile=args.profile,
+            target=args.target,
+            android_api_level=args.android_api_level,
+        )
         print(destination)
         return
     subprocess.run(
-        ["cargo", "build", "--locked", "--profile", args.profile, "-p", "xconn-ffi"],
+        [
+            "cargo",
+            "build",
+            "--locked",
+            "--profile",
+            args.profile,
+            "-p",
+            "xconn-ffi",
+            *(["--target", args.target] if args.target else []),
+        ],
         cwd=ROOT,
         check=True,
     )
     destination.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="xconn-native-") as temporary:
         staging = Path(temporary)
-        name = stage(staging, static=args.static, profile=args.profile)
+        name = stage(
+            staging,
+            static=args.static,
+            profile=args.profile,
+            target=args.target,
+            android_api_level=args.android_api_level,
+        )
         archive = destination / f"{name}.tar.gz"
         # Exclusive creation prevents accidentally replacing an existing release artifact.
         with (

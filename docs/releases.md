@@ -16,18 +16,21 @@ is implied by local tests.
 
 [`scripts/package-native.py`](../scripts/package-native.py) stages or archives
 headers, the shared or static Rust library, pkg-config metadata, checksums, and
-build provenance. Archives support the host Linux/macOS platform; Linux static
-SDK staging is also available. See [native installation](native-install.md).
+build provenance. Archives support native Linux/macOS builds and an Android ARM64 cross-build;
+Linux static SDK staging is also available. See [native installation](native-install.md).
 Build outputs belong in release artifacts, not Git source history.
 
-The `Native SDK release` workflow builds and tests five archives across Linux and
-macOS, then creates the GitHub Release after every matrix job passes. It runs
+The `Native SDK release` workflow builds and checks six archives across Linux, macOS,
+and Android, then creates the GitHub Release after every matrix job passes. It runs
 on tags named `vVERSION`; the tag must match `bindings/ffi/Cargo.toml`. It can
 also be dispatched manually with an existing tag. Both paths check out the tag,
 so the manifest's source revision identifies the released code.
 
 Merge the release workflow and intended source changes before creating a tag.
-For the first release, create `v0.1.0` on that reviewed commit and push the tag.
+Android ARM64 is prepared for native SDK `v0.1.1`; create that tag on the
+reviewed commit after merging. Do not replace the existing `v0.1.0` tag or
+release assets. This changes the internal FFI package version; the published
+Rust libraries remain at `0.1.0`.
 No extra publishing token is needed: only the final job receives the repository
 `GITHUB_TOKEN` with release-write permission. Existing releases/assets are not
 overwritten; a failed upload may require removing an incomplete draft before
@@ -36,6 +39,9 @@ The workflow calls `ci/check-native-release.sh` to check the tag/host,
 `ci/test-native-sdk.sh` to exercise extracted SDKs, and
 `ci/publish-native-sdk.sh` to verify checksums and create the release. The smoke
 test can also run locally with an archive directory as its argument.
+Android uses `ci/build-android-sdk.sh` with the pinned NDK and
+`ci/test-android-sdk.sh` for ELF/API linking checks. Android binaries are not
+executed on the Linux runner. Publication waits for the Android job as well.
 See [native installation](native-install.md) for the platform matrix and limits.
 
 Go modules in this repository use tags such as `bindings/go/v0.1.0`. Installing
