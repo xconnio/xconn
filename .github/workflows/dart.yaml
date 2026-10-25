@@ -39,6 +39,8 @@ jobs:
           XCONN_TRANSPORT_PEER: ${{ github.workspace }}/target/debug/examples/transport_peer
           XCONN_REFERENCE_GO_BIN: ${{ github.workspace }}/target/reference/xconn-go-reference
           XCONN_DISCOVERY_BIN: ${{ github.workspace }}/target/debug/examples/discovery
+      - name: Verify standalone SDK download and bundling
+        run: ci/test-dart-sdk-download.sh
       - run: dart build cli --target test/fixtures/native_asset_smoke.dart --output "$RUNNER_TEMP/xconn-dart"
         working-directory: bindings/dart
       - run: '"$RUNNER_TEMP/xconn-dart/bundle/bin/native_asset_smoke"'

@@ -17,6 +17,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "14.5.0"
+  archive:
+    dependency: "direct main"
+    description:
+      name: archive
+      sha256: "0d58d1fa1fddf6588251ccf2819f3fb3b6d0452c1b2813ac7413a05592bfbefe"
+      url: "https://pub.dev"
+    source: hosted
+    version: "4.5.2"
   args:
     dependency: transitive
     description:
@@ -90,7 +98,7 @@ packages:
     source: hosted
     version: "1.16.0"
   crypto:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: crypto
       sha256: c8ea0233063ba03258fbcf2ca4d6dadfefe14f02fab57702265467a19f27fadf
@@ -233,6 +241,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.5.3"
+  posix:
+    dependency: transitive
+    description:
+      name: posix
+      sha256: "6312deb534ce3812a1b454143740ffe721a17dc3a33bfc978f3a6d7bc5833edf"
+      url: "https://pub.dev"
+    source: hosted
+    version: "6.5.3"
   pub_semver:
     dependency: transitive
     description:
