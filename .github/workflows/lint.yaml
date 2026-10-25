@@ -1,0 +1,61 @@
+name: Binding lint
+on:
+  workflow_call:
+    inputs:
+      python:
+        type: boolean
+        default: false
+      dart:
+        type: boolean
+        default: false
+      browser:
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  python:
+    if: inputs.python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - run: pip install ruff==0.17.1
+      - run: ruff check --config bindings/python/pyproject.toml bindings/python bindings/go scripts tests/go-interop tests/packaging
+      - run: ruff format --check --config bindings/python/pyproject.toml bindings/python bindings/go scripts tests/go-interop tests/packaging
+
+  dart:
+    if: inputs.dart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.13.5'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.pub-cache
+          key: dart-${{ runner.os }}-3.13.5-${{ hashFiles('bindings/dart/pubspec.lock') }}
+          restore-keys: dart-${{ runner.os }}-3.13.5-
+      - run: dart pub get --enforce-lockfile
+        working-directory: bindings/dart
+      - run: dart format --output=none --set-exit-if-changed --line-length 120 .
+        working-directory: bindings/dart
+      - run: dart analyze --fatal-infos
+        working-directory: bindings/dart
+
+  browser:
+    if: inputs.browser
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: bindings/js/package-lock.json
+      - run: npm --prefix bindings/js ci --ignore-scripts
+      - run: npm --prefix bindings/js run lint
+      - run: npm --prefix bindings/js run format:check

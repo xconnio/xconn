@@ -1,8 +1,6 @@
 name: Python binding
 on:
-  push:
-  pull_request:
-  workflow_dispatch:
+  workflow_call:
 permissions:
   contents: read
 jobs:
@@ -11,9 +9,14 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.8'
+          cache-dependency-path: bindings/go/go.sum
       - uses: dtolnay/rust-toolchain@stable
-      - uses: ./.github/actions/reference
-        id: reference
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-python
       - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
@@ -22,21 +25,20 @@ jobs:
           "$RUNNER_TEMP/venv/bin/pip" install maturin pytest pytest-asyncio ruff==0.17.1
           echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
-      - run: ruff check --config bindings/python/pyproject.toml bindings/python bindings/go scripts tests/go-interop tests/packaging
-      - run: ruff format --check --config bindings/python/pyproject.toml bindings/python bindings/go scripts tests/go-interop tests/packaging
-      - run: cargo build --locked --release -p xconn-ffi
-      - run: python3 scripts/package-native.py --stage-only target/native
-      - run: cargo build --locked -p xconn-core --features router,services --bin xconn-router --example discovery
+      - uses: ./.github/actions/ci-artifacts
+        with:
+          reference: 'true'
+          native: 'true'
+          helpers: 'true'
       - run: |
           mkdir -p target/streaming-interop
           go -C bindings/go test -c -race -o "$PWD/target/streaming-interop/go.test" .
         env:
           PKG_CONFIG_PATH: ${{ github.workspace }}/target/native/lib/pkgconfig
       - run: maturin develop --locked --manifest-path bindings/python/Cargo.toml
-      - run: cargo build --locked -p xconn-binding-runtime --all-features --example transport_peer
       - run: pytest bindings/python/tests -q
         env:
           XCONN_TRANSPORT_PEER: ${{ github.workspace }}/target/debug/examples/transport_peer
-          XCONN_REFERENCE_GO_BIN: ${{ steps.reference.outputs.binary }}
+          XCONN_REFERENCE_GO_BIN: ${{ github.workspace }}/target/reference/xconn-go-reference
           XCONN_DISCOVERY_BIN: ${{ github.workspace }}/target/debug/examples/discovery
           XCONN_STREAM_GO_TEST_BIN: ${{ github.workspace }}/target/streaming-interop/go.test

@@ -1,16 +1,48 @@
-name: Rust
+name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
-  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
 
 jobs:
+  changes:
+    name: Select affected checks
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      go: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.go == 'true' }}
+      python: >-
+        ${{ steps.select.outputs.shared == 'true' ||
+            steps.select.outputs.go == 'true' || steps.select.outputs.python == 'true' }}
+      dart: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.dart == 'true' }}
+      browser: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.browser == 'true' }}
+      rust: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.rust == 'true' }}
+      interop: ${{ steps.select.outputs.shared }}
+      native: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.native == 'true' }}
+      bindings: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.bindings == 'true' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: select
+        with:
+          base: main
+          predicate-quantifier: every
+          filters: .github/filters.yaml
+
   check:
     name: Rust (${{ matrix.os }})
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
@@ -22,6 +54,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: rust-${{ matrix.os }}
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --locked --workspace --all-features
@@ -38,6 +73,8 @@ jobs:
           RUSTDOCFLAGS: -D warnings
 
   sctp-regression:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     name: SCTP remote-reset regression
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -47,11 +84,16 @@ jobs:
           repository: xconnio/webrtc
           ref: b4b91964e91973778c3080e0f403561f6765522b
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: sctp-fork
       - run: >-
           cargo test --locked -p webrtc-sctp
           --lib remote_reset_drains_received_messages_before_eof
 
   wasm-crypto:
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
     name: Browser-compatible packet encryption
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -60,15 +102,123 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: wasm-crypto
       - run: cargo check --locked -p xconn-crypto --target wasm32-unknown-unknown
 
   reference:
     name: Independent Go interoperability
+    needs: [changes, go-reference]
+    if: needs.changes.outputs.interop == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-reference
+      - uses: ./.github/actions/ci-artifacts
+        with:
+          reference: 'true'
+      - run: ci/test-reference.sh "$PWD/target/reference/xconn-go-reference"
+
+  native-sdk:
+    name: Build Linux native SDK once
+    needs: changes
+    if: needs.changes.outputs.native == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-native-sdk
+      - run: cargo build --locked --release -p xconn-ffi
+      - run: python3 scripts/package-native.py --stage-only target/native
+      - run: tar -cf "$RUNNER_TEMP/native-sdk.tar" target/native target/release/libxconn_ffi.so
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-native-sdk
+          path: ${{ runner.temp }}/native-sdk.tar
+          retention-days: 1
+          compression-level: 0
+
+  test-helpers:
+    name: Build Linux test helpers once
+    needs: changes
+    if: needs.changes.outputs.bindings == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: linux-test-helpers
+      - run: >-
+          cargo build --locked -p xconn-core --features router,services
+          --bin xconn-router --example discovery --example streaming_peer
+      - run: cargo build --locked -p xconn-binding-runtime --all-features --example transport_peer
+      - run: >-
+          tar -cf "$RUNNER_TEMP/test-helpers.tar"
+          target/debug/xconn-router target/debug/examples/discovery
+          target/debug/examples/streaming_peer target/debug/examples/transport_peer
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-test-helpers
+          path: ${{ runner.temp }}/test-helpers.tar
+          retention-days: 1
+          compression-level: 0
+
+  go-reference:
+    name: Build independent Go reference once
+    needs: changes
+    if: needs.changes.outputs.bindings == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
       - uses: ./.github/actions/reference
         id: reference
-      - run: ci/test-reference.sh "${{ steps.reference.outputs.binary }}"
+      - run: |
+          mkdir -p target/reference
+          cp "${{ steps.reference.outputs.binary }}" target/reference/
+          cp "$RUNNER_TEMP/reference/manifest.json" target/reference/
+          tar -cf "$RUNNER_TEMP/go-reference.tar" target/reference
+      - uses: actions/upload-artifact@v4
+        with:
+          name: independent-go-reference
+          path: ${{ runner.temp }}/go-reference.tar
+          retention-days: 1
+
+  lint:
+    needs: changes
+    if: needs.changes.outputs.bindings == 'true'
+    uses: ./.github/workflows/lint.yaml
+    with:
+      python: ${{ needs.changes.outputs.python == 'true' }}
+      dart: ${{ needs.changes.outputs.dart == 'true' }}
+      browser: ${{ needs.changes.outputs.browser == 'true' }}
+
+  go:
+    needs: [changes, native-sdk, go-reference]
+    if: needs.changes.outputs.go == 'true'
+    uses: ./.github/workflows/go.yaml
+
+  python:
+    needs: [changes, native-sdk, test-helpers, go-reference]
+    if: needs.changes.outputs.python == 'true'
+    uses: ./.github/workflows/python.yaml
+
+  dart:
+    needs: [changes, native-sdk, test-helpers, go-reference]
+    if: needs.changes.outputs.dart == 'true'
+    uses: ./.github/workflows/dart.yaml
+
+  browser:
+    needs: [changes, test-helpers, go-reference]
+    if: needs.changes.outputs.browser == 'true'
+    uses: ./.github/workflows/browser.yaml

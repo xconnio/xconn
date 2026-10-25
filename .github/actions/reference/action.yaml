@@ -25,7 +25,9 @@ runs:
     - uses: actions/setup-go@v6
       with:
         go-version: '1.26.8'
-        cache: false
+        cache-dependency-path: |
+          bindings/go/go.sum
+          target/reference-sources/*/go.sum
     - id: build
       shell: bash
       run: |

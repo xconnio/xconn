@@ -1,0 +1,46 @@
+# "every" combines each filter's positive pattern with its exclusions.
+# Unrecognized non-documentation paths conservatively select all checks.
+shared:
+  - '**'
+  - '!bindings/{go,python,dart,js}/**'
+  - '!benchmarks/browser-wasm/**'
+  - '!.github/workflows/{go,python,dart,browser}.yaml'
+  - '!ci/test-browser.sh'
+  - '!docs/**'
+  - '!**/*.md'
+  - '!**/LICENSE'
+
+go:
+  - '{bindings/go/**,.github/workflows/go.yaml}'
+  - '!**/*.md'
+  - '!**/LICENSE'
+
+python:
+  - '{bindings/python/**,.github/workflows/python.yaml}'
+  - '!**/*.md'
+  - '!**/LICENSE'
+
+dart:
+  - '{bindings/dart/**,.github/workflows/dart.yaml}'
+  - '!**/*.md'
+  - '!**/LICENSE'
+
+browser:
+  - '{bindings/js/**,benchmarks/browser-wasm/**,.github/workflows/browser.yaml,ci/test-browser.sh}'
+  - '!**/*.md'
+  - '!**/LICENSE'
+
+rust:
+  - '{bindings/python/**/*.rs,bindings/python/**/Cargo.toml,bindings/js/wasm/**}'
+  - '!**/*.md'
+  - '!**/LICENSE'
+
+native:
+  - '{bindings/{go,python,dart}/**,.github/workflows/{go,python,dart}.yaml}'
+  - '!**/*.md'
+  - '!**/LICENSE'
+
+bindings:
+  - '{bindings/{go,python,dart,js}/**,benchmarks/browser-wasm/**,.github/workflows/{go,python,dart,browser}.yaml,ci/test-browser.sh}'
+  - '!**/*.md'
+  - '!**/LICENSE'
