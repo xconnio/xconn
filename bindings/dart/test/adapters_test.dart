@@ -7,7 +7,6 @@ import "package:test/test.dart";
 import "package:xconn_core/auth.dart";
 import "package:xconn_core/messages.dart" show Authenticate, Challenge, Message;
 import "package:xconn_core/src/native.dart" as native;
-import "package:xconn_core/src/types.dart" show SessionDetails;
 import "package:xconn_core/xconn_core.dart";
 
 class TrackingSerializer extends CBORSerializer {

@@ -4,7 +4,6 @@ import "dart:developer";
 import "dart:io";
 
 import "package:xconn_core/src/native.dart" as native;
-import "package:xconn_core/src/types.dart" show SessionDetails;
 import "package:xconn_core/xconn_core.dart";
 
 class TrackingPeer implements Peer {

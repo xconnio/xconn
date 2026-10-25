@@ -52,11 +52,24 @@ dart analyze --fatal-infos
 XCONN_REFERENCE_GO_BIN=/path/to/original-go-reference dart test
 ```
 
-The Dart CI workflow runs these checks. Development builds find `libxconn_ffi` in the
-workspace `target/release`; `XCONN_LIBRARY` overrides its location. Tested platform:
-native Linux x86_64 with Dart 3.13.5. Flutter platform packaging, browser JavaScript,
-WebRTC wrappers and automatic cleanup on forced isolate termination remain future
-work. No package publication or mobile platform validation is claimed.
+Dart 3.10+ build hooks compile the shared Rust C ABI and declare a native code
+asset. `dart run`, `dart test`, and Flutter builds bundle it automatically; no
+manual library copying is required. Keep the full Core checkout available when
+using this source package and install Rust plus the matching Rust target.
+For example, Android arm64 needs `rustup target add aarch64-linux-android` and
+the Android NDK; iOS needs Xcode and the device/simulator Rust targets on macOS.
+Linux, macOS, Windows, Android arm64/x64, and iOS device/simulator target mappings
+are included. The hook uses Flutter's NDK linker for Android builds.
+
+For a standalone Dart application, use `dart build cli` (Dart 3.13+) to produce
+an executable **and its bundled native library**. `dart compile exe` alone does
+not invoke the native-assets hook. `XCONN_LIBRARY` remains an explicit loader
+override for development and tests.
+
+Native-assets loading and packaged CLI execution are verified on Linux x86_64.
+Apple/Android cross-target mappings require their platform toolchains and are
+not a claim of device validation. Browser clients use the JavaScript binding.
+Forced isolate termination still does not guarantee finalizer cleanup.
 
 Fluent requests use `execute()`, for example:
 `await session.call('echo').arg('hello').execute()`.

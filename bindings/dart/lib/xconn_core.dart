@@ -22,4 +22,5 @@ export "package:xconn_core/src/types.dart"
         Progress,
         Registration,
         Result,
+        SessionDetails,
         Subscription;
