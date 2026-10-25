@@ -4,6 +4,7 @@ Extract the versioned `xconn-native-VERSION-TARGET.tar.gz` archive to a permanen
 location. Verify its companion SHA-256 file before extracting. The package has
 `lib/`, `include/`, a relocatable `lib/pkgconfig/xconn.pc`, and `manifest.json`.
 The manifest records the target, source revision, ABI version and dependencies.
+It also hashes the library, header, pkg-config metadata, README, and MIT license.
 
 Go requires Go, a C compiler and pkg-config; Rust is needed only to build the SDK,
 not to consume it. Point pkg-config to the extracted SDK:
@@ -21,12 +22,33 @@ a standard dynamic-loader location. To move the library independently, configure
 module contains no workspace-relative include or library paths. It does not
 automatically download or install native code during a build.
 
+## GitHub Releases
+
+Download SDK archives from the [Core releases](https://github.com/xconnio/xconn-core/releases).
+Assets inherit repository visibility: public downloads require a public
+repository; private releases require authenticated repository access.
+For each version, the release workflow builds these host targets:
+
+| Target | Build host | Archives |
+| --- | --- | --- |
+| `x86_64-unknown-linux-gnu` | Ubuntu 22.04 | Shared and static |
+| `aarch64-unknown-linux-gnu` | Ubuntu 22.04 ARM64 | Shared and static |
+| `aarch64-apple-darwin` | macOS 15 ARM64 | Shared |
+
+Each archive has its own `.sha256` file; `SHA256SUMS` covers all archives.
+For example, verify a Linux SDK before extracting it:
+
+```sh
+sha256sum --check xconn-native-0.1.0-x86_64-unknown-linux-gnu.tar.gz.sha256
+tar -xzf xconn-native-0.1.0-x86_64-unknown-linux-gnu.tar.gz
+```
+
 Native SDKs are host builds, not manylinux packages. The default shared SDK
 requires the system libraries recorded in `manifest.json`; use a compatible
 distribution. TLS uses rustls with native certificate roots. Static Linux linking
 is available separately below. The archive target describes architecture/OS;
 the manifest describes the build host.
-Windows, Android and iOS SDK packaging are not included in this first release path.
+Intel macOS, Windows, Android and iOS SDK packaging are not included in this first release path.
 
 For source development from the repository root:
 
@@ -44,8 +66,9 @@ python3 scripts/package-native.py target/binding-dist/native
 ```
 
 Existing archives are never overwritten. These commands do not publish artifacts
-or change system library paths. CI produces workflow artifacts; public releases
-and Go module tags remain separate actions. The Go module's eventual release tag
+or change system library paths. Normal CI produces internal workflow artifacts. The native release workflow
+publishes GitHub Release assets only for a release tag; Go module tags remain
+a separate action. The Go module's eventual release tag
 must use its subdirectory prefix, for example `bindings/go/v0.1.0`.
 
 ## Static Linux linking

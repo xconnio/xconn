@@ -72,6 +72,13 @@ class NativeStagingTests(unittest.TestCase):
             self.assertEqual(manifest["profile"], "native")
             self.assertEqual(manifest["linkage"], "static")
             self.assertEqual(manifest["runtime_dependencies"], "")
+            self.assertEqual(
+                set(manifest["files"]),
+                {"lib/libxconn_ffi.a", "include/xconn.h", "lib/pkgconfig/xconn-static.pc", "README.md", "LICENSE"},
+            )
+            for relative, checksum in manifest["files"].items():
+                self.assertEqual(PACKAGE.digest(destination / relative), checksum)
+            self.assertEqual((destination / "LICENSE").read_bytes(), (PACKAGE.ROOT / "LICENSE").read_bytes())
 
     def test_signing_failure_preserves_installed_library(self):
         with tempfile.TemporaryDirectory() as directory:
