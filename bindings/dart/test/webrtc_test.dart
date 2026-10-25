@@ -20,7 +20,9 @@ void main() {
         remoteCandidatesTopic: "to-client",
         localCandidatesTopic: "to-provider",
         iceServers: [
-          {"urls": ["stun:127.0.0.1:9"]},
+          {
+            "urls": ["stun:127.0.0.1:9"],
+          },
         ],
       ),
     );
