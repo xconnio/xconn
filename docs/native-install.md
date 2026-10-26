@@ -7,18 +7,15 @@ Unix utilities. The installer uses `sha256sum` on Linux or `shasum` on macOS.
 It installs the SDK only; it does not install prerequisite packages.
 
 ```sh
-curl -fL https://raw.githubusercontent.com/xconnio/xconn-core/v0.1.2/scripts/install-xconn-sdk.sh -o install-xconn-sdk.sh
+curl -fL https://raw.githubusercontent.com/xconnio/xconn-core/main/scripts/install-xconn-sdk.sh -o install-xconn-sdk.sh
 sh install-xconn-sdk.sh
-go get github.com/xconnio/xconn-core/bindings/go@v0.1.0
+go get github.com/xconnio/xconn-core/bindings/go
 go build ./...
 ```
 
-The default SDK is 0.1.2. Run `sh install-xconn-sdk.sh --version VERSION` to select
-another release. Supported hosts are Linux amd64/arm64 with a compatible glibc
-(SDKs are built on Ubuntu 22.04), and macOS arm64. macOS static archives start
-with 0.1.2; existing Linux SDK 0.1.1 is also supported. The SDK and Go module tags
-must be published after merging; installation does not depend on the Go module.
-No Windows, Intel macOS, musl or cross-installation is provided.
+Supported hosts are Linux amd64/arm64 with a compatible glibc (SDKs are built
+on Ubuntu 22.04), and macOS arm64. No Windows, Intel macOS, musl or
+cross-installation is provided.
 
 The script downloads the archive and SHA-256 sidecar from the same versioned
 GitHub Release over HTTPS. It checks the archive hash before extracting, rejects
@@ -42,6 +39,8 @@ requires a matching SDK and C cross-compiler. The explicit `xconn_static` tag an
 static-libc linker flags below are only needed for fully static Linux executables.
 
 ## Manual SDK installation
+
+To select a specific SDK release, run `sh install-xconn-sdk.sh --version VERSION`.
 
 Extract the versioned `xconn-native-VERSION-TARGET.tar.gz` archive to a permanent
 location. Verify its companion SHA-256 file before extracting. The package has
@@ -110,10 +109,8 @@ python3 scripts/package-native.py target/binding-dist/native
 ```
 
 Existing archives are never overwritten. These commands do not publish artifacts
-or change system library paths. Normal CI produces internal workflow artifacts. The native release workflow
-publishes GitHub Release assets only for a release tag; Go module tags remain
-a separate action. The Go module's eventual release tag
-must use its subdirectory prefix, for example `bindings/go/v0.1.0`.
+or change system library paths. See [binding distribution](releases.md) for
+maintainer release instructions.
 
 ## Static Linux linking
 
