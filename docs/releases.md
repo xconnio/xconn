@@ -45,13 +45,13 @@ executed on the Linux runner. Publication waits for the Android job as well.
 See [native installation](native-install.md) for the platform matrix and limits.
 
 Native SDK `v0.1.2` adds the macOS ARM64 static archive and the Go installer.
-After merging, release SDK `v0.1.2`, then tag the Go module `bindings/go/v0.1.0`.
+After merging, release SDK `v0.1.2`, then tag the Go module `bindings/go/v0.1.2`.
 The single shell installer downloads from the SDK tag without building a helper
 or depending on a Go module release. The Go module tag is only needed for
 `go get`. Linux installer checks can also use existing SDK 0.1.1 before tagging.
 Native SDK checks build a standalone Go consumer through the installed static SDK.
 
-Go modules in this repository use tags such as `bindings/go/v0.1.0`. Installing
+Go modules in this repository use tags such as `bindings/go/v0.1.2`. Installing
 the Go module alone does not install the native SDK. The installer runs first
 and configures ordinary Go builds to select the static archive through pkg-config.
 
