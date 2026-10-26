@@ -58,6 +58,9 @@ jobs:
         run: python3 scripts/package-native.py --static --profile native target/native-dist
       - name: Test packaged SDK linking
         run: ci/test-native-sdk.sh target/native-dist
+        env:
+          # cgo caches pkg-config's absolute paths to extracted SDKs.
+          GOCACHE: ${{ runner.temp }}/xconn-sdk-go-cache
       - uses: actions/upload-artifact@v4
         with:
           name: native-sdk-${{ matrix.target }}
