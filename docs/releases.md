@@ -17,10 +17,10 @@ is implied by local tests.
 [`scripts/package-native.py`](../scripts/package-native.py) stages or archives
 headers, the shared or static Rust library, pkg-config metadata, checksums, and
 build provenance. Archives support native Linux/macOS builds and an Android ARM64 cross-build;
-Linux static SDK staging is also available. See [native installation](native-install.md).
+Linux and macOS static SDK staging is also available. See [native installation](native-install.md).
 Build outputs belong in release artifacts, not Git source history.
 
-The `Native SDK release` workflow builds and checks six archives across Linux, macOS,
+The `Native SDK release` workflow builds and checks seven archives across Linux, macOS,
 and Android, then creates the GitHub Release after every matrix job passes. It runs
 on tags named `vVERSION`; the tag must match `bindings/ffi/Cargo.toml`. It can
 also be dispatched manually with an existing tag. Both paths check out the tag,
@@ -44,8 +44,16 @@ Android uses `ci/build-android-sdk.sh` with the pinned NDK and
 executed on the Linux runner. Publication waits for the Android job as well.
 See [native installation](native-install.md) for the platform matrix and limits.
 
+Native SDK `v0.1.2` adds the macOS ARM64 static archive and the Go installer.
+After merging, release SDK `v0.1.2`, then tag the Go module `bindings/go/v0.1.0`.
+The single shell installer downloads from the SDK tag without building a helper
+or depending on a Go module release. The Go module tag is only needed for
+`go get`. Linux installer checks can also use existing SDK 0.1.1 before tagging.
+Native SDK checks build a standalone Go consumer through the installed static SDK.
+
 Go modules in this repository use tags such as `bindings/go/v0.1.0`. Installing
-the Go module alone does not install the native SDK. Static linking is explicit.
+the Go module alone does not install the native SDK. The installer runs first
+and configures ordinary Go builds to select the static archive through pkg-config.
 
 ## Python
 

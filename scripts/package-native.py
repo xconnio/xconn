@@ -30,7 +30,7 @@ def install_library(source, destination, system):
     with tempfile.TemporaryDirectory(prefix=".xconn-stage-", dir=destination.parent) as temporary:
         staged = Path(temporary) / destination.name
         shutil.copy2(source, staged)
-        if system == "Darwin":
+        if system == "Darwin" and destination.suffix != ".a":
             subprocess.run(
                 ["install_name_tool", "-id", f"@rpath/{destination.name}", str(staged)],
                 check=True,
@@ -58,8 +58,8 @@ def stage(destination, static=False, profile="release", target=None, android_api
         readelf = ndk / "toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
         if not readelf.is_file():
             raise SystemExit("Set ANDROID_NDK_HOME to the Android NDK directory")
-    if static and (system != "Linux" or android):
-        raise SystemExit("static SDK packaging currently supports native Linux targets only")
+    if static and android:
+        raise SystemExit("Android SDKs are shared libraries")
     filename = "libxconn_ffi.a" if static else ("libxconn_ffi.dylib" if system == "Darwin" else "libxconn_ffi.so")
     build_directory = Path(metadata["target_directory"])
     if build_target:
@@ -77,7 +77,27 @@ def stage(destination, static=False, profile="release", target=None, android_api
     abi = int(re.search(r"#define XC_ABI_VERSION (\d+)", header.read_text())[1])
     version = package["version"]
     name = "xconn-static" if static else "xconn"
-    if static:
+    if static and system == "Darwin":
+        command = [
+            "cargo",
+            "rustc",
+            "--locked",
+            "--color",
+            "never",
+            "--profile",
+            profile,
+            "-p",
+            "xconn-ffi",
+            "--lib",
+            "--",
+            "--print=native-static-libs",
+        ]
+        result = subprocess.run(command, cwd=ROOT, check=True, capture_output=True, text=True)
+        native_flags = re.search(r"native-static-libs: (.+)", result.stderr)
+        if native_flags is None:
+            raise SystemExit("rustc did not report the macOS native static linker flags")
+        libraries = f'"${{libdir}}/libxconn_ffi.a" {native_flags[1]}'
+    elif static:
         libraries = '"${libdir}/libxconn_ffi.a" -lgcc_eh -lutil -lrt -lpthread -lm -ldl -lc'
     elif android:
         libraries = '-L"${libdir}" -lxconn_ffi'
@@ -135,14 +155,14 @@ def main():
         action="store_true",
         help="create a relocatable SDK directory instead of an archive",
     )
-    parser.add_argument("--static", action="store_true", help="stage the Linux static archive and linker dependencies")
+    parser.add_argument("--static", action="store_true", help="stage the host static archive and linker dependencies")
     parser.add_argument("--profile", choices=("release", "native"), default="release", help="Cargo build profile")
     parser.add_argument("--target", choices=("aarch64-linux-android",), help="cross-compile the Android ARM64 SDK")
     parser.add_argument("--android-api-level", type=int, default=24, help="minimum Android API level (default: 24)")
     parser.add_argument("destination", type=Path)
     args = parser.parse_args()
     if args.target and args.static:
-        parser.error("Android SDKs are shared libraries; --static is only supported for native Linux")
+        parser.error("Android SDKs are shared libraries; --static is only supported for native Linux/macOS")
     destination = args.destination.resolve()
     if args.stage_only:
         stage(

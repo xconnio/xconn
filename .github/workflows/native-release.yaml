@@ -54,8 +54,7 @@ jobs:
         run: ci/check-native-release.sh
       - name: Package shared SDK
         run: python3 scripts/package-native.py --profile native target/native-dist
-      - name: Package static Linux SDK
-        if: runner.os == 'Linux'
+      - name: Package static SDK
         run: python3 scripts/package-native.py --static --profile native target/native-dist
       - name: Test packaged SDK linking
         run: ci/test-native-sdk.sh target/native-dist
