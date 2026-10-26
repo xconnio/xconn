@@ -33,7 +33,7 @@ jobs:
       - if: runner.os == 'Linux'
         run: dnf install -y openssl-devel
       - uses: dtolnay/rust-toolchain@stable
-      - uses: astral-sh/setup-uv@v9
+      - uses: astral-sh/setup-uv@v7
         with:
           version: '0.8.10'
       - if: runner.os == 'macOS'
