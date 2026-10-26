@@ -1,9 +1,36 @@
 # Go binding
 
 The module is `github.com/xconnio/xconn-core/bindings/go` and its package name is
-`xconn`. It uses cgo and the shared Rust client/router runtime. Consumers install the
-matching native SDK and set `PKG_CONFIG_PATH` to its `lib/pkgconfig` directory; no
-Rust toolchain is needed. See [native installation](../../docs/native-install.md).
+`xconn`. It uses cgo and the Rust client/router runtime.
+
+## Install
+
+Install Go, a C compiler and `pkg-config`, then run the native SDK installer once:
+
+```sh
+curl -fL https://raw.githubusercontent.com/xconnio/xconn-core/v0.1.2/scripts/install-xconn-sdk.sh -o install-xconn-sdk.sh
+sh install-xconn-sdk.sh
+go get github.com/xconnio/xconn-core/bindings/go@v0.1.0
+go build ./...
+```
+
+The script downloads static SDK 0.1.2 and verifies its SHA-256, archive paths,
+ABI header and pkg-config version. It requires `curl`, `tar` and the usual Unix
+utilities, including `sha256sum` on Linux or `shasum` on macOS. It does not install
+system packages. Linux amd64/arm64 and macOS arm64 are supported. No Rust toolchain is needed.
+
+The prefix is `/usr/local`, or `/opt/homebrew` on Apple Silicon when Homebrew is
+installed. The script requests sudo only when installation needs it. Standard
+`pkg-config` discovery finds `xconn.pc`, which selects the static archive. No
+shell profiles or global Go settings are changed. The executable needs no separate
+XConn `.so` or `.dylib`; system libraries and certificate stores remain required.
+
+Use `sh install-xconn-sdk.sh --version VERSION` to select another release.
+The default requires SDK `v0.1.2`; existing Linux static SDK 0.1.1 can be used
+before that release. macOS static archives start with 0.1.2. The Go module's
+`bindings/go/v0.1.0` tag is needed for `go get`, independently of SDK installation.
+See [native installation](../../docs/native-install.md) for manual SDK setups.
+
 For source development:
 
 ```sh
@@ -61,8 +88,8 @@ Compatibility tests include the original client and parser suites, custom auth/s
 independent original-Go router. This is not complete operational API parity:
 custom `NetDial`, network queue tuning, custom server codecs, and
 diagnostics/log publishing remain unbound.
-Native SDK artifacts support installation outside the workspace; public release
-publication remains pending. Unsupported exposed tuning options return errors.
+Native SDK artifacts support installation outside the workspace; the Go module
+release uses a separate subdirectory-prefixed tag. Unsupported exposed tuning options return errors.
 See [binding scope](../README.md).
 
 ## WebRTC

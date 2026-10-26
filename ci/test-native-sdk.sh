@@ -31,4 +31,7 @@ for archive in "$archives"/*.tar.gz; do
   "$temporary/sdk-smoke"
   go -C bindings/go test -tags "$test_tags" -count=1 -timeout=90s \
     -run '^TestClientRouterMatrix$' .
+  if [[ "$archive" == *-static.tar.gz ]]; then
+    ci/test-go-sdk-install.sh "$archive"
+  fi
 done

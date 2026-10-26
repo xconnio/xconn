@@ -1,5 +1,48 @@
 # Native SDK installation
 
+## Go quick start
+
+Prerequisites are Go, a C compiler, `pkg-config`, `curl`, `tar`, and standard
+Unix utilities. The installer uses `sha256sum` on Linux or `shasum` on macOS.
+It installs the SDK only; it does not install prerequisite packages.
+
+```sh
+curl -fL https://raw.githubusercontent.com/xconnio/xconn-core/v0.1.2/scripts/install-xconn-sdk.sh -o install-xconn-sdk.sh
+sh install-xconn-sdk.sh
+go get github.com/xconnio/xconn-core/bindings/go@v0.1.0
+go build ./...
+```
+
+The default SDK is 0.1.2. Run `sh install-xconn-sdk.sh --version VERSION` to select
+another release. Supported hosts are Linux amd64/arm64 with a compatible glibc
+(SDKs are built on Ubuntu 22.04), and macOS arm64. macOS static archives start
+with 0.1.2; existing Linux SDK 0.1.1 is also supported. The SDK and Go module tags
+must be published after merging; installation does not depend on the Go module.
+No Windows, Intel macOS, musl or cross-installation is provided.
+
+The script downloads the archive and SHA-256 sidecar from the same versioned
+GitHub Release over HTTPS. It checks the archive hash before extracting, rejects
+paths outside the SDK root and links/special files, and checks the ABI header and
+pkg-config version. Reinstalling copies the verified SDK files again.
+
+Files live under `PREFIX/lib/xconn/VERSION/TARGET-static`. Both `xconn.pc` and
+`xconn-static.pc` in `PREFIX/lib/pkgconfig` select the archive. The prefix is
+`/usr/local`, or `/opt/homebrew` on Apple Silicon when Homebrew is installed.
+The script requests sudo when needed, without changing shell profiles or global
+Go settings. These standard locations require no environment variables when in
+pkg-config's search path. Custom prefixes and offline installs use the manual
+instructions below.
+
+`pkg-config --modversion xconn` reports the selected SDK. Rerunning the installer
+with another version switches the pkg-config entries while retaining old SDKs.
+Relink existing applications with `go build -a` after changing SDK versions.
+Static XConn linking does not imply a fully static executable: system libraries,
+libc compatibility and certificate roots remain requirements. Cross-compiling
+requires a matching SDK and C cross-compiler. The explicit `xconn_static` tag and
+static-libc linker flags below are only needed for fully static Linux executables.
+
+## Manual SDK installation
+
 Extract the versioned `xconn-native-VERSION-TARGET.tar.gz` archive to a permanent
 location. Verify its companion SHA-256 file before extracting. The package has
 `lib/`, `include/`, a relocatable `lib/pkgconfig/xconn.pc`, and `manifest.json`.
@@ -33,7 +76,7 @@ The release workflow builds these targets:
 | --- | --- | --- |
 | `x86_64-unknown-linux-gnu` | Ubuntu 22.04 | Shared and static |
 | `aarch64-unknown-linux-gnu` | Ubuntu 22.04 ARM64 | Shared and static |
-| `aarch64-apple-darwin` | macOS 15 ARM64 | Shared |
+| `aarch64-apple-darwin` | macOS 15 ARM64 | Shared; static from 0.1.2 |
 | `aarch64-linux-android` | Ubuntu 22.04 + NDK r28c | Shared, Android API 24+ |
 
 Each archive has its own `.sha256` file; `SHA256SUMS` covers all archives.
@@ -90,8 +133,9 @@ archive instead of a neighboring shared library. The native profile enables thin
 while retaining panic unwinding. The host needs a C toolchain and static libc.
 TLS uses rustls/ring; no OpenSSL development libraries are required.
 Relink Go applications after rebuilding the Rust archive: Go does not track
-changes to external native archives in its build cache (use `go build -a`). Static packaging currently supports
-Linux on the build host architecture. Certificates and any glibc runtime modules
+changes to external native archives in its build cache (use `go build -a`). Static packaging supports
+Linux and macOS on the build host architecture. Only Linux supports the explicit
+fully static libc link command above. Certificates and any glibc runtime modules
 remain system resources; this is not a hermetic cross-distribution build.
 
 ## Android ARM64
