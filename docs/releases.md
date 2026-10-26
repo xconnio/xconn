@@ -55,6 +55,21 @@ supported target or repaired using the appropriate platform tooling before
 publication. Consumers of a compatible wheel do not need Rust or a separate SDK.
 The package imports as `xconn_core` and has no required Python runtime dependency.
 
+Use `uv build bindings/python --out-dir target/python-dist` for local source and
+wheel builds. `uv` builds the wheel from the source archive, checking that the
+workspace crates and pinned SCTP dependency survive source packaging.
+The manually dispatched `Python release artifacts` workflow calls
+`ci/build-python-release.sh` on Linux x86-64/ARM64 in manylinux 2.28 containers
+and on macOS ARM64. It repairs Linux wheels, checks metadata with `uvx twine`,
+tests native crypto from the installed wheel, and uploads artifacts only.
+It neither publishes to PyPI nor creates a GitHub release.
+
+After reviewing the artifacts, combine all wheels with one copy of the source
+archive, check them with `uvx twine check`, and publish with `uv publish` using
+PyPI credentials. Do not upload an unrepaired local `linux_x86_64` wheel.
+The optional Cap'n Proto serializer must be installed separately; its GitHub
+URL is not included in PyPI dependency metadata.
+
 ## Dart and Flutter
 
 Dart uses the shared C ABI through FFI. Local tests can set `XCONN_LIBRARY` to an

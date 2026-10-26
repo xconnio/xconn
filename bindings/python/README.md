@@ -32,18 +32,58 @@ transport/codec adapters remain available.
 `App`/`Component` helpers remain optional client composition APIs. Embedded router,
 server, `start_router` and in-memory router conveniences have been removed.
 
-Install the matching prebuilt ABI3 wheel with `python -m pip install /path/to/xconn_core-*.whl`.
-The wheel contains the native extension; users need no Rust toolchain or separate
-SDK. Linux release wheels are built in manylinux containers and repaired to bundle
-external TLS libraries. See [binding packaging](../../docs/releases.md).
-
-For source development, build from the workspace root:
+## Installation
 
 ```sh
-maturin develop --manifest-path bindings/python/Cargo.toml
-cargo build -p xconn-core --features router --bin xconn-router
-pytest bindings/python/tests
+uv add xconn-core
+# Or install into an existing environment:
+uv pip install xconn-core
 ```
+
+The package imports as `xconn_core`. A matching prebuilt ABI3 wheel contains the
+native extension; users need no Rust toolchain or separate SDK. Wheels support
+CPython 3.10 and newer. Source builds require Rust and the platform build tools.
+Linux wheels must be built in manylinux containers and repaired to bundle
+external TLS libraries before publication. See
+[binding packaging](https://github.com/xconnio/xconn-core/blob/main/docs/releases.md).
+
+Application configuration helpers have optional dependencies:
+
+```sh
+uv add 'xconn-core[framework]'
+```
+
+The optional Cap'n Proto serializer is distributed separately from GitHub.
+Its compatibility import remains available after installing it explicitly:
+
+```sh
+uv pip install 'git+https://github.com/xconnio/wampproto-messages-capnproto@main#subdirectory=python'
+```
+
+## Development and release builds
+
+From the workspace root, use `uv` to build the source archive and a wheel from
+that archive, then install the wheel in an isolated environment:
+
+```sh
+uv build bindings/python --out-dir target/python-dist
+uv venv target/python-release-venv
+uv pip install --python target/python-release-venv/bin/python target/python-dist/xconn_core-*.whl
+uv pip install --python target/python-release-venv/bin/python pytest pytest-asyncio ruff==0.17.1
+cargo build -p xconn-core --features router --bin xconn-router
+target/python-release-venv/bin/python -m pytest bindings/python/tests
+```
+
+The manually triggered `Python release artifacts` workflow uses `uv` to build
+manylinux 2.28 wheels for Linux x86-64/ARM64 and a macOS ARM64 wheel. It repairs
+Linux wheels, checks metadata, tests the installed extension, and uploads artifacts
+without publishing. Windows, Intel macOS and other targets are not in this matrix.
+
+Before publishing, download those artifacts, keep one source archive, run
+`uvx twine check target/python-dist/*`, and test the installed wheels. A local
+Linux wheel is not a replacement for a repaired manylinux release wheel.
+`uv publish target/python-dist/*` is a separate maintainer action requiring
+PyPI credentials; building and testing do not publish anything.
 
 The Rust executable is used only by test fixtures. Client tests also exercise the
 independent original Go router when `XCONN_REFERENCE_GO_BIN` is configured.
@@ -56,16 +96,16 @@ Fluent requests use `execute()` exclusively: for example,
 `session.call("echo").arg("hello").execute()`, or
 `await session.call("echo").arg("hello").execute()` with AsyncSession.
 The former `do()` spelling has been removed. See the
-[shared execution contract](../../docs/fluent-api.md).
+[shared execution contract](https://github.com/xconnio/xconn-core/blob/main/docs/fluent-api.md).
 
-Invocation, Event and Result share [strict typed payload accessors](../../docs/payload.md)
+Invocation, Event and Result share [strict typed payload accessors](https://github.com/xconnio/xconn-core/blob/main/docs/payload.md)
 with explicit defaults and consistent numeric/binary conversion rules.
 
-[Result construction and received values](../../docs/results.md) use one payload
+[Result construction and received values](https://github.com/xconnio/xconn-core/blob/main/docs/results.md) use one payload
 type for handler replies, progressive results and completed calls.
 
 Progressive RPCs use the fluent `stream()` terminal (`Stream()`/`StreamContext()` in Go).
-See the [cross-language streaming API](../../docs/streaming.md) for examples and lifecycle rules.
+See the [cross-language streaming API](https://github.com/xconnio/xconn-core/blob/main/docs/streaming.md) for examples and lifecycle rules.
 
 ## Progressive results
 

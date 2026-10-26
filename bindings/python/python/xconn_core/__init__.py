@@ -27,7 +27,9 @@ except ImportError:
 
     class CapnProtoSerializer:
         def __init__(self, *args, **kwargs):
-            raise ImportError("Cap'n Proto serializer support is not installed. Install xconn-core[capnproto].")
+            raise ImportError(
+                "Cap'n Proto serializer support is not installed. Install wampproto-messages-capnproto separately."
+            )
 
 
 __all__ = [

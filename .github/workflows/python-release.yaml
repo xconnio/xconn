@@ -1,0 +1,55 @@
+name: Python release artifacts
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Wheel (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: manylinux_2_28_x86_64
+            container: quay.io/pypa/manylinux_2_28_x86_64
+            python: /opt/python/cp310-cp310/bin/python
+          - os: ubuntu-22.04-arm
+            platform: manylinux_2_28_aarch64
+            container: quay.io/pypa/manylinux_2_28_aarch64
+            python: /opt/python/cp310-cp310/bin/python
+          - os: macos-15
+            platform: macos_arm64
+            container: ''
+            python: python3
+    steps:
+      - uses: actions/checkout@v6
+      - if: runner.os == 'Linux'
+        run: dnf install -y openssl-devel
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: astral-sh/setup-uv@v9
+        with:
+          version: '0.8.10'
+      - if: runner.os == 'macOS'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.10'
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: python-release-${{ matrix.platform }}
+      - name: Build, repair and test distributions
+        run: ci/build-python-release.sh
+        env:
+          PYTHON_BIN: ${{ matrix.python }}
+          MANYLINUX_PLATFORM: ${{ runner.os == 'Linux' && matrix.platform || '' }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-${{ matrix.platform }}
+          path: target/python-release/dist/*
+          if-no-files-found: error
