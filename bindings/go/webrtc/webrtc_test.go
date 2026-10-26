@@ -200,7 +200,8 @@ func (authentication) Authenticate(request auth.Request) (auth.Response, error) 
 		}
 	}
 	if request.AuthMethod() == auth.WAMPCRA {
-		return auth.NewCRAResponseSalted(request.AuthID(), "anonymous", "secret", "salt", 1000, 32, 0), nil
+		key := auth.DeriveWAMPCRAKey("salt", "secret", 1000, 32)
+		return auth.NewCRAResponseSalted(request.AuthID(), "anonymous", string(key), "salt", 1000, 32, 0), nil
 	}
 	return auth.NewResponse(request.AuthID(), "anonymous", 0)
 }
