@@ -174,9 +174,12 @@ def test_python_async_caller_go_callee(go_peer, serializer):
                 with pytest.raises(asyncio.CancelledError):
                     await receiving
                 assert await call.receive() is None
-            async with asyncio.timeout(3):
+
+            async def wait_for_cancel():
                 while not (await session.call("go.cancelled").arg("task-cancel").execute()).args[0]:
                     await asyncio.sleep(0.01)
+
+            await asyncio.wait_for(wait_for_cancel(), 3)
             # The session still carries ordinary traffic after cancelling a pending native receive.
             assert (await session.call("go.cancelled").arg("unknown").execute()).args == [False]
 

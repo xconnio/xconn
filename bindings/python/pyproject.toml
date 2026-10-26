@@ -5,11 +5,27 @@ build-backend = "maturin"
 name = "xconn-core"
 version = "0.1.0"
 description = "Blocking and asyncio Python client APIs backed by the shared Rust XConn runtime"
+readme = "README.md"
 requires-python = ">=3.10"
+keywords = ["wamp", "rpc", "pubsub", "webrtc", "quic"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Programming Language :: Rust",
+    "Topic :: System :: Networking",
+]
 license = "MIT"
 authors = [{ name = "Code Mistri", email = "mistri@xconn.io" }]
 license-files = ["LICENSE"]
 dependencies = []
+
+[project.urls]
+Repository = "https://github.com/xconnio/xconn-core"
+Issues = "https://github.com/xconnio/xconn-core/issues"
+Changelog = "https://github.com/xconnio/xconn-core/blob/main/bindings/python/CHANGELOG.md"
+
 [tool.maturin]
 python-source = "python"
 module-name = "xconn_core._native"
@@ -88,7 +104,6 @@ docstring-code-line-length = "dynamic"
 
 [project.optional-dependencies]
 framework = ["pydantic", "pyyaml", "python-dotenv"]
-capnproto = ["wampproto-messages-capnproto @ git+https://github.com/xconnio/wampproto-messages-capnproto@main#subdirectory=python"]
 test = ["pytest", "pytest-asyncio", "ruff==0.17.1"]
 
 [tool.pytest.ini_options]
