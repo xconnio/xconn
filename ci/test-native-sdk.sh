@@ -19,7 +19,9 @@ for archive in "$archives"/*.tar.gz; do
   test_tags=
   if [[ "$archive" == *-static.tar.gz ]]; then
     package=xconn-static
-    flags=(-static "-Wl,--gc-sections")
+    if [[ "$(uname -s)" == Linux ]]; then
+      flags=(-static "-Wl,--gc-sections")
+    fi
     test_tags=xconn_static
   fi
   # CI paths contain no spaces; pkg-config emits compiler arguments.

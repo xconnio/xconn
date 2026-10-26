@@ -80,6 +80,44 @@ class NativeStagingTests(unittest.TestCase):
                 self.assertEqual(PACKAGE.digest(destination / relative), checksum)
             self.assertEqual((destination / "LICENSE").read_bytes(), (PACKAGE.ROOT / "LICENSE").read_bytes())
 
+    def test_macos_static_sdk_uses_rustc_framework_flags_without_codesigning(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release = root / "target/native"
+            release.mkdir(parents=True)
+            (release / "libxconn_ffi.a").write_bytes(b"macOS archive")
+            metadata = {
+                "target_directory": str(root / "target"),
+                "packages": [{"name": "xconn-ffi", "version": "0.1.2", "features": {"default": []}}],
+            }
+
+            def output(*command):
+                if command[0] == "cargo":
+                    return json.dumps(metadata)
+                if command == ("rustc", "-vV"):
+                    return "host: aarch64-apple-darwin"
+                if command[:2] == ("git", "status"):
+                    return ""
+                return "fixture"
+
+            flags = "-framework Security -framework CoreFoundation -liconv -lSystem"
+            result = subprocess.CompletedProcess([], 0, "", f"note: native-static-libs: {flags}\n")
+            destination = root / "sdk"
+            with (
+                patch.object(PACKAGE, "output", side_effect=output),
+                patch.object(PACKAGE.platform, "system", return_value="Darwin"),
+                patch.object(PACKAGE.subprocess, "run", return_value=result) as run,
+            ):
+                name = PACKAGE.stage(destination, static=True, profile="native")
+
+            run.assert_called_once()
+            self.assertIn("--print=native-static-libs", run.call_args.args[0])
+            self.assertTrue(name.endswith("aarch64-apple-darwin-static"))
+            self.assertEqual((destination / "lib/libxconn_ffi.a").read_bytes(), b"macOS archive")
+            pkgconfig = (destination / "lib/pkgconfig/xconn-static.pc").read_text()
+            self.assertIn(flags, pkgconfig)
+            self.assertNotIn("-lgcc_eh", pkgconfig)
+
     def test_android_sdk_uses_cross_target_library_and_ndk_metadata(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -118,7 +156,7 @@ class NativeStagingTests(unittest.TestCase):
                 patch.dict(PACKAGE.os.environ, {"ANDROID_NDK_HOME": str(ndk)}),
             ):
                 name = PACKAGE.stage(destination, profile="native", target="aarch64-linux-android")
-                with self.assertRaisesRegex(SystemExit, "native Linux"):
+                with self.assertRaisesRegex(SystemExit, "Android SDKs are shared libraries"):
                     PACKAGE.stage(destination, static=True, target="aarch64-linux-android")
                 with self.assertRaisesRegex(SystemExit, "API level 24"):
                     PACKAGE.stage(destination, target="aarch64-linux-android", android_api_level=23)
