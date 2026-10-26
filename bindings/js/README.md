@@ -5,8 +5,9 @@ authentication, IDs, message layouts/validation and JSON/CBOR/MessagePack.
 TypeScript owns browser WebSocket IO, Promises, request correlation, callbacks,
 cancellation and session lifecycle. There are no npm runtime dependencies.
 
-This package provides WebSocket/WSS clients. Browser WebRTC is future work;
-Tokio, native networking, router algorithms and C FFI are not shipped to browsers.
+This package provides WebSocket/WSS clients and direct WebRTC/WebTransport
+connections through browser APIs. Tokio, native networking, router algorithms
+and C FFI are not shipped to browsers.
 
 ## Use
 
@@ -103,13 +104,24 @@ idempotent. Custom base sessions extend `BaseSession` and use the raw send/recei
 interface; custom serializers/authenticators retain structural interfaces. The
 WebSocket-specific `WebSocketBaseSession` does not preserve the old peer-based constructor.
 
-Invocation, Event and Result expose the same [strict payload accessors](../../docs/payload.md).
+Invocation, Event and Result expose the same [strict payload accessors](https://github.com/xconnio/xconn-core/blob/main/docs/payload.md).
 JS `argInt64` / `kwargInt64` return BigInt; typed defaults use names such as
-`argStringOr(0, "fallback")`. See the [cross-language API contract](../../docs/fluent-api.md).
+`argStringOr(0, "fallback")`. See the [cross-language API contract](https://github.com/xconnio/xconn-core/blob/main/docs/fluent-api.md).
 
 ## Build and package
 
-This new package is not published to npm yet. Maintainer builds require Rust,
+Install the browser client from npm:
+
+```sh
+npm install @xconnio/core
+```
+
+The package includes JavaScript, TypeScript declarations and the compiled WASM
+binary. Application installs require no Rust toolchain or native SDK downloads.
+Bundlers must preserve or explicitly relocate the WASM asset; pass its URL to
+`initializeWasm(wasmURL)` when configuring a custom asset location.
+
+Maintainer builds require Rust,
 wasm32-unknown-unknown, wasm-bindgen-cli 0.2.129, Binaryen wasm-opt and Node 20.11+.
 
 ```sh
@@ -149,14 +161,14 @@ without Chromium browser tests are skipped. CI requires both and also installs
 and tests the packed package outside the checkout. Chromium tests use an isolated
 profile and --no-sandbox for the local test process.
 
-[Size measurements](../../benchmarks/browser-wasm/README.md) include WASM,
+[Size measurements](https://github.com/xconnio/xconn-core/blob/main/benchmarks/browser-wasm/README.md) include WASM,
 generated glue and all high-level client modules.
 
-[Result construction and received values](../../docs/results.md) use one payload
+[Result construction and received values](https://github.com/xconnio/xconn-core/blob/main/docs/results.md) use one payload
 type for handler replies, progressive results and completed calls.
 
 Progressive RPCs use the fluent `stream()` terminal (`Stream()`/`StreamContext()` in Go).
-See the [cross-language streaming API](../../docs/streaming.md) for examples and lifecycle rules.
+See the [cross-language streaming API](https://github.com/xconnio/xconn-core/blob/main/docs/streaming.md) for examples and lifecycle rules.
 
 ### Native adapter ownership
 
