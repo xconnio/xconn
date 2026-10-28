@@ -495,7 +495,7 @@ export class WebRTCConnection {
                 }
 
                 const json = rustCall(() => getNative().signaling_encode(candidate));
-                await this.signaling.publish(this.options.localCandidatesTopic).args([this.requestID, json]).execute();
+                await this.signaling.publish(this.options.localCandidatesTopic).args(this.requestID, json).execute();
             })
             .catch(() => {
                 void this.close();
