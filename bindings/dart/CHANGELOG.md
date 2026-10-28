@@ -1,3 +1,8 @@
+## Unreleased
+
+- QUIC: `verifyPeerCertificate` lets callers verify the server certificate chain
+  themselves, e.g. to pin a self-signed certificate.
+
 ## 0.1.0
 
 - Initial Dart and Flutter client binding for XConn Core.

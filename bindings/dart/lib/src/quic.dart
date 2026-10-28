@@ -36,17 +36,59 @@ class ByteStream extends NativeTransportResource {
 class QUICConnection extends NativeTransportResource {
   QUICConnection._(super.handle);
 
+  /// [verifyPeerCertificate] replaces root and hostname verification: it gets the
+  /// peer's DER chain, leaf first, and the connection is closed unless it returns true.
   static Future<QUICConnection> connect(
     String address, {
     required String serverName,
     Uint8List? certificate,
+    bool Function(List<Uint8List> certificates)? verifyPeerCertificate,
     Duration timeout = const Duration(seconds: 20),
-  }) => dialNative(
-    "quic_dial",
-    {"address": address, "server_name": serverName, "certificate": ?certificate},
-    timeout,
-    (response) => QUICConnection._(response["handle"] as int),
-  );
+  }) {
+    if (verifyPeerCertificate == null) {
+      return dialNative(
+        "quic_dial",
+        {"address": address, "server_name": serverName, "certificate": ?certificate},
+        timeout,
+        (response) => QUICConnection._(response["handle"] as int),
+      );
+    }
+    if (certificate != null) {
+      throw ArgumentError("certificate and verifyPeerCertificate cannot be combined");
+    }
+    return _connectVerified(address, serverName, verifyPeerCertificate, timeout);
+  }
+
+  static Future<QUICConnection> _connectVerified(
+    String address,
+    String serverName,
+    bool Function(List<Uint8List> certificates) verify,
+    Duration timeout,
+  ) async {
+    late Map<String, dynamic> response;
+    final connection = await dialNative(
+      "quic_dial",
+      {"address": address, "server_name": serverName, "host_verification": true},
+      timeout,
+      (fields) {
+        response = fields;
+        return QUICConnection._(fields["handle"] as int);
+      },
+    );
+    var trusted = false;
+    try {
+      final certificates = [for (final certificate in response["certificates"] as List) certificate as Uint8List];
+      trusted = certificates.isNotEmpty && verify(List.unmodifiable(certificates));
+    } finally {
+      if (!trusted) {
+        await connection.close();
+      }
+    }
+    if (!trusted) {
+      throw StateError("QUIC peer certificate was rejected");
+    }
+    return connection;
+  }
 
   Future<Session> openSession(String realm, {Client? client}) => connectNative(client ?? Client(), "quic_session", {
     "handle": handle,

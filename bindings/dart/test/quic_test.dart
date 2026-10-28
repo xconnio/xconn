@@ -1,5 +1,6 @@
 import "dart:typed_data";
 
+import "package:crypto/crypto.dart";
 import "package:test/test.dart";
 import "package:xconn_core/quic.dart";
 
@@ -35,5 +36,29 @@ void main() {
     await stream.writeEof();
     expect(await stream.read(), [1, 2, 3]);
     expect(await stream.read(), isEmpty);
+  }, skip: TransportPeer.binary == null ? "Set XCONN_TRANSPORT_PEER" : false);
+
+  test("QUIC accepts a peer certificate the caller verifies", () async {
+    final peer = await TransportPeer.start();
+    addTearDown(peer.close);
+    final pinned = sha256.convert(peer.certificate("quic"));
+    bool pin(List<Uint8List> chain) => sha256.convert(chain.first) == pinned;
+    final connection = await QUICConnection.connect(
+      peer.addresses["quic"] as String,
+      serverName: "wrong.invalid",
+      verifyPeerCertificate: pin,
+    );
+    addTearDown(connection.close);
+    final session = await connection.openSession("realm");
+    addTearDown(session.close);
+    expect((await session.call("echo").arg("pinned").execute()).args, ["pinned"]);
+    await expectLater(
+      QUICConnection.connect(
+        peer.addresses["quic"] as String,
+        serverName: "localhost",
+        verifyPeerCertificate: (_) => false,
+      ),
+      throwsStateError,
+    );
   }, skip: TransportPeer.binary == null ? "Set XCONN_TRANSPORT_PEER" : false);
 }
