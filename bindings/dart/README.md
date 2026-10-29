@@ -148,6 +148,8 @@ try {
 ```
 
 TLS verifies the hostname and system roots, or an explicit DER `certificate`.
+Pass `verifyPeerCertificate` to verify the server yourself instead, for example by
+pinning a self-signed certificate's SHA-256; it receives the DER chain, leaf first.
 `openStream` and `acceptStream` provide independent byte streams with `read`,
 `write`, `writeAll`, `writeEof`, and `close`. Closing a WAMP session leaves sibling
 sessions and streams open. Connection timeouts cancel native attempts.
