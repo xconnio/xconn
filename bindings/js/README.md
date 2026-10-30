@@ -261,7 +261,7 @@ One-time setup:
 
 1. Create a GitHub environment named `npm` with a required reviewer.
 2. In the npm package settings, add a GitHub Actions trusted publisher:
-   owner `xconnio`, repository `xconn-core`, workflow `npm-release.yaml`,
+   owner `xconnio`, repository `xconn`, workflow `npm-release.yaml`,
    environment `npm`. Allow publishing. No npm token secret is needed.
 
 For a release, update `package.json`, `package-lock.json`, and `CHANGELOG.md`,
