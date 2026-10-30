@@ -1,6 +1,6 @@
 {
   "name": "@xconnio/core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Browser WAMP client backed by the shared Rust protocol engine",
   "license": "MIT",
   "publishConfig": {
@@ -43,7 +43,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xconnio/xconn-core.git",
+    "url": "git+https://github.com/xconnio/xconn.git",
     "directory": "bindings/js"
   }
 }

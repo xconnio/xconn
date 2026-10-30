@@ -44,10 +44,10 @@ export async function exerciseWebRTC(api, server, variant) {
         connectTimeout: 10000,
         openTimeout: 5000,
     };
-    let localCandidates = 0;
+    const localCandidates = [];
     const monitor = await observer
-        .subscribe("to-provider", () => {
-            localCandidates++;
+        .subscribe("to-provider", (event) => {
+            localCandidates.push(event.args);
         })
         .execute();
     let peer;
@@ -89,7 +89,14 @@ export async function exerciseWebRTC(api, server, variant) {
             const large = "rtc".repeat(50000);
             check((await session.call("echo").arg(large).execute()).args[0] === large, "chunked WAMP RPC failed");
         }
-        check(localCandidates > 0, "browser did not trickle ICE candidates through WAMP");
+        check(localCandidates.length > 0, "browser did not trickle ICE candidates through WAMP");
+        for (const args of localCandidates) {
+            check(
+                args.length === 2 && typeof args[0] === "string" && typeof args[1] === "string",
+                "ICE events must contain separate request ID and candidate JSON arguments",
+            );
+            check(typeof JSON.parse(args[1]).candidate === "string", "ICE event contains invalid candidate JSON");
+        }
         const second = sessions[1];
         const registration = await second
             .register("browser.rtc.echo", (inv) => new api.Result(inv.args, inv.kwargs))
