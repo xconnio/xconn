@@ -385,6 +385,7 @@ impl PacketCrypto {
 /// RawSocket negotiation and bounded headers shared by browser transports.
 #[wasm_bindgen]
 pub struct RawSocketFraming {
+    receive_limit: usize,
     serializer: rawsocket::SerializerID,
     send_limit: usize,
 }
@@ -392,7 +393,11 @@ pub struct RawSocketFraming {
 #[wasm_bindgen]
 impl RawSocketFraming {
     #[wasm_bindgen(constructor)]
-    pub fn new(codec: &str) -> Result<RawSocketFraming, JsValue> {
+    pub fn new(codec: &str, maximum: Option<usize>) -> Result<RawSocketFraming, JsValue> {
+        let receive_limit = maximum.unwrap_or(rawsocket::DEFAULT_MAX_MSG_SIZE);
+        if !(512..=rawsocket::PROTOCOL_MAX_MSG_SIZE).contains(&receive_limit) || !receive_limit.is_power_of_two() {
+            return Err(error("invalid RawSocket receive limit"));
+        }
         let serializer = match codec {
             "json" => rawsocket::SerializerID::JSON,
             "msgpack" => rawsocket::SerializerID::MSGPACK,
@@ -400,17 +405,14 @@ impl RawSocketFraming {
             _ => return Err(error("unsupported RawSocket codec")),
         };
         Ok(Self {
+            receive_limit,
             serializer,
             send_limit: 0,
         })
     }
 
     pub fn handshake(&self) -> Result<Vec<u8>, JsValue> {
-        rawsocket::send_handshake(&rawsocket::Handshake::new(
-            self.serializer,
-            rawsocket::DEFAULT_MAX_MSG_SIZE,
-        ))
-        .map_err(error)
+        rawsocket::send_handshake(&rawsocket::Handshake::new(self.serializer, self.receive_limit)).map_err(error)
     }
 
     pub fn accept_handshake(&mut self, data: &[u8]) -> Result<(), JsValue> {
@@ -436,7 +438,7 @@ impl RawSocketFraming {
 
     pub fn parse_header(&self, data: &[u8]) -> Result<Vec<u32>, JsValue> {
         let header = rawsocket::receive_message_header(data).map_err(error)?;
-        if header.length() > rawsocket::DEFAULT_MAX_MSG_SIZE {
+        if header.length() > self.receive_limit {
             return Err(error("message exceeds receive limit"));
         }
         Ok(vec![header.kind() as u32, header.length() as u32])
@@ -478,6 +480,11 @@ impl ChannelFraming {
         }
         Ok(chunks)
     }
+}
+
+#[wasm_bindgen]
+pub fn channel_message_limit() -> usize {
+    xconn_framing::DEFAULT_MAX_MESSAGE
 }
 
 #[wasm_bindgen]

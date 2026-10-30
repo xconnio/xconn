@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.2
+
+- Allow WebRTC WAMP responses up to 16 MiB and advertise that receive limit
+  during negotiation, preventing disconnects on multi-megabyte results.
+- Keep peer send limits and bounded receive assembly enforced.
+
 ## 0.1.1
 
 - Fix browser ICE candidate signaling arguments being sent as a nested array,

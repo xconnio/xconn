@@ -355,7 +355,10 @@ class ChannelPeer implements MessagePeer {
         private readonly channel: DataChannel,
         serializer: Serializer,
     ) {
-        this.framing = new (getNative().RawSocketFraming)(getSubProtocol(serializer).slice("wamp.2.".length));
+        this.framing = new (getNative().RawSocketFraming)(
+            getSubProtocol(serializer).slice("wamp.2.".length),
+            getNative().channel_message_limit(),
+        );
         channel.onDisconnect(() => this.framing.free());
     }
 
@@ -480,8 +483,8 @@ export class WebRTCConnection {
         });
     }
 
-    private track(channel: RTCDataChannel, wamp = false): DataChannel {
-        const wrapped = new DataChannel(channel, wamp ? getNative().rawsocket_receive_limit() : undefined);
+    private track(channel: RTCDataChannel): DataChannel {
+        const wrapped = new DataChannel(channel);
         this.channels.add(wrapped);
         wrapped.onDisconnect(() => this.channels.delete(wrapped));
         return wrapped;
@@ -578,7 +581,7 @@ export class WebRTCConnection {
             );
             const current = connection;
             current.setup = controller;
-            current.initial = current.track(current.peer.createDataChannel("data"), true);
+            current.initial = current.track(current.peer.createDataChannel("data"));
             const pending = signaling
                 .subscribe(options.remoteCandidatesTopic, (event) => {
                     const [id, json] = event.args ?? [];
@@ -659,7 +662,7 @@ export class WebRTCConnection {
                     throw new ProtocolError("WebRTC connection closed");
                 }
 
-                const channel = this.initial ?? this.track(this.peer.createDataChannel("data"), true);
+                const channel = this.initial ?? this.track(this.peer.createDataChannel("data"));
                 this.initial = undefined;
                 const peer = new ChannelPeer(channel, serializer);
                 try {

@@ -89,6 +89,12 @@ export async function exerciseWebRTC(api, server, variant) {
             const large = "rtc".repeat(50000);
             check((await session.call("echo").arg(large).execute()).args[0] === large, "chunked WAMP RPC failed");
         }
+        const largeResult = await peer.call("large_result").execute();
+        check(largeResult.args[0] === "rtc".repeat(700000), "multi-megabyte WebRTC response changed");
+        check(
+            (await peer.call("echo").arg("after large response").execute()).args[0] === "after large response",
+            "large WebRTC response disconnected the session",
+        );
         check(localCandidates.length > 0, "browser did not trickle ICE candidates through WAMP");
         for (const args of localCandidates) {
             check(

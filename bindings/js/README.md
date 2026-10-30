@@ -241,6 +241,10 @@ The Rust signaling provider's offer/candidate contract is preserved. Early remot
 candidates are buffered and applied in order; the signaling subscription remains
 active for late trickle candidates until the peer connection closes.
 
+WebRTC WAMP sessions advertise a 16 MiB receive limit and reject larger assembled
+messages. Outgoing WAMP messages remain bounded by the remote peer's advertised
+limit; chunking does not bypass either limit.
+
 `connectTimeout`, `openTimeout`, `handshakeTimeout` and `signal` bound setup.
 Additional sessions use `peer.connection.openSession`. Closing a session leaves
 its connection and sibling channels open. The signaling session remains owned by
