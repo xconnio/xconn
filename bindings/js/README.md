@@ -255,7 +255,9 @@ concurrently and handle explicit queue-limit errors. Close resources explicitly.
 
 The `npm release` GitHub Actions workflow builds and tests the packed package,
 including browser WebRTC and WebTransport, before publishing `@xconnio/core`.
-Manual runs produce a tested package artifact without publishing.
+Manual runs produce a tested package artifact without publishing by default.
+To retry a failed publication, run the workflow on `main` with `publish` enabled;
+the same build, tests, and environment approval still apply.
 
 One-time setup:
 

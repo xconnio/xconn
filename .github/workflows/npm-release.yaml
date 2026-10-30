@@ -5,6 +5,11 @@ on:
     tags:
       - 'bindings/js/v*'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the tested package (for retrying a failed release)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -58,7 +63,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || inputs.publish
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -76,4 +81,4 @@ jobs:
           node-version: '24'
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
-      - run: npm publish package/*.tgz --access public --provenance --ignore-scripts
+      - run: npm publish ./package/*.tgz --access public --provenance --ignore-scripts
