@@ -250,3 +250,28 @@ channels. `send`/`receive` preserve text and binary packets; `writeMessage` and
 optional AbortSignal. Do not mix packet and chunk framing on the same channel.
 Incoming and outgoing queues are bounded; large producers should receive
 concurrently and handle explicit queue-limit errors. Close resources explicitly.
+
+## Publishing
+
+The `npm release` GitHub Actions workflow builds and tests the packed package,
+including browser WebRTC and WebTransport, before publishing `@xconnio/core`.
+Manual runs produce a tested package artifact without publishing.
+
+One-time setup:
+
+1. Create a GitHub environment named `npm` with a required reviewer.
+2. In the npm package settings, add a GitHub Actions trusted publisher:
+   owner `xconnio`, repository `xconn-core`, workflow `npm-release.yaml`,
+   environment `npm`. Allow publishing. No npm token secret is needed.
+
+For a release, update `package.json`, `package-lock.json`, and `CHANGELOG.md`,
+then merge the changes. Tag that commit with the matching package version:
+
+```sh
+git tag bindings/js/v0.1.1
+git push origin bindings/js/v0.1.1
+```
+
+Approve the `npm` environment deployment after the build succeeds. The publish
+job uploads the tested tarball using npm trusted publishing with provenance.
+Native SDK and other language releases are independent of this tag.
