@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Restore the 1 MiB WebRTC receive limit. Large editor Git-status responses
+  need to be bounded at the application layer.
+
 ## 0.1.2
 
 - Allow WebRTC WAMP responses up to 16 MiB and advertise that receive limit

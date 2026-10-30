@@ -1,6 +1,6 @@
 {
   "name": "@xconnio/core",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Browser WAMP client backed by the shared Rust protocol engine",
   "license": "MIT",
   "publishConfig": {

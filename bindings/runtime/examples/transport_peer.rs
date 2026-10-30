@@ -23,12 +23,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .register("echo", |inv| async move { RpcResult::new(inv.args, inv.kwargs) })
         .execute()
         .await?;
-    local
-        .register("large_result", |_inv| async move {
-            RpcResult::new(vec![xconn_core::Value::Str("rtc".repeat(700_000))], Default::default())
-        })
-        .execute()
-        .await?;
     let server = Server::websocket(router.clone(), "127.0.0.1:0".parse()?).await?;
     let quic = Arc::new(quic::Listener::bind(router.clone(), "127.0.0.1:0".parse()?).await?);
     let mut params = rcgen::CertificateParams::new(vec!["localhost".into(), "127.0.0.1".into()])?;
