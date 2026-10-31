@@ -1,9 +1,9 @@
 # Reusable services and application ownership
 
 Enable `xconn-core`'s optional `services` feature to use RPC bridging,
-attachment supervision, and endpoint discovery. The separate `crypto` feature
-re-exports portable packet encryption. Ordinary WAMP clients and routers do not
-need either feature.
+attachment supervision, stream brokering, and endpoint discovery. The separate
+`crypto` feature re-exports portable packet encryption. Ordinary WAMP clients and
+routers do not need either feature.
 
 | Responsibility | Owner |
 | --- | --- |
@@ -80,6 +80,49 @@ Connection setup, credentials and any decision to detach remain explicit.
 For a runnable backend/router/client composition with automatic RPC restoration,
 see the [`service_attachment` example](../crates/xconn-core/examples/service_attachment.rs)
 and the [connectivity runtime extraction plan](connectivity-runtime.md).
+
+## Stream broker
+
+`async_::services::stream_broker::StreamBroker` tracks authenticated destinations
+under application-chosen keys. Construction requires a policy callback receiving
+the authenticated source, destination key and destination identity. Policy is
+checked before opening each stream. Identity comes from the transport's
+successful WAMP authentication, never a client-provided routing header.
+
+`register(key, identity, opener)` returns an owned `DestinationRegistration`.
+Keep it alive until that destination disconnects; dropping it removes the entry.
+An old connection's cleanup cannot remove a newer registration under the same
+key. The application is responsible for admitting destinations and choosing
+which key each may register. There is no remote registration RPC or built-in
+realm/role convention.
+
+The opener can capture a QUIC connection or another stream-capable transport:
+
+```rust
+let registration = broker.register(key, authenticated_identity, Arc::new(move || {
+    let connection = connection.clone();
+    Box::pin(async move {
+        Ok(Box::new(connection.open_raw().await?) as BoxStream)
+    })
+}))?;
+```
+
+`relay(source, key, incoming)` opens and forwards a stream. `open(source, key)`
+returns an authorized destination stream instead, allowing a compatibility
+adapter to write its existing header before calling `forward(incoming, outgoing)`.
+The broker parses no DeskConn operations, file paths, or text/binary framing.
+
+Forwarding uses bounded buffers and transport backpressure. A request-side EOF
+half-closes the destination writer and lets the remaining reply drain. Cancelling
+the forwarding future releases both owned streams. Applications own forwarding
+tasks and must stop/join them with their listener or attachment. They also supply
+open deadlines; cancelling `open` drops the pending connector future.
+Unregistering a destination prevents new lookups; it does not cancel opens already
+in progress or existing streams. Close the underlying connection and its tasks
+when that behavior is required.
+
+Tests cover policy denial, connection replacement, cancellation, a large reply
+after request EOF, and forwarding between real authenticated QUIC connections.
 
 ## Endpoint discovery
 

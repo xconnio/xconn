@@ -79,16 +79,28 @@ explicit closure, handle drop, and cancellation of a cleanup wait. A caller-supp
 shutdown callback owns the shared connection and additional workers. Partial
 initialization rollback stays with the cycle. No binding changes are introduced.
 
-## Subsequent slices
+## Stream broker prototype
 
-1. Define attachment ownership around caller-supplied connection/session setup
-   and service initialization. Support multiple sessions per connection and
-   explicit shutdown. Prototype with DeskConn's two-session flow before binding
-   it; avoid one callback per protocol detail across FFI.
-2. Extract the Hub's stream broker: register a destination under an opaque key,
-   authorize each source/destination pair, and open/copy streams with bounded
-   lifecycle and cleanup. No machine roles, account RPCs or file operations in
-   the broker. Retain DeskConn's existing stream header and framing at its edge.
+`stream_broker::StreamBroker` now supplies the shared destination registry,
+per-open authorization, replacement-safe registration ownership, and opaque byte
+forwarding. QUIC integration tests use identities supplied by the authenticated
+listener and relay between separate client and backend connections. Bounded
+buffers, request half-close/reply draining, denied opens, and cancellation are
+covered independently of DeskConn framing.
+
+This is not yet wired into either Go application. The existing header parser can
+request an authorized stream, write the original header, then use the generic
+forwarder. Applications still own admission policy, connection shutdown and
+forwarding tasks. No new discovery or enrollment protocol is required.
+
+## Remaining integration work
+
+1. Apply the attachment prototype to DeskConn's full initialization/shutdown
+   sequence, including its WebRTC provider and authorization subscriptions.
+   Connection/session setup and partial initialization rollback stay explicit;
+   avoid one callback per protocol detail across FFI.
+2. Connect Hub's existing stream-header adapter to the broker while preserving
+   its current destination admission and authorization decisions.
 3. Compose listener ownership, attachment, RPC bridging and stream forwarding
    into a service host. Reuse the existing WebRTC provider for direct connections;
    signaling must preserve existing peers' compatibility.
