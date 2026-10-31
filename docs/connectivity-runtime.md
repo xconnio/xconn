@@ -119,3 +119,39 @@ Do not rewrite both applications or introduce a new discovery/enrollment protoco
 in the same change. Keep the working DeskConn migration as a compatibility
 reference until the replacement covers attachment, authentication, forwarding,
 streaming, reconnection and shutdown end to end.
+
+## Integration findings and release order
+
+Hub's account adapter now uses the XConn binding with the original account RPCs,
+argument order, CRA salt fields, role names and realm permissions. Its integration
+test uses the production adapter with local account RPC fixtures: salted CRA,
+wrong-password rejection, CryptoSign, routed RPCs, WebTransport-to-QUIC relay,
+cross-realm rejection, backend replacement and shutdown pass. The shared router
+also owns its internal session and certificate endpoint until shutdown.
+
+DeskConn's remaining cloud code handles enrollment state, the account service's
+principal snapshot/events, credential persistence and its local application
+boundary. These are adapters, not another transport or protocol implementation.
+Keep them explicit for this migration. A higher-level listener/provider host can
+be additive once the admission and framing adapters are stable; it does not need
+to block either application's migration. Do not introduce another Session API or
+move DeskConn's roles and account schema behind a generic-looking configuration.
+
+The prototype builds and tests through an external Go workspace. That proves the
+source integration, not installation from published application pins. The Hub
+binary is statically linked on Linux amd64; its release Docker/CI setup needs the
+published dependency updates before it can be exercised as a standalone build.
+The Postgres inventory query and deployed management service are not covered by
+the local account fixture. Full Go binding and DeskConn race suites pass, except
+for the eight FUSE mount tests unavailable on this host.
+
+1. Review and merge XConn's shared services and native SDK version `0.1.5`.
+2. Tag `v0.1.5`; wait for every native SDK platform build to publish.
+3. Tag the Go module `bindings/go/v0.1.5` on that same source commit.
+4. Update DeskConn's SDK and Go pins, verify without the workspace, and publish
+   its reviewed module revision.
+5. Pin that DeskConn revision in Hub, run `go mod tidy` to remove the legacy
+   transitive modules, then verify Hub's standalone CI and Docker builds.
+
+No new SDK, Go module, or application release is created by this development
+branch. The existing published tags remain unchanged.
