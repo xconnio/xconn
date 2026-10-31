@@ -239,7 +239,7 @@ def main():
         ):
             for path in sorted(staging.iterdir()):
                 bundle.add(path, arcname=f"{name}/{path.name}")
-    archive.with_suffix(archive.suffix + ".sha256").write_text(f"{digest(archive)}  {archive.name}\n")
+    archive.with_suffix(archive.suffix + ".sha256").write_bytes(f"{digest(archive)}  {archive.name}\n".encode("ascii"))
     print(archive)
 
 

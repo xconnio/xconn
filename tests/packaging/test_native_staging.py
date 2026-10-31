@@ -4,6 +4,7 @@ import importlib.util
 import json
 import mmap
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -17,6 +18,28 @@ SPEC.loader.exec_module(PACKAGE)
 
 
 class NativeStagingTests(unittest.TestCase):
+    def test_archive_checksum_uses_lf_line_endings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            destination = Path(directory)
+
+            def stage(staging, **kwargs):
+                (staging / "include").mkdir()
+                (staging / "include/xconn.h").write_bytes(b"header")
+                return "xconn-native-test"
+
+            with (
+                patch.object(sys, "argv", ["package-native.py", str(destination)]),
+                patch.object(PACKAGE, "stage", side_effect=stage),
+                patch.object(PACKAGE.subprocess, "run"),
+                patch("builtins.print"),
+            ):
+                PACKAGE.main()
+
+            archive = destination / "xconn-native-test.tar.gz"
+            checksum = destination / "xconn-native-test.tar.gz.sha256"
+            self.assertEqual(checksum.read_bytes(), f"{PACKAGE.digest(archive)}  {archive.name}\n".encode("ascii"))
+            subprocess.run(["sha256sum", "--check", checksum.name], cwd=destination, check=True, capture_output=True)
+
     def test_replacement_preserves_existing_mapping(self):
         with tempfile.TemporaryDirectory() as directory:
             source, installed = (
