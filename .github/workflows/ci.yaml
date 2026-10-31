@@ -66,6 +66,8 @@ jobs:
           shared-key: rust-${{ matrix.os }}
       - if: runner.os == 'Linux'
         run: cargo fmt --all -- --check
+      - if: runner.os == 'Linux'
+        run: python3 -m unittest discover -s tests/packaging
       - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
       - run: cargo test --locked --workspace --all-features
       - run: cargo check --locked -p xconn-webrtc --no-default-features
@@ -202,6 +204,11 @@ jobs:
       python: ${{ needs.changes.outputs.python == 'true' }}
       dart: ${{ needs.changes.outputs.dart == 'true' }}
       browser: ${{ needs.changes.outputs.browser == 'true' }}
+
+  windows-sdk:
+    needs: changes
+    if: needs.changes.outputs.go == 'true'
+    uses: ./.github/workflows/windows-sdk.yaml
 
   go:
     needs: [changes, native-sdk, go-reference]

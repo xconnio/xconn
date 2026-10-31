@@ -47,8 +47,11 @@ def stage(destination, static=False, profile="release", target=None, android_api
     target = target or host
     android = target == "aarch64-linux-android"
     system = platform.system()
-    if system not in ("Linux", "Darwin"):
-        raise SystemExit("native SDK packaging supports Linux and macOS")
+    if system not in ("Linux", "Darwin", "Windows"):
+        raise SystemExit("native SDK packaging supports Linux, macOS and Windows")
+    windows = system == "Windows"
+    if windows and target != "x86_64-pc-windows-gnu":
+        raise SystemExit("Windows SDKs require the x86_64-pc-windows-gnu toolchain")
     if android:
         if host != "x86_64-unknown-linux-gnu":
             raise SystemExit("Android SDK packaging currently requires a Linux x86-64 host")
@@ -60,7 +63,14 @@ def stage(destination, static=False, profile="release", target=None, android_api
             raise SystemExit("Set ANDROID_NDK_HOME to the Android NDK directory")
     if static and android:
         raise SystemExit("Android SDKs are shared libraries")
-    filename = "libxconn_ffi.a" if static else ("libxconn_ffi.dylib" if system == "Darwin" else "libxconn_ffi.so")
+    if static:
+        filename = "libxconn_ffi.a"
+    elif windows:
+        filename = "xconn_ffi.dll"
+    elif system == "Darwin":
+        filename = "libxconn_ffi.dylib"
+    else:
+        filename = "libxconn_ffi.so"
     build_directory = Path(metadata["target_directory"])
     if build_target:
         build_directory /= build_target
@@ -72,12 +82,17 @@ def stage(destination, static=False, profile="release", target=None, android_api
         (destination / directory).mkdir(parents=True, exist_ok=True)
     installed = destination / "lib" / filename
     install_library(library, installed, system)
+    extra_files = []
+    if windows and not static:
+        import_library = destination / "lib/libxconn_ffi.dll.a"
+        shutil.copy2(library.parent / import_library.name, import_library)
+        extra_files.append(import_library)
     header = destination / "include/xconn.h"
     shutil.copy2(ROOT / "bindings/ffi/include/xconn.h", header)
     abi = int(re.search(r"#define XC_ABI_VERSION (\d+)", header.read_text())[1])
     version = package["version"]
     name = "xconn-static" if static else "xconn"
-    if static and system == "Darwin":
+    if static and system in ("Darwin", "Windows"):
         command = [
             "cargo",
             "rustc",
@@ -95,11 +110,28 @@ def stage(destination, static=False, profile="release", target=None, android_api
         result = subprocess.run(command, cwd=ROOT, check=True, capture_output=True, text=True)
         native_flags = re.search(r"native-static-libs: (.+)", result.stderr)
         if native_flags is None:
-            raise SystemExit("rustc did not report the macOS native static linker flags")
-        libraries = f'"${{libdir}}/libxconn_ffi.a" {native_flags[1]}'
+            raise SystemExit("rustc did not report the native static linker flags")
+        flags = native_flags[1]
+        if windows:
+            dependencies_metadata = json.loads(output("cargo", "metadata", "--locked", "--format-version", "1"))
+            for dependency in dependencies_metadata["packages"]:
+                if dependency["name"] not in ("windows_x86_64_gnu", "winapi-x86_64-pc-windows-gnu"):
+                    continue
+                directory = Path(dependency["manifest_path"]).parent / "lib"
+                for archive in sorted(directory.glob("lib*.a")):
+                    flag = f"-l{archive.name[3:-2]}"
+                    if flag not in flags.split():
+                        continue
+                    installed_archive = destination / "lib" / archive.name
+                    shutil.copy2(archive, installed_archive)
+                    extra_files.append(installed_archive)
+                    flags = " ".join(
+                        f'"${{libdir}}/{archive.name}"' if token == flag else token for token in flags.split()
+                    )
+        libraries = f'"${{libdir}}/libxconn_ffi.a" {flags}'
     elif static:
         libraries = '"${libdir}/libxconn_ffi.a" -lgcc_eh -lutil -lrt -lpthread -lm -ldl -lc'
-    elif android:
+    elif android or windows:
         libraries = '-L"${libdir}" -lxconn_ffi'
     else:
         libraries = '-L"${libdir}" -lxconn_ffi -Wl,-rpath,"${libdir}"'
@@ -117,6 +149,24 @@ def stage(destination, static=False, profile="release", target=None, android_api
     dependencies = ""
     if android:
         dependencies = output(str(readelf), "--dynamic", str(installed))
+    elif windows and not static:
+        dependencies = output("objdump", "-p", str(installed))
+        dependencies = "\n".join(re.findall(r"DLL Name:\s*(\S+)", dependencies))
+        pending = dependencies.splitlines()
+        copied = set()
+        while pending:
+            dependency = pending.pop()
+            if dependency.lower() in copied:
+                continue
+            if dependency.lower() in {"libgcc_s_seh-1.dll", "libstdc++-6.dll", "libwinpthread-1.dll"}:
+                source = Path(output("gcc", f"-print-file-name={dependency}"))
+                if not source.is_file():
+                    raise SystemExit(f"MinGW runtime library not found: {dependency}")
+                runtime = destination / "lib" / dependency
+                shutil.copy2(source, runtime)
+                extra_files.append(runtime)
+                copied.add(dependency.lower())
+                pending.extend(re.findall(r"DLL Name:\s*(\S+)", output("objdump", "-p", str(runtime))))
     elif not static:
         dependencies = output("otool", "-L", str(installed)) if system == "Darwin" else output("ldd", str(installed))
     manifest = {
@@ -136,7 +186,7 @@ def stage(destination, static=False, profile="release", target=None, android_api
         "runtime_dependencies": dependencies,
         "files": {
             str(path.relative_to(destination)): digest(path)
-            for path in (installed, header, pkg_config, readme, license_file)
+            for path in (installed, header, pkg_config, readme, license_file, *extra_files)
         },
     }
     if android:
@@ -162,7 +212,7 @@ def main():
     parser.add_argument("destination", type=Path)
     args = parser.parse_args()
     if args.target and args.static:
-        parser.error("Android SDKs are shared libraries; --static is only supported for native Linux/macOS")
+        parser.error("Android SDKs are shared libraries; --static is only supported for native Linux/macOS/Windows")
     destination = args.destination.resolve()
     if args.stage_only:
         stage(
@@ -206,7 +256,7 @@ def main():
         ):
             for path in sorted(staging.iterdir()):
                 bundle.add(path, arcname=f"{name}/{path.name}")
-    archive.with_suffix(archive.suffix + ".sha256").write_text(f"{digest(archive)}  {archive.name}\n")
+    archive.with_suffix(archive.suffix + ".sha256").write_bytes(f"{digest(archive)}  {archive.name}\n".encode("ascii"))
     print(archive)
 
 

@@ -14,8 +14,9 @@ go build ./...
 ```
 
 Supported hosts are Linux amd64/arm64 with a compatible glibc (SDKs are built
-on Ubuntu 22.04), and macOS arm64. No Windows, Intel macOS, musl or
-cross-installation is provided.
+on Ubuntu 22.04), and macOS arm64. The installer does not support Windows,
+Intel macOS, musl or cross-installation. Windows amd64 SDK archives use the
+manual installation described below.
 
 The script downloads the archive and SHA-256 sidecar from the same versioned
 GitHub Release over HTTPS. It checks the archive hash before extracting, rejects
@@ -134,6 +135,38 @@ changes to external native archives in its build cache (use `go build -a`). Stat
 Linux and macOS on the build host architecture. Only Linux supports the explicit
 fully static libc link command above. Certificates and any glibc runtime modules
 remain system resources; this is not a hermetic cross-distribution build.
+
+## Windows amd64
+
+Windows archives target `x86_64-pc-windows-gnu`, using Rust's GNU toolchain and
+MinGW-w64 GCC so that the static library is compatible with Go's cgo linker.
+MSVC libraries, Windows ARM64 and 32-bit Windows are not included.
+
+Extract the release `.tar.gz` archive with Windows tar or MSYS2 tar. The shared SDK
+contains `lib/xconn_ffi.dll` and `lib/libxconn_ffi.dll.a`; keep the DLL and any
+bundled runtime DLLs on `PATH` or beside the executable. The static SDK contains
+`lib/libxconn_ffi.a` and `lib/pkgconfig/xconn-static.pc`, including the native
+Windows linker dependencies reported by Rust. Both include `include/xconn.h`,
+checksums and a provenance manifest.
+
+With Go and MSYS2's MINGW64 GCC/pkg-config installed, run these from an MSYS2
+MINGW64 shell, replacing `/c/path/to/sdk` with the extracted SDK directory:
+
+```sh
+export CGO_ENABLED=1
+export CC=gcc
+export PKG_CONFIG_PATH="$(cygpath -m /c/path/to/sdk/lib/pkgconfig)"
+go build -tags xconn_static ./...
+```
+
+For shared linking, omit `-tags xconn_static` and add the shared SDK's `lib`
+directory to `PATH`. A normal Go install still needs this separate SDK setup;
+no Rust toolchain is required by application builds. These archives are not
+MSVC SDKs. Static linking removes the XConn DLL dependency; it does not remove
+Windows system-library dependencies.
+
+The Windows SDK CI job extracts both archives, links and runs a C ABI probe,
+and runs Go client/router round trips against each SDK before publication.
 
 ## Android ARM64
 
