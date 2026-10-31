@@ -49,6 +49,34 @@ Dropping the supervisor future cancels its current cycle or retry wait. A cycle
 must own and release its resources when cancelled. The supervisor does not issue
 credentials or prescribe an enrollment RPC or storage format.
 
+`Attachment` owns the upstream sessions and bridges of one established cycle.
+It watches all supplied sessions: losing either a device session or a control
+session starts cleanup of the whole attachment. It closes forwarding bridges,
+then the remaining sessions. A shared local backend remains application-owned.
+
+For one QUIC connection with multiple sessions, use `with_shutdown`:
+
+```rust
+let attachment = Attachment::with_shutdown(
+    vec![device_session, control_session],
+    vec![bridge],
+    move || async move {
+        connection.close();
+        Ok(())
+    },
+)?;
+attachment.wait().await?;
+```
+
+Create the attachment inside the supervisor's cycle, after initialization succeeds.
+The cycle owns rollback of partially initialized resources. The shutdown callback
+can also stop and join stream workers; it runs once after bridges and sessions
+close. `close().await` requests shutdown and waits for cleanup. Cancelling that
+wait does not cancel cleanup. Dropping the handle requests the same cleanup;
+the Tokio runtime must remain alive until it finishes. Cleanup attempts every
+resource and reports its first error. Repeated waits return the same result.
+Connection setup, credentials and any decision to detach remain explicit.
+
 For a runnable backend/router/client composition with automatic RPC restoration,
 see the [`service_attachment` example](../crates/xconn-core/examples/service_attachment.rs)
 and the [connectivity runtime extraction plan](connectivity-runtime.md).

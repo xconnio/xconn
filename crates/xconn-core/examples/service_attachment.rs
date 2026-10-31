@@ -6,7 +6,7 @@ use xconn_core::{
         router::{RealmConfig, Router},
         server::Server,
         services::{
-            attachment::{AttachmentOutcome, RetryPolicy, supervise},
+            attachment::{Attachment, AttachmentOutcome, RetryPolicy, supervise},
             bridge::{Bridge, BridgeRoute},
         },
         session::Session,
@@ -58,9 +58,14 @@ async fn attachment_cycle(uri: &str, target: Session) -> AttachmentOutcome {
         }
     };
     println!("exposing {PROCEDURE} through {uri}");
-    upstream.wait_disconnect().await;
-    let _ = bridge.close().await;
-    AttachmentOutcome::Disconnected(Error::new("upstream session disconnected"))
+    let attachment = match Attachment::new(vec![upstream], vec![bridge]) {
+        Ok(attachment) => attachment,
+        Err(error) => return AttachmentOutcome::Retry(error),
+    };
+    match attachment.wait().await {
+        Ok(()) => AttachmentOutcome::Disconnected(Error::new("upstream session disconnected")),
+        Err(error) => AttachmentOutcome::Disconnected(error),
+    }
 }
 
 #[tokio::main]

@@ -72,8 +72,12 @@ cancellation cleanup.
 Existing supervisor and bridge tests cover backoff, caller isolation, progressive
 calls/results, and cancellation propagation.
 
-This slice adds no new public API or binding layer. Its purpose is to establish
-an executable baseline before choosing a higher-level service-host API.
+The initial example established a baseline using existing services. It now uses
+`attachment::Attachment` to own the upstream sessions and bridges of each cycle.
+Tests also exercise two sessions on one QUIC connection, loss of either session,
+explicit closure, handle drop, and cancellation of a cleanup wait. A caller-supplied
+shutdown callback owns the shared connection and additional workers. Partial
+initialization rollback stays with the cycle. No binding changes are introduced.
 
 ## Subsequent slices
 
