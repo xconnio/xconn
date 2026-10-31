@@ -146,6 +146,33 @@ when that behavior is required.
 Tests cover policy denial, connection replacement, cancellation, a large reply
 after request EOF, and forwarding between real authenticated QUIC connections.
 
+The Go API provides `NewStreamBroker`, `RegisterQUIC`, `Open`, `Relay`, and
+`ForwardStreams`. Register identities from `QUICListener.AcceptConnection`; use
+the source identity returned by `AcceptStream`, not fields from a routing header.
+Keep and close each `StreamDestination` with its accepted connection.
+
+A legacy header adapter can keep its existing parser and writer:
+
+```go
+outgoing, err := broker.Open(ctx, sourceIdentity, destinationKey)
+if err != nil {
+    return err
+}
+defer outgoing.Close()
+if err := writeExistingHeader(outgoing, request); err != nil {
+    return err
+}
+_, err = xconn.ForwardStreams(ctx, incoming, outgoing)
+return err
+```
+
+`ForwardStreams` and `Relay` consume the native stream handles. Do not run
+concurrent reads or writes on them. Cancellation releases both sides and payload
+bytes stay inside Rust. Existing stream deadlines are replaced by the forwarding
+context. These APIs currently accept the native streams exposed as `QUICStream`,
+including WebTransport streams; arbitrary Go `io.ReadWriteCloser` adapters and
+message-oriented WebRTC channels are not silently converted into byte streams.
+
 ## Endpoint discovery
 
 `DiscoveryService::start(session, prefix, policy)` hosts an in-memory directory

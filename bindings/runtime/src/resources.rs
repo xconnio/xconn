@@ -42,6 +42,10 @@ pub(super) fn get_base(handle: u64) -> Result<Arc<ForeignBase>> {
 
 pub(super) enum Resource {
     Attachment(Arc<xconn_core::async_::services::attachment::Attachment>),
+    #[cfg(feature = "quic")]
+    StreamBroker(xconn_core::async_::services::stream_broker::StreamBroker),
+    #[cfg(feature = "quic")]
+    StreamDestination(xconn_core::async_::services::stream_broker::DestinationRegistration),
     Discovery(Arc<xconn_core::async_::services::discovery::DiscoveryService>),
     Bridge(Arc<xconn_core::async_::services::bridge::Bridge>),
     #[cfg(feature = "quic")]
@@ -65,9 +69,13 @@ pub(super) enum Resource {
 }
 
 impl Resource {
-    fn close(&self) {
+    pub(super) fn close(&self) {
         match self {
             Self::Attachment(attachment) => attachment.request_close(),
+            #[cfg(feature = "quic")]
+            Self::StreamBroker(_) => {}
+            #[cfg(feature = "quic")]
+            Self::StreamDestination(registration) => registration.close(),
             Self::Discovery(service) => {
                 let service = service.clone();
                 runtime().spawn(async move {
@@ -125,6 +133,15 @@ pub fn close(handle: u64) {
     if let Some(resource) = resources().lock().unwrap().remove(&handle) {
         resource.close();
     }
+}
+
+#[cfg(feature = "quic")]
+pub(super) fn take_resource(handle: u64) -> Result<Arc<Resource>> {
+    resources()
+        .lock()
+        .unwrap()
+        .remove(&handle)
+        .ok_or("closed or invalid resource".into())
 }
 
 pub(super) fn get_resource(handle: u64) -> Result<Arc<Resource>> {

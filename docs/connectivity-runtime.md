@@ -88,19 +88,26 @@ listener and relay between separate client and backend connections. Bounded
 buffers, request half-close/reply draining, denied opens, and cancellation are
 covered independently of DeskConn framing.
 
-This is not yet wired into either Go application. The existing header parser can
-request an authorized stream, write the original header, then use the generic
-forwarder. Applications still own admission policy, connection shutdown and
-forwarding tasks. No new discovery or enrollment protocol is required.
+Go now exposes attachment ownership and the stream broker through the native
+bridge. A separate DeskConn `feat/shared-connectivity` branch uses the attachment
+for its two cloud sessions and the broker in the Hub's shared `deskconn/relay`
+package. That adapter preserves the existing routing header and role checks.
+Applications still own admission policy, connection shutdown and forwarding tasks.
+No new discovery or enrollment protocol is required.
+
+The application prototype uses a temporary Go workspace and a locally built SDK;
+its changes cannot land independently against the currently published bindings.
+Release the new native SDK and Go module before updating application dependency
+pins. Hub's deployment module still needs the new DeskConn release and its Go API
+imports migrated; it has not been switched by this prototype.
 
 ## Remaining integration work
 
-1. Apply the attachment prototype to DeskConn's full initialization/shutdown
-   sequence, including its WebRTC provider and authorization subscriptions.
-   Connection/session setup and partial initialization rollback stay explicit;
-   avoid one callback per protocol detail across FFI.
-2. Connect Hub's existing stream-header adapter to the broker while preserving
-   its current destination admission and authorization decisions.
+1. Finish service-host composition around listener, WebRTC-provider and stream
+   worker ownership. Connection/session setup and partial initialization rollback
+   stay explicit; avoid one callback per protocol detail across FFI.
+2. Verify the Hub deployment against the new relay adapter and migrate its
+   remaining Go imports without moving account/database policy into XConn.
 3. Compose listener ownership, attachment, RPC bridging and stream forwarding
    into a service host. Reuse the existing WebRTC provider for direct connections;
    signaling must preserve existing peers' compatibility.
