@@ -293,3 +293,97 @@ async fn broker_relays_between_authenticated_quic_connections() {
     .await
     .unwrap();
 }
+
+#[cfg(feature = "quic")]
+#[tokio::test]
+async fn configured_router_owns_stream_registration_and_forwarding() {
+    use xconn_core::{
+        Error, JSONSerializerSpec,
+        async_::{
+            quic::{Connection, Listener},
+            router::{RealmConfig, Router},
+            services::routing::StreamRouting,
+        },
+        wampproto::authenticators::anonymous::AnonymousAuthenticator,
+    };
+
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let router = Router::new();
+        router.add_realm("example", RealmConfig::default()).unwrap();
+        // Only the first authenticated connection is the backend in this local
+        // fixture. Production policy uses authenticated roles or identities.
+        let first = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let source_id = Arc::new(std::sync::atomic::AtomicI64::new(0));
+        let observed = source_id.clone();
+        router
+            .route_streams(StreamRouting::new(
+                move |_| first.swap(false, Ordering::SeqCst).then(|| "backend".into()),
+                move |mut incoming| {
+                    observed.store(incoming.session.id, Ordering::SeqCst);
+                    async move {
+                        let destination = incoming.stream.read_u8().await.map_err(|e| Error::new(e.to_string()))?;
+                        Ok(incoming
+                            .route_to(if destination == 1 { "backend" } else { "missing" })
+                            .with_prefix(b"header".to_vec())
+                            .with_failure(b"unavailable".to_vec()))
+                    }
+                },
+                Arc::new(|source, _, target| source.realm == target.realm),
+            ))
+            .unwrap();
+        let listener = Listener::bind(router.clone(), "127.0.0.1:0".parse().unwrap())
+            .await
+            .unwrap();
+        let backend = Connection::connect(listener.local_addr, "localhost", listener.client_config().unwrap())
+            .await
+            .unwrap();
+        let backend_session = backend
+            .open_session(
+                "example",
+                Box::new(JSONSerializerSpec),
+                Box::new(AnonymousAuthenticator::default()),
+            )
+            .await
+            .unwrap();
+        let client = Connection::connect(listener.local_addr, "localhost", listener.client_config().unwrap())
+            .await
+            .unwrap();
+        let session = client
+            .open_session(
+                "example",
+                Box::new(JSONSerializerSpec),
+                Box::new(AnonymousAuthenticator::default()),
+            )
+            .await
+            .unwrap();
+        let mut request = client.open_raw().await.unwrap();
+        request.write_all(&[1]).await.unwrap();
+        request.write_all(b"body").await.unwrap();
+        request.shutdown().await.unwrap();
+        let mut incoming = backend.accept_raw().await.unwrap();
+        let mut body = Vec::new();
+        incoming.read_to_end(&mut body).await.unwrap();
+        assert_eq!(body, b"headerbody");
+        incoming.write_all(b"reply").await.unwrap();
+        incoming.shutdown().await.unwrap();
+        let mut reply = Vec::new();
+        request.read_to_end(&mut reply).await.unwrap();
+        assert_eq!(reply, b"reply");
+        assert_eq!(source_id.load(Ordering::SeqCst), session.details().id());
+
+        let mut missing = client.open_raw().await.unwrap();
+        missing.write_all(&[0]).await.unwrap();
+        missing.shutdown().await.unwrap();
+        let mut failure = Vec::new();
+        missing.read_to_end(&mut failure).await.unwrap();
+        assert_eq!(failure, b"unavailable");
+        session.close().await.unwrap();
+        backend_session.close().await.unwrap();
+        client.close();
+        backend.close();
+        listener.close();
+        router.close();
+    })
+    .await
+    .unwrap();
+}

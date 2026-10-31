@@ -3,7 +3,7 @@ use crate::{
     Result, Value,
     callbacks::get_callbacks,
     quic,
-    resources::{Output, Resource, get_resource},
+    resources::{Output, Resource, get_resource, get_router},
     values::{dictionary, handle_field, object_value, session_fields, string_field},
 };
 use std::{collections::HashMap, sync::Arc};
@@ -39,6 +39,80 @@ fn broker(fields: &HashMap<String, Value>) -> Result<StreamBroker> {
 
 pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Result<Output> {
     match method {
+        "service_stream_configure" => {
+            use xconn_core::async_::services::routing::StreamRouting;
+            let router = get_router(handle_field(&fields, "handle")?)?;
+            let callbacks = get_callbacks(handle_field(&fields, "callback")?)?;
+            let destination_callbacks = callbacks.clone();
+            let route_callbacks = callbacks.clone();
+            let routing = StreamRouting::new(
+                move |identity| match destination_callbacks.call(
+                    "stream_destination",
+                    Value::Dict(session_fields(&xconn_core::SessionDetails::from_protocol(identity))),
+                ) {
+                    Ok(Value::Str(key)) if !key.is_empty() => Some(key),
+                    _ => None,
+                },
+                move |incoming| {
+                    let callbacks = route_callbacks.clone();
+                    async move {
+                        let source = incoming.session.clone();
+                        let fields = HashMap::from([(
+                            "source".into(),
+                            Value::Dict(session_fields(&xconn_core::SessionDetails::from_protocol(&source))),
+                        )]);
+                        let output = quic::stream_output(incoming.stream, fields);
+                        let handle =
+                            handle_field(&dictionary(&output.value).map_err(xconn_core::Error::new)?, "handle")
+                                .map_err(xconn_core::Error::new)?;
+                        let response = callbacks
+                            .call("stream_route", output.value.clone())
+                            .map_err(xconn_core::Error::new)?;
+                        let response = dictionary(&response).map_err(xconn_core::Error::new)?;
+                        let key = string_field(&response, "key").map_err(xconn_core::Error::new)?;
+                        let prefix = match response.get("prefix") {
+                            Some(Value::Bytes(bytes)) => bytes.0.clone(),
+                            None | Some(Value::Null) => Vec::new(),
+                            _ => return Err(xconn_core::Error::new("expected stream prefix bytes")),
+                        };
+                        let failure = match response.get("failure") {
+                            Some(Value::Bytes(bytes)) => bytes.0.clone(),
+                            None | Some(Value::Null) => Vec::new(),
+                            _ => return Err(xconn_core::Error::new("expected stream failure bytes")),
+                        };
+                        let stream = quic::take_stream(handle).map_err(xconn_core::Error::new)?;
+                        Ok(xconn_core::async_::quic::AuthenticatedStream {
+                            stream,
+                            session: source,
+                        }
+                        .route_to(key)
+                        .with_prefix(prefix)
+                        .with_failure(failure))
+                    }
+                },
+                Arc::new(move |source, key, target| {
+                    matches!(
+                        callbacks.call(
+                            "stream_authorize",
+                            object_value([
+                                (
+                                    "source",
+                                    Value::Dict(session_fields(&xconn_core::SessionDetails::from_protocol(source)))
+                                ),
+                                ("key", Value::Str(key.into())),
+                                (
+                                    "target",
+                                    Value::Dict(session_fields(&xconn_core::SessionDetails::from_protocol(target)))
+                                ),
+                            ])
+                        ),
+                        Ok(Value::Bool(true))
+                    )
+                }),
+            );
+            router.route_streams(routing).map_err(|error| error.to_string())?;
+            Ok(Output::plain(Value::Null))
+        }
         "service_stream_new" => {
             let callbacks = get_callbacks(handle_field(&fields, "callback")?)?;
             let broker = StreamBroker::new(Arc::new(move |source, key, target| {

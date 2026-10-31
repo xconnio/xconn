@@ -41,7 +41,6 @@ pub(super) fn get_base(handle: u64) -> Result<Arc<ForeignBase>> {
 }
 
 pub(super) enum Resource {
-    Attachment(Arc<xconn_core::async_::services::attachment::Attachment>),
     #[cfg(feature = "quic")]
     StreamBroker(xconn_core::async_::services::stream_broker::StreamBroker),
     #[cfg(feature = "quic")]
@@ -71,7 +70,6 @@ pub(super) enum Resource {
 impl Resource {
     pub(super) fn close(&self) {
         match self {
-            Self::Attachment(attachment) => attachment.request_close(),
             #[cfg(feature = "quic")]
             Self::StreamBroker(_) => {}
             #[cfg(feature = "quic")]

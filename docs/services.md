@@ -1,7 +1,7 @@
 # Reusable services and application ownership
 
 Enable `xconn-core`'s optional `services` feature to use RPC bridging,
-attachment supervision, stream brokering, and endpoint discovery. The separate
+managed backends, stream routing, and endpoint discovery. The separate
 `crypto` feature re-exports portable packet encryption. Ordinary WAMP clients and
 routers do not need either feature.
 
@@ -9,7 +9,7 @@ routers do not need either feature.
 | --- | --- |
 | WAMP protocol, clients, routers, transport connections and TLS | XConn Core |
 | RPC forwarding, cancellation and owned caller-session cleanup | XConn Core |
-| Attachment retry/backoff and detachment supervision | XConn Core |
+| Backend reconnection, retry/backoff and transport cleanup | XConn Core |
 | Endpoint directory, validation, ownership and presence cleanup | XConn Core |
 | Packet encryption and key-agreement primitives | XConn Core |
 | Enrollment protocol and credential issuance/revocation | Application or service provider |
@@ -18,6 +18,78 @@ routers do not need either feature.
 
 Core services impose no product-specific procedure prefix, identity format,
 credential files, enrollment server, or local socket architecture.
+
+## Managed backends
+
+Use `Client::serve` to connect a backend and restore its registrations after a
+connection loss. Setup receives an ordinary session and runs once per connection.
+A setup error stops the runner. Dropping the runner future closes its session.
+
+```rust
+Client::default().serve(uri, realm, |session| async move {
+    let registered = session.register("example.echo", |invocation| async move {
+        RpcResult::new(invocation.args, invocation.kwargs)
+    }).execute().await?;
+    if let Some(error) = registered.error {
+        return Err(Error::application(error));
+    }
+    Ok(())
+}).await?;
+```
+
+Go provides the same lifecycle with context cancellation:
+
+```go
+err := client.Serve(ctx, uri, realm, func(ctx context.Context, session *xconn.Session) error {
+    return session.Register("example.echo", echo).ExecuteContext(ctx).Err
+})
+```
+
+Use Rust `quic::run_backend` or Go `RunQUICBackend` when a backend also accepts raw
+streams. Its handler receives the session and QUIC connection. Returning an error
+stops the runner; return success on normal stream EOF and honor cancellation.
+The runner closes the connection and restores the handler after disconnection.
+
+The runnable [`backend` example](../crates/xconn-core/examples/backend.rs) has
+`hub`, `backend` and `call` modes. Restart its router to see RPC restoration.
+Credentials, enrollment, and decisions to stop retrying belong to the application.
+The lower-level `attachment::supervise` / Go `RunAttachment` remain available for
+custom enrollment cycles with multiple sessions and detachment outcomes.
+
+## Managed stream routing
+
+Configure `Router::route_streams` / Go `Router.RouteStreams` before starting
+QUIC or WebTransport listeners. Applications supply three policies:
+
+- `Destination`: map an authenticated backend identity to an opaque routing key.
+- `Route`: read the application's existing header and choose its destination.
+- `Authorize`: check the authenticated source and target before opening a stream.
+
+Listeners then own destination registration, replacement, forwarding and cleanup.
+Applications do not need accept loops, a broker registry or forwarding workers.
+The first successfully authenticated WAMP session identifies the connection.
+Identity always comes from WAMP authentication, never the routing header.
+
+```go
+err := router.RouteStreams(ctx, xconn.StreamRouting{
+    Destination: backendKey,
+    Route: readRoutingHeader,
+    Authorize: authorize,
+})
+```
+
+Go's route callback receives a borrowed native stream and returns `StreamRoute`.
+It may supply `Prefix` to replay its header and `Failure` to send its protocol's
+error response when the destination cannot be opened. The callback must not
+retain the stream or start concurrent I/O. Header reads have a ten-second deadline;
+router closure also cancels them. Rust returns `incoming.route_to(key)` with
+optional `with_prefix` / `with_failure`; Rust applications should bound their
+header parser with `tokio::time::timeout`.
+
+Policy callbacks and wire framing stay application-owned. There is no prescribed
+machine realm, role, file operation or enrollment protocol. Existing WAMP clients
+and routers that do not configure stream routing keep their current behavior.
+These additions require the native SDK prepared on this branch.
 
 ## RPC bridges
 
@@ -37,71 +109,6 @@ A forwarded progressive call remains correlated until its source invocation
 finishes writing the final reply or is interrupted. Trailing input chunks cannot
 reopen an already-completed backend invocation. Tests cover this race, independent
 input/results options, and cancellation of the backend handler.
-
-## Attachment lifecycle
-
-`async_::services::attachment::supervise` runs application-provided attachment
-cycles with bounded exponential retry backoff. A disconnected established
-attachment resets backoff. A detached outcome returns control to the application
-so it can apply enrollment and credential policy.
-
-Dropping the supervisor future cancels its current cycle or retry wait. A cycle
-must own and release its resources when cancelled. The supervisor does not issue
-credentials or prescribe an enrollment RPC or storage format.
-
-`Attachment` owns the upstream sessions and bridges of one established cycle.
-It watches all supplied sessions: losing either a device session or a control
-session starts cleanup of the whole attachment. It closes forwarding bridges,
-then the remaining sessions. A shared local backend remains application-owned.
-
-For one QUIC connection with multiple sessions, use `with_shutdown`:
-
-```rust
-let attachment = Attachment::with_shutdown(
-    vec![device_session, control_session],
-    vec![Arc::new(bridge)],
-    move || async move {
-        connection.close();
-        Ok(())
-    },
-)?;
-attachment.wait().await?;
-```
-
-Create the attachment inside the supervisor's cycle, after initialization succeeds.
-The cycle owns rollback of partially initialized resources. The shutdown callback
-can also stop and join stream workers; it runs once after bridges and sessions
-close. `close().await` requests shutdown and waits for cleanup. Cancelling that
-wait does not cancel cleanup. Dropping the handle requests the same cleanup;
-the Tokio runtime must remain alive until it finishes. Cleanup attempts every
-resource and reports its first error. Repeated waits return the same result.
-Connection setup, credentials and any decision to detach remain explicit.
-
-The Go binding exposes the same ownership through `NewAttachment`:
-
-```go
-attachment, err := xconn.NewAttachment(ctx, xconn.AttachmentConfig{
-    Sessions: []*xconn.Session{device, control},
-    Bridges:  []*xconn.Bridge{bridge},
-    Shutdown: connection.Close,
-})
-if err != nil {
-    return err // The caller still owns initialization rollback.
-}
-defer attachment.Close()
-return attachment.Wait(ctx)
-```
-
-Cancelling the constructor's lifetime context starts cleanup. `Wait(ctx)` only
-bounds that wait; it does not cancel the attachment. `CloseContext(ctx)` requests
-shutdown and can stop waiting while Rust continues cleanup. The shutdown callback
-must not call `Wait` or `Close` on the attachment itself. Cleanup releases the Go
-session readers, bridge callbacks and native handles before completion is exposed.
-These APIs require an SDK built from this branch until the next native release.
-
-For a runnable backend/router/client composition with automatic RPC restoration,
-see the [`service_attachment` example](../crates/xconn-core/examples/service_attachment.rs)
-and the [connectivity runtime extraction plan](connectivity-runtime.md).
 
 ## Stream broker
 

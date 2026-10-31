@@ -1,157 +1,24 @@
-# Connectivity runtime: extraction plan
+# Connectivity runtime integration
 
-The first goal is to share connection lifecycle and forwarding across applications,
-without requiring a DeskConn account service, realm layout, or wire protocol.
-Ordinary WAMP clients and routers keep their existing APIs.
+The public entry points are described in [services](services.md): managed backend
+runners and router stream-routing policy. Ordinary WAMP APIs remain unchanged.
+Bridges, brokers and the retry supervisor remain available for custom compositions.
 
-## Source audit
+DeskConn keeps enrollment, credentials, account snapshots/events, role policy and
+its existing stream header. XConn owns transport implementation, authenticated
+destination registration and byte forwarding. Hub keeps its account/database
+adapter and uses DeskConn's relay policy without implementing forwarding workers.
 
-This audit compares XConn `c102a26`, DeskConn's migration through `10e8d68`,
-and Hub main `f199ef5` (the checkout and module are still named
-`deskconn-router`). Hub currently imports `deskconn/relay`; its account/database
-adapter is separate from the relay implementation.
+Integration uses an external Go workspace and a locally built SDK. Published
+application dependency pins have not yet changed. The release order is:
 
-| Current source | Mechanism | Application policy | Destination |
-| --- | --- | --- | --- |
-| DeskConn `internal/connectivity/app.go` | Forward registrations and preserve caller identity | Local Unix socket, exposed procedures, registration options | Existing Rust `Bridge`; retain a small application adapter |
-| `cloud.go`: attachment loop | Retry, reconnect, restore services, release resources | Credentials-file polling, device/cloud realms, enrollment and detach messages | Existing supervisor plus a reusable attachment lifecycle; keep enrollment/storage adapters in DeskConn |
-| `cloud.go`: initial key snapshot and events | Subscribe before snapshot, buffer updates, detect overflow | Principal schema, key-list/add/remove RPCs and topics, disk persistence | Keep the current protocol adapter; extract synchronization only with a second concrete use case |
-| `auth.go`, `credentials.go`, `machineid_*.go` | Verify authentication material | Principal lookup, roles, credential locations, host identity choice | Rust authentication primitives plus application identity/storage adapters |
-| `standalone.go` | Own listeners, sessions, bridges and direct connections until shutdown | Which transports to expose, realm policy, configured users and keys | Reusable service-host lifecycle; application supplies configuration and identity policy |
-| `relay.go` | Forward accepted QUIC streams and WebRTC channels | Local socket paths and DeskConn text/binary framing | Generic stream forwarding in Rust; preserve legacy framing in an application adapter |
-| DeskConn `relay/relay.go` | Track live service connections and open destination streams | One machine per realm, role checks, `realm/op/path/recursive` request header | Generic authorized stream broker in Rust; keep existing request parser as a compatibility adapter |
-| DeskConn `relay/router.go` | Start listeners, add/remove realms, accept authenticated connections | Cloud realm, machine-role prefix, procedure permissions, management RPCs | Existing router/listeners plus shared host/broker lifecycle; retain DeskConn realm policy |
-| Hub `accountservice.go`, `db.go` | Supply authentication and authorization decisions | Account RPCs, database schema, identities, machine inventory | Hub |
+1. Review and merge the XConn changes and native SDK version `0.1.5`.
+2. Tag `v0.1.5`; wait for all native SDK archives to publish.
+3. Tag `bindings/go/v0.1.5` on the same source commit.
+4. Update DeskConn's SDK/Go pins, verify without the workspace, and release it.
+5. Update Hub's DeskConn pin, tidy its module and verify standalone CI/Docker.
 
-Generic does not mean accepting DeskConn procedure names as configuration for an
-otherwise unchanged DeskConn runtime. A generic operation needs explicit inputs,
-resource ownership, authorization decisions and transport-independent behavior.
-
-## Existing XConn building blocks
-
-The optional Rust `services` feature already provides:
-
-- `attachment::supervise`: bounded exponential retry and detachment outcomes.
-- `bridge::Bridge`: RPC forwarding, progressive calls/results, cancellation,
-  and owned per-caller sessions.
-- `discovery`: an optional endpoint directory with explicit authorization and
-  presence cleanup. Neither migration currently requires adopting its protocol.
-
-Go already exposes these services. The main gap is composing them with connection
-and stream ownership, rather than implementing another WAMP or transport engine.
-Session multiplexing on one QUIC connection must remain possible: DeskConn opens
-both device and control sessions on that connection.
-
-## First slice: attachment and RPC exposure
-
-`service_attachment` is a runnable Rust example using the existing supervisor,
-client, router and bridge. A backend keeps its local service session alive while
-its upstream connection is replaced. Every successful attachment reinstalls the
-forwarding registrations. Cancelling the attachment releases its upstream bridge
-and session while leaving the local backend available.
-
-```sh
-# Terminal 1: upstream router, realm "example", localhost only.
-cargo run -p xconn-core --features services --example service_attachment -- router
-
-# Terminal 2: local echo service attached to that router.
-cargo run -p xconn-core --features services --example service_attachment -- backend
-
-# Terminal 3: call the forwarded service.
-cargo run -p xconn-core --features services --example service_attachment -- call
-```
-
-Restart the router and repeat the call. The backend stays running and restores
-its registration automatically. Stop each process with Ctrl+C. The example uses
-anonymous loopback connections; authentication remains an explicit application
-choice, not a production default for a future service host.
-
-The example's integration test exercises a real WebSocket connection, loss and
-replacement of the upstream sessions, restoration of RPC exposure, and
-cancellation cleanup.
-Existing supervisor and bridge tests cover backoff, caller isolation, progressive
-calls/results, and cancellation propagation.
-
-The initial example established a baseline using existing services. It now uses
-`attachment::Attachment` to own the upstream sessions and bridges of each cycle.
-Tests also exercise two sessions on one QUIC connection, loss of either session,
-explicit closure, handle drop, and cancellation of a cleanup wait. A caller-supplied
-shutdown callback owns the shared connection and additional workers. Partial
-initialization rollback stays with the cycle. No binding changes are introduced.
-
-## Stream broker prototype
-
-`stream_broker::StreamBroker` now supplies the shared destination registry,
-per-open authorization, replacement-safe registration ownership, and opaque byte
-forwarding. QUIC integration tests use identities supplied by the authenticated
-listener and relay between separate client and backend connections. Bounded
-buffers, request half-close/reply draining, denied opens, and cancellation are
-covered independently of DeskConn framing.
-
-Go now exposes attachment ownership and the stream broker through the native
-bridge. A separate DeskConn `feat/shared-connectivity` branch uses the attachment
-for its two cloud sessions and the broker in the Hub's shared `deskconn/relay`
-package. That adapter preserves the existing routing header and role checks.
-Applications still own admission policy, connection shutdown and forwarding tasks.
-No new discovery or enrollment protocol is required.
-
-The application prototype uses a temporary Go workspace and a locally built SDK;
-its changes cannot land independently against the currently published bindings.
-Release the new native SDK and Go module before updating application dependency
-pins. Hub's deployment module still needs the new DeskConn release and its Go API
-imports migrated; it has not been switched by this prototype.
-
-## Remaining integration work
-
-1. Finish service-host composition around listener, WebRTC-provider and stream
-   worker ownership. Connection/session setup and partial initialization rollback
-   stay explicit; avoid one callback per protocol detail across FFI.
-2. Verify the Hub deployment against the new relay adapter and migrate its
-   remaining Go imports without moving account/database policy into XConn.
-3. Compose listener ownership, attachment, RPC bridging and stream forwarding
-   into a service host. Reuse the existing WebRTC provider for direct connections;
-   signaling must preserve existing peers' compatibility.
-4. Expose the proven runtime through Go first. Adapt DeskConn and Hub separately,
-   measuring removed orchestration and preserving their existing contracts.
-   Extend other language bindings after this path is verified.
-
-Do not rewrite both applications or introduce a new discovery/enrollment protocol
-in the same change. Keep the working DeskConn migration as a compatibility
-reference until the replacement covers attachment, authentication, forwarding,
-streaming, reconnection and shutdown end to end.
-
-## Integration findings and release order
-
-Hub's account adapter now uses the XConn binding with the original account RPCs,
-argument order, CRA salt fields, role names and realm permissions. Its integration
-test uses the production adapter with local account RPC fixtures: salted CRA,
-wrong-password rejection, CryptoSign, routed RPCs, WebTransport-to-QUIC relay,
-cross-realm rejection, backend replacement and shutdown pass. The shared router
-also owns its internal session and certificate endpoint until shutdown.
-
-DeskConn's remaining cloud code handles enrollment state, the account service's
-principal snapshot/events, credential persistence and its local application
-boundary. These are adapters, not another transport or protocol implementation.
-Keep them explicit for this migration. A higher-level listener/provider host can
-be additive once the admission and framing adapters are stable; it does not need
-to block either application's migration. Do not introduce another Session API or
-move DeskConn's roles and account schema behind a generic-looking configuration.
-
-The prototype builds and tests through an external Go workspace. That proves the
-source integration, not installation from published application pins. The Hub
-binary is statically linked on Linux amd64; its release Docker/CI setup needs the
-published dependency updates before it can be exercised as a standalone build.
-The Postgres inventory query and deployed management service are not covered by
-the local account fixture. Full Go binding and DeskConn race suites pass, except
-for the eight FUSE mount tests unavailable on this host.
-
-1. Review and merge XConn's shared services and native SDK version `0.1.5`.
-2. Tag `v0.1.5`; wait for every native SDK platform build to publish.
-3. Tag the Go module `bindings/go/v0.1.5` on that same source commit.
-4. Update DeskConn's SDK and Go pins, verify without the workspace, and publish
-   its reviewed module revision.
-5. Pin that DeskConn revision in Hub, run `go mod tidy` to remove the legacy
-   transitive modules, then verify Hub's standalone CI and Docker builds.
-
-No new SDK, Go module, or application release is created by this development
-branch. The existing published tags remain unchanged.
+Local Hub fixtures cover salted CRA, CryptoSign, routed RPCs, WebTransport-to-QUIC
+streams, cross-realm denial and backend replacement. They do not exercise the
+production Postgres inventory or deployed account service. No release is created
+by this development branch.

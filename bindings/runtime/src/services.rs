@@ -74,63 +74,6 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
             };
             Ok(Output::plain(value))
         }
-        "service_attachment_new" => {
-            use xconn_core::async_::services::attachment::Attachment;
-            let handles = |name: &str| -> Result<Vec<u64>> {
-                let Some(Value::List(values)) = fields.get(name) else {
-                    return Err(format!("expected {name} handles"));
-                };
-                values
-                    .iter()
-                    .map(|value| match value {
-                        Value::UInt(handle) => Ok(*handle),
-                        Value::Int(handle) if *handle >= 0 => Ok(*handle as u64),
-                        _ => Err(format!("expected nonnegative {name} handle")),
-                    })
-                    .collect()
-            };
-            let sessions = handles("sessions")?
-                .into_iter()
-                .map(|handle| get_session(handle).map(|session| session.session.clone()))
-                .collect::<Result<Vec<_>>>()?;
-            let bridges = handles("bridges")?
-                .into_iter()
-                .map(|handle| match get_resource(handle)?.as_ref() {
-                    Resource::Bridge(bridge) => Ok(bridge.clone()),
-                    _ => Err("expected bridge".into()),
-                })
-                .collect::<Result<Vec<_>>>()?;
-            let callbacks = if fields.contains_key("callback") {
-                Some(get_callbacks(handle_field(&fields, "callback")?)?)
-            } else {
-                None
-            };
-            let attachment = Attachment::with_shutdown(sessions, bridges, move || async move {
-                if let Some(callbacks) = callbacks {
-                    callbacks
-                        .call("attachment_shutdown", Value::Null)
-                        .map_err(xconn_core::Error::new)?;
-                }
-                Ok(())
-            })
-            .map_err(|error| error.to_string())?;
-            Ok(Output::resource(
-                Resource::Attachment(Arc::new(attachment)),
-                HashMap::new(),
-            ))
-        }
-        "service_attachment_wait" | "service_attachment_stop" => {
-            let resource = get_resource(handle_field(&fields, "handle")?)?;
-            let Resource::Attachment(attachment) = resource.as_ref() else {
-                return Err("expected attachment".into());
-            };
-            if method == "service_attachment_stop" {
-                attachment.request_close();
-                return Ok(Output::plain(Value::Null));
-            }
-            attachment.wait().await.map_err(|error| error.to_string())?;
-            Ok(Output::plain(Value::Null))
-        }
         "service_attachment_run" => {
             use xconn_core::async_::services::attachment::{AttachmentOutcome, RetryPolicy, supervise};
             let callbacks = get_callbacks(handle_field(&fields, "callback")?)?;

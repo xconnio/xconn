@@ -1,9 +1,6 @@
 //! Attachment supervision independent of a cloud protocol or credential store.
-use super::bridge::Bridge;
-use crate::{Error, async_::session::Session};
-use futures_util::future::select_all;
-use std::{sync::Arc, time::Duration};
-use tokio::sync::watch;
+use crate::Error;
+use std::time::Duration;
 
 /// Outcome of one attachment attempt. A cycle owns its sessions and resources
 /// until it completes; dropping its future must release those resources.
@@ -14,99 +11,6 @@ pub enum AttachmentOutcome {
     Retry(Error),
     /// An established attachment disconnected. Reset reconnect backoff.
     Disconnected(Error),
-}
-
-/// Owns the upstream sessions and bridges of one established attachment.
-/// Losing any session shuts down the whole attachment. Local backend sessions
-/// shared with bridges remain owned by the application.
-///
-/// Dropping this handle requests cleanup on the current Tokio runtime. Use
-/// `close().await` to wait for it; the runtime must remain alive until it finishes.
-pub struct Attachment {
-    stop: watch::Sender<bool>,
-    completed: watch::Receiver<Option<Result<(), String>>>,
-}
-
-impl Attachment {
-    pub fn new(sessions: Vec<Session>, bridges: Vec<Arc<Bridge>>) -> Result<Self, Error> {
-        Self::with_shutdown(sessions, bridges, || async { Ok(()) })
-    }
-
-    /// The shutdown callback owns additional resources, such as a shared QUIC
-    /// connection or stream workers. It runs once, after bridges and sessions
-    /// close, including when the handle is dropped or a `close` wait is cancelled.
-    pub fn with_shutdown<F, Fut>(sessions: Vec<Session>, bridges: Vec<Arc<Bridge>>, shutdown: F) -> Result<Self, Error>
-    where
-        F: FnOnce() -> Fut + Send + 'static,
-        Fut: Future<Output = Result<(), Error>> + Send + 'static,
-    {
-        if sessions.is_empty() {
-            return Err(Error::new("an attachment requires at least one upstream session"));
-        }
-        let (stop, mut stopped) = watch::channel(false);
-        let (completed, completion) = watch::channel(None);
-        tokio::spawn(async move {
-            {
-                let disconnected = sessions.iter().map(|session| Box::pin(session.wait_disconnect()));
-                tokio::select! {
-                    _ = stopped.wait_for(|stop| *stop) => {},
-                    _ = select_all(disconnected) => {},
-                }
-            }
-            let mut failure = None;
-            for bridge in bridges {
-                if let Err(error) = bridge.close().await {
-                    failure.get_or_insert_with(|| error.to_string());
-                }
-            }
-            for session in sessions {
-                if session.connected()
-                    && let Err(error) = session.close().await
-                {
-                    failure.get_or_insert_with(|| error.to_string());
-                }
-            }
-            if let Err(error) = shutdown().await {
-                failure.get_or_insert_with(|| error.to_string());
-            }
-            completed.send_replace(Some(failure.map_or(Ok(()), Err)));
-        });
-        Ok(Self {
-            stop,
-            completed: completion,
-        })
-    }
-
-    /// Wait for disconnection or requested shutdown and completion of cleanup.
-    /// Cancelling this wait leaves the attachment running until explicitly
-    /// closed, dropped, or disconnected.
-    pub async fn wait(&self) -> Result<(), Error> {
-        let mut completed = self.completed.clone();
-        completed
-            .wait_for(Option::is_some)
-            .await
-            .map_err(|_| Error::new("attachment task stopped before cleanup completed"))?
-            .as_ref()
-            .unwrap()
-            .clone()
-            .map_err(Error::new)
-    }
-
-    /// Request shutdown without waiting for cleanup to finish.
-    pub fn request_close(&self) {
-        self.stop.send_replace(true);
-    }
-
-    pub async fn close(&self) -> Result<(), Error> {
-        self.request_close();
-        self.wait().await
-    }
-}
-
-impl Drop for Attachment {
-    fn drop(&mut self) {
-        self.request_close();
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
