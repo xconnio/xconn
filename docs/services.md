@@ -49,6 +49,10 @@ Dropping the supervisor future cancels its current cycle or retry wait. A cycle
 must own and release its resources when cancelled. The supervisor does not issue
 credentials or prescribe an enrollment RPC or storage format.
 
+For a runnable backend/router/client composition with automatic RPC restoration,
+see the [`service_attachment` example](../crates/xconn-core/examples/service_attachment.rs)
+and the [connectivity runtime extraction plan](connectivity-runtime.md).
+
 ## Endpoint discovery
 
 `DiscoveryService::start(session, prefix, policy)` hosts an in-memory directory

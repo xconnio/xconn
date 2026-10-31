@@ -77,3 +77,8 @@ required-features = ["async"]
 [[example]]
 name = "discovery"
 required-features = ["services"]
+
+[[example]]
+name = "service_attachment"
+required-features = ["services"]
+test = true
