@@ -16,12 +16,13 @@ is implied by local tests.
 
 [`scripts/package-native.py`](../scripts/package-native.py) stages or archives
 headers, the shared or static Rust library, pkg-config metadata, checksums, and
-build provenance. Archives support native Linux/macOS builds and an Android ARM64 cross-build;
-Linux and macOS static SDK staging is also available. See [native installation](native-install.md).
+build provenance. Archives support native Linux/macOS builds, Windows amd64 GNU
+builds, and an Android ARM64 cross-build. Linux, macOS and Windows GNU static SDK
+staging is also available. See [native installation](native-install.md).
 Build outputs belong in release artifacts, not Git source history.
 
-The `Native SDK release` workflow builds and checks seven archives across Linux, macOS,
-and Android, then creates the GitHub Release after every matrix job passes. It runs
+The `Native SDK release` workflow builds and checks nine archives across Linux, macOS,
+Windows and Android, then creates the GitHub Release after every matrix job passes. It runs
 on tags named `vVERSION`; the tag must match `bindings/ffi/Cargo.toml`. It can
 also be dispatched manually with an existing tag. Both paths check out the tag,
 so the manifest's source revision identifies the released code.
@@ -41,7 +42,8 @@ The workflow calls `ci/check-native-release.sh` to check the tag/host,
 test can also run locally with an archive directory as its argument.
 Android uses `ci/build-android-sdk.sh` with the pinned NDK and
 `ci/test-android-sdk.sh` for ELF/API linking checks. Android binaries are not
-executed on the Linux runner. Publication waits for the Android job as well.
+executed on the Linux runner. Windows uses the GNU toolchain and `ci/test-windows-sdk.sh` to compile and run
+C and Go consumers against both SDK variants. Publication waits for all platform jobs.
 See [native installation](native-install.md) for the platform matrix and limits.
 
 Native SDK `v0.1.2` adds the macOS ARM64 static archive and the Go installer.
