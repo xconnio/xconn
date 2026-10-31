@@ -162,6 +162,7 @@ impl xconn_core::wampproto::authenticators::server::ServerAuthenticator for Fore
         xconn_core::wampproto::messages::types::Error,
     > {
         use xconn_core::wampproto::authenticators::server::{AuthResponse, CRAKey, Salt};
+        use xconn_core::wampproto::authenticators::wampcra::validate_cra_parameters;
         let error = |message: String| xconn_core::wampproto::messages::types::Error::new(message);
         let response = self
             .callbacks
@@ -199,7 +200,17 @@ impl xconn_core::wampproto::authenticators::server::ServerAuthenticator for Fore
                 }),
                 _ => None,
             };
-            result.cra = Some(CRAKey::from_secret(secret, salt)?);
+            if let Some(parameters) = &salt {
+                validate_cra_parameters(
+                    i64::from(parameters.iterations),
+                    i64::try_from(parameters.key_length).map_err(|_| error("invalid key length".into()))?,
+                )?;
+            }
+            // Foreign policies supply the signing key, already derived for salted CRA.
+            result.cra = Some(CRAKey {
+                key: secret.as_bytes().to_vec(),
+                salt,
+            });
         }
 
         Ok(result)

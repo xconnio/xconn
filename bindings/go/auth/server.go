@@ -137,6 +137,7 @@ func NewCRAResponse(authID, authRole, secret string, ttl time.Duration) Response
 	}
 }
 
+// NewCRAResponseSalted accepts the base64 signing key produced by DeriveWAMPCRAKey.
 func NewCRAResponseSalted(authID, authRole, secret, salt string, iterations, keyLen int, ttl time.Duration) Response {
 	response, _ := NewResponse(authID, authRole, ttl)
 	return &CRAResponse{
