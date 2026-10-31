@@ -1,4 +1,5 @@
 //! Expose a local service through an upstream router and restore it on reconnect.
+use std::sync::Arc;
 use xconn_core::{
     Error, JSONSerializerSpec, Result as RpcResult,
     async_::{
@@ -58,7 +59,7 @@ async fn attachment_cycle(uri: &str, target: Session) -> AttachmentOutcome {
         }
     };
     println!("exposing {PROCEDURE} through {uri}");
-    let attachment = match Attachment::new(vec![upstream], vec![bridge]) {
+    let attachment = match Attachment::new(vec![upstream], vec![Arc::new(bridge)]) {
         Ok(attachment) => attachment,
         Err(error) => return AttachmentOutcome::Retry(error),
     };

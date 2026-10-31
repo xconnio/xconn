@@ -52,7 +52,7 @@ async fn losing_either_upstream_session_closes_the_attachment_but_not_the_backen
             let observed = closed.clone();
             let attachment = Attachment::with_shutdown(
                 vec![device.clone(), control.clone()],
-                vec![bridge],
+                vec![Arc::new(bridge)],
                 move || async move {
                     observed.fetch_add(1, Ordering::SeqCst);
                     Ok(())

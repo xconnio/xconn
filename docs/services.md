@@ -59,7 +59,7 @@ For one QUIC connection with multiple sessions, use `with_shutdown`:
 ```rust
 let attachment = Attachment::with_shutdown(
     vec![device_session, control_session],
-    vec![bridge],
+    vec![Arc::new(bridge)],
     move || async move {
         connection.close();
         Ok(())
@@ -76,6 +76,28 @@ wait does not cancel cleanup. Dropping the handle requests the same cleanup;
 the Tokio runtime must remain alive until it finishes. Cleanup attempts every
 resource and reports its first error. Repeated waits return the same result.
 Connection setup, credentials and any decision to detach remain explicit.
+
+The Go binding exposes the same ownership through `NewAttachment`:
+
+```go
+attachment, err := xconn.NewAttachment(ctx, xconn.AttachmentConfig{
+    Sessions: []*xconn.Session{device, control},
+    Bridges:  []*xconn.Bridge{bridge},
+    Shutdown: connection.Close,
+})
+if err != nil {
+    return err // The caller still owns initialization rollback.
+}
+defer attachment.Close()
+return attachment.Wait(ctx)
+```
+
+Cancelling the constructor's lifetime context starts cleanup. `Wait(ctx)` only
+bounds that wait; it does not cancel the attachment. `CloseContext(ctx)` requests
+shutdown and can stop waiting while Rust continues cleanup. The shutdown callback
+must not call `Wait` or `Close` on the attachment itself. Cleanup releases the Go
+session readers, bridge callbacks and native handles before completion is exposed.
+These APIs require an SDK built from this branch until the next native release.
 
 For a runnable backend/router/client composition with automatic RPC restoration,
 see the [`service_attachment` example](../crates/xconn-core/examples/service_attachment.rs)

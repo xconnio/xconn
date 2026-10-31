@@ -2,7 +2,7 @@
 use super::bridge::Bridge;
 use crate::{Error, async_::session::Session};
 use futures_util::future::select_all;
-use std::time::Duration;
+use std::{sync::Arc, time::Duration};
 use tokio::sync::watch;
 
 /// Outcome of one attachment attempt. A cycle owns its sessions and resources
@@ -28,14 +28,14 @@ pub struct Attachment {
 }
 
 impl Attachment {
-    pub fn new(sessions: Vec<Session>, bridges: Vec<Bridge>) -> Result<Self, Error> {
+    pub fn new(sessions: Vec<Session>, bridges: Vec<Arc<Bridge>>) -> Result<Self, Error> {
         Self::with_shutdown(sessions, bridges, || async { Ok(()) })
     }
 
     /// The shutdown callback owns additional resources, such as a shared QUIC
     /// connection or stream workers. It runs once, after bridges and sessions
     /// close, including when the handle is dropped or a `close` wait is cancelled.
-    pub fn with_shutdown<F, Fut>(sessions: Vec<Session>, bridges: Vec<Bridge>, shutdown: F) -> Result<Self, Error>
+    pub fn with_shutdown<F, Fut>(sessions: Vec<Session>, bridges: Vec<Arc<Bridge>>, shutdown: F) -> Result<Self, Error>
     where
         F: FnOnce() -> Fut + Send + 'static,
         Fut: Future<Output = Result<(), Error>> + Send + 'static,
@@ -92,15 +92,20 @@ impl Attachment {
             .map_err(Error::new)
     }
 
-    pub async fn close(&self) -> Result<(), Error> {
+    /// Request shutdown without waiting for cleanup to finish.
+    pub fn request_close(&self) {
         self.stop.send_replace(true);
+    }
+
+    pub async fn close(&self) -> Result<(), Error> {
+        self.request_close();
         self.wait().await
     }
 }
 
 impl Drop for Attachment {
     fn drop(&mut self) {
-        self.stop.send_replace(true);
+        self.request_close();
     }
 }
 

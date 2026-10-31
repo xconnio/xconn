@@ -41,6 +41,7 @@ pub(super) fn get_base(handle: u64) -> Result<Arc<ForeignBase>> {
 }
 
 pub(super) enum Resource {
+    Attachment(Arc<xconn_core::async_::services::attachment::Attachment>),
     Discovery(Arc<xconn_core::async_::services::discovery::DiscoveryService>),
     Bridge(Arc<xconn_core::async_::services::bridge::Bridge>),
     #[cfg(feature = "quic")]
@@ -66,6 +67,7 @@ pub(super) enum Resource {
 impl Resource {
     fn close(&self) {
         match self {
+            Self::Attachment(attachment) => attachment.request_close(),
             Self::Discovery(service) => {
                 let service = service.clone();
                 runtime().spawn(async move {
