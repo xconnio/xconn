@@ -111,7 +111,24 @@ def stage(destination, static=False, profile="release", target=None, android_api
         native_flags = re.search(r"native-static-libs: (.+)", result.stderr)
         if native_flags is None:
             raise SystemExit("rustc did not report the native static linker flags")
-        libraries = f'"${{libdir}}/libxconn_ffi.a" {native_flags[1]}'
+        flags = native_flags[1]
+        if windows:
+            dependencies_metadata = json.loads(output("cargo", "metadata", "--locked", "--format-version", "1"))
+            for dependency in dependencies_metadata["packages"]:
+                if dependency["name"] not in ("windows_x86_64_gnu", "winapi-x86_64-pc-windows-gnu"):
+                    continue
+                directory = Path(dependency["manifest_path"]).parent / "lib"
+                for archive in sorted(directory.glob("lib*.a")):
+                    flag = f"-l{archive.name[3:-2]}"
+                    if flag not in flags.split():
+                        continue
+                    installed_archive = destination / "lib" / archive.name
+                    shutil.copy2(archive, installed_archive)
+                    extra_files.append(installed_archive)
+                    flags = " ".join(
+                        f'"${{libdir}}/{archive.name}"' if token == flag else token for token in flags.split()
+                    )
+        libraries = f'"${{libdir}}/libxconn_ffi.a" {flags}'
     elif static:
         libraries = '"${libdir}/libxconn_ffi.a" -lgcc_eh -lutil -lrt -lpthread -lm -ldl -lc'
     elif android or windows:

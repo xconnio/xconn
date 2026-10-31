@@ -248,6 +248,15 @@ class NativeStagingTests(unittest.TestCase):
                 "packages": [{"name": "xconn-ffi", "version": "0.1.3", "features": {"default": []}}],
             }
 
+            for package, library in (
+                ("windows_x86_64_gnu", "windows.0.52.0"),
+                ("winapi-x86_64-pc-windows-gnu", "winapi_kernel32"),
+            ):
+                dependency = root / package
+                (dependency / "lib").mkdir(parents=True)
+                (dependency / "lib" / f"lib{library}.a").write_bytes(library.encode())
+                metadata["packages"].append({"name": package, "manifest_path": str(dependency / "Cargo.toml")})
+
             def output(*command):
                 if command[0] == "cargo":
                     return json.dumps(metadata)
@@ -259,7 +268,9 @@ class NativeStagingTests(unittest.TestCase):
                     self.fail("Static archive must not use dynamic dependency inspection")
                 return "fixture"
 
-            result = subprocess.CompletedProcess([], 0, stderr="note: native-static-libs: -lws2_32 -luserenv -lbcrypt")
+            result = subprocess.CompletedProcess(
+                [], 0, stderr="note: native-static-libs: -lws2_32 -luserenv -lbcrypt -lwindows.0.52.0 -lwinapi_kernel32"
+            )
             destination = root / "sdk"
             with (
                 patch.object(PACKAGE, "output", side_effect=output),
@@ -272,6 +283,10 @@ class NativeStagingTests(unittest.TestCase):
             flags = (destination / "lib/pkgconfig/xconn-static.pc").read_text()
             self.assertIn('"${libdir}/libxconn_ffi.a" -lws2_32 -luserenv -lbcrypt', flags)
             self.assertNotIn("-lgcc_eh", flags)
+            for library in ("windows.0.52.0", "winapi_kernel32"):
+                self.assertIn(f'"${{libdir}}/lib{library}.a"', flags)
+                self.assertNotIn(f"-l{library}", flags)
+                self.assertEqual((destination / "lib" / f"lib{library}.a").read_bytes(), library.encode())
             manifest = json.loads((destination / "manifest.json").read_text())
             self.assertEqual(manifest["runtime_dependencies"], "")
             self.assertEqual(manifest["linkage"], "static")
