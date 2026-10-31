@@ -1,0 +1,69 @@
+name: Windows native SDK
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
+      release_tag:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: msys2 {0}
+    env:
+      CGO_ENABLED: '1'
+      CC: gcc
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.8'
+          cache: false
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          path-type: inherit
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkgconf
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-x86_64-pc-windows-gnu
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-windows-gnu
+      - name: Check release version and host
+        if: inputs.release_tag != ''
+        run: ci/check-native-release.sh
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          EXPECTED_TARGET: x86_64-pc-windows-gnu
+      - name: Package shared SDK
+        run: python scripts/package-native.py --profile native target/native-dist
+      - name: Package static SDK
+        run: python scripts/package-native.py --static --profile native target/native-dist
+      - name: Test extracted Windows SDKs
+        run: ci/test-windows-sdk.sh target/native-dist
+        env:
+          GOCACHE: ${{ runner.temp }}/xconn-windows-go-cache
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-sdk-x86_64-pc-windows-gnu
+          path: target/native-dist/*
+          if-no-files-found: error
+          compression-level: 0

@@ -171,6 +171,99 @@ class NativeStagingTests(unittest.TestCase):
             self.assertEqual(manifest["android_ndk_version"], "28.2.13676358")
             self.assertEqual(manifest["runtime_dependencies"], "NEEDED libc.so")
 
+    def test_windows_shared_sdk_includes_import_library_and_runtime(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release = root / "target/native"
+            release.mkdir(parents=True)
+            (release / "xconn_ffi.dll").write_bytes(b"Windows DLL")
+            (release / "libxconn_ffi.dll.a").write_bytes(b"MinGW import archive")
+            runtime = root / "libgcc_s_seh-1.dll"
+            runtime.write_bytes(b"MinGW runtime")
+            metadata = {
+                "target_directory": str(root / "target"),
+                "packages": [{"name": "xconn-ffi", "version": "0.1.3", "features": {"default": []}}],
+            }
+
+            def output(*command):
+                if command[0] == "cargo":
+                    return json.dumps(metadata)
+                if command == ("rustc", "-vV"):
+                    return "host: x86_64-pc-windows-gnu"
+                if command[0] == "objdump":
+                    return "DLL Name: KERNEL32.dll\nDLL Name: libgcc_s_seh-1.dll"
+                if command[0] == "gcc":
+                    return str(runtime)
+                if command[:2] == ("git", "status"):
+                    return ""
+                return "fixture"
+
+            destination = root / "sdk"
+            with (
+                patch.object(PACKAGE, "output", side_effect=output),
+                patch.object(PACKAGE.platform, "system", return_value="Windows"),
+            ):
+                name = PACKAGE.stage(destination, profile="native")
+
+            self.assertEqual(name, "xconn-native-0.1.3-x86_64-pc-windows-gnu")
+            manifest = json.loads((destination / "manifest.json").read_text())
+            for relative in ("lib/xconn_ffi.dll", "lib/libxconn_ffi.dll.a", "lib/libgcc_s_seh-1.dll"):
+                self.assertEqual(manifest["files"][relative], PACKAGE.digest(destination / relative))
+            self.assertIn("KERNEL32.dll", manifest["runtime_dependencies"])
+            flags = (destination / "lib/pkgconfig/xconn.pc").read_text()
+            self.assertIn("-lxconn_ffi", flags)
+            self.assertNotIn("-rpath", flags)
+
+    def test_windows_static_sdk_uses_rustc_linker_flags(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            release = root / "target/native"
+            release.mkdir(parents=True)
+            (release / "libxconn_ffi.a").write_bytes(b"Windows static archive")
+            metadata = {
+                "target_directory": str(root / "target"),
+                "packages": [{"name": "xconn-ffi", "version": "0.1.3", "features": {"default": []}}],
+            }
+
+            def output(*command):
+                if command[0] == "cargo":
+                    return json.dumps(metadata)
+                if command == ("rustc", "-vV"):
+                    return "host: x86_64-pc-windows-gnu"
+                if command[:2] == ("git", "status"):
+                    return ""
+                if command[0] in ("ldd", "otool", "objdump"):
+                    self.fail("Static archive must not use dynamic dependency inspection")
+                return "fixture"
+
+            result = subprocess.CompletedProcess([], 0, stderr="note: native-static-libs: -lws2_32 -luserenv -lbcrypt")
+            destination = root / "sdk"
+            with (
+                patch.object(PACKAGE, "output", side_effect=output),
+                patch.object(PACKAGE.platform, "system", return_value="Windows"),
+                patch.object(PACKAGE.subprocess, "run", return_value=result),
+            ):
+                name = PACKAGE.stage(destination, static=True, profile="native")
+
+            self.assertTrue(name.endswith("x86_64-pc-windows-gnu-static"))
+            flags = (destination / "lib/pkgconfig/xconn-static.pc").read_text()
+            self.assertIn('"${libdir}/libxconn_ffi.a" -lws2_32 -luserenv -lbcrypt', flags)
+            self.assertNotIn("-lgcc_eh", flags)
+            manifest = json.loads((destination / "manifest.json").read_text())
+            self.assertEqual(manifest["runtime_dependencies"], "")
+            self.assertEqual(manifest["linkage"], "static")
+
+    def test_windows_sdk_rejects_unsupported_toolchains(self):
+        metadata = {"packages": [{"name": "xconn-ffi"}]}
+        for host in ("x86_64-pc-windows-msvc", "i686-pc-windows-gnu", "aarch64-pc-windows-msvc"):
+            with self.subTest(host=host):
+                with (
+                    patch.object(PACKAGE, "output", side_effect=[json.dumps(metadata), "host: " + host]),
+                    patch.object(PACKAGE.platform, "system", return_value="Windows"),
+                    self.assertRaisesRegex(SystemExit, "x86_64-pc-windows-gnu"),
+                ):
+                    PACKAGE.stage(Path("unused"))
+
     def test_signing_failure_preserves_installed_library(self):
         with tempfile.TemporaryDirectory() as directory:
             source, installed = (
