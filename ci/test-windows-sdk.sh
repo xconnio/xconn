@@ -3,6 +3,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 archives=${1:-target/native-dist}
 temporary=$(mktemp -d)
+go_cache=${GOCACHE:?Go build cache directory required}
 trap 'rm -rf "$temporary"' EXIT
 
 cat > "$temporary/sdk-smoke.c" <<'C'
@@ -28,6 +29,14 @@ for archive in "$archives"/*-x86_64-pc-windows-gnu*.tar.gz; do
     echo 'Static SDK linked the XConn DLL' >&2
     exit 1
   fi
-  PATH="$sdk/lib:$PATH" go -C bindings/go test -tags "$test_tags" -count=1 -timeout=90s \
-    -run '^TestClientRouterMatrix$' .
+  # cgo caches pkg-config output; each SDK needs its own build cache.
+  GOCACHE="$go_cache/$package" go -C bindings/go test -c -tags "$test_tags" \
+    -o "$(cygpath -m "$temporary/go-sdk-smoke.exe")" .
+  objdump -p "$temporary/go-sdk-smoke.exe" | grep -i 'DLL Name:'
+  if [[ -n "$test_tags" ]] && objdump -p "$temporary/go-sdk-smoke.exe" | grep -qi 'DLL Name:.*xconn_ffi'; then
+    echo 'Static Go consumer linked the XConn DLL' >&2
+    exit 1
+  fi
+  PATH="$sdk/lib:$PATH" "$temporary/go-sdk-smoke.exe" -test.count=1 -test.timeout=90s \
+    -test.run '^TestClientRouterMatrix$'
 done
