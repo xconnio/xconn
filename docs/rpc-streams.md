@@ -115,6 +115,42 @@ WAMP carries a reserved dictionary containing `io.xconn.stream.v1` and an opaque
 RawSocket handshake `7f 00 00 00`, followed by that reference. Ordinary raw streams
 and valid WAMP RawSocket handshakes retain their previous classification.
 
+## RPC bridges
+
+The existing bridge API forwards stream arguments and results when `services`
+and `rpc-streams` are enabled. Source and target sessions must both support
+RPC streams. Connect them normally, then configure ordinary procedure routes:
+
+```go
+bridge, err := upstream.Bridge(ctx, xconn.BridgeConfig{
+    Target: localApplicationSession,
+    Routes: []xconn.BridgeRoute{{
+        Procedure: "app.",
+        Options: xconn.Options{"match": "prefix"},
+    }},
+})
+```
+
+Rust uses the existing `async_::services::bridge::Bridge` and `BridgeRoute` APIs.
+Uploads, downloads and duplex endpoints keep the same application APIs on either
+side; no application-level stream relay is required.
+
+Each bridge opens a stream on its next session, replaces the reference in the
+forwarded payload, and copies opaque bytes with bounded buffers and backpressure.
+References stay authorized to their session pair on each router. Bridges can be
+chained across QUIC, WebTransport, Yamux and in-process sessions.
+
+Write-side EOF preserves the reverse direction until its reply drains. Input
+streams end with the source invocation; result streams survive the final RPC
+reply. Cancellation, session loss and bridge closure release the relevant relays.
+If translation fails partway through a payload, its new relays are rolled back.
+
+Closing the bridge stops active transfers but leaves source and shared target
+sessions open. Sessions created by `BridgeConfig.NewSession` remain bridge-owned;
+a caller's departure closes its target without affecting other callers. Factory
+mode retains its existing caller-disclosure and session-meta requirements. See
+[bridge ownership](services.md#rpc-bridges).
+
 ## Current boundaries
 
 - The stream-capable endpoints and router must use this implementation. There is
@@ -125,7 +161,7 @@ and valid WAMP RawSocket handshakes retain their previous classification.
 - Only top-level positional arguments/results are supported, through Go's
   `Execute`/`ExecuteContext` API. Keyword and nested streams, byte streams combined
   with progressive RPC, and automatic direct-peer selection are subsequent work.
-- Bridge forwarding and WebRTC carriers are separate additions.
+- WebRTC carriers are a separate addition.
 - Plain WebSocket/RawSocket sessions have no byte-stream carrier in this slice.
   Yamux provides a stream-capable Unix/TCP alternative. Other language bindings
   are not exposed yet.

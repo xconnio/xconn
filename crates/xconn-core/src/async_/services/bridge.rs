@@ -48,19 +48,48 @@ struct Callers {
     sessions: HashMap<i64, Session>,
 }
 
-type ForwardedCalls = Arc<Mutex<HashMap<i64, Arc<Call>>>>;
+struct ForwardedCall {
+    rpc: Call,
+    target: Session,
+}
+
+type ForwardedCalls = Arc<Mutex<HashMap<i64, Arc<ForwardedCall>>>>;
+
+#[derive(Clone, Copy)]
+enum StreamDirection {
+    Input,
+    Result,
+}
+
+// Roll back partially translated frames; committed relays stay bridge-owned.
+#[derive(Default)]
+struct StreamRelays(Vec<tokio::task::AbortHandle>);
+
+impl StreamRelays {
+    fn commit(mut self) {
+        self.0.clear();
+    }
+}
+
+impl Drop for StreamRelays {
+    fn drop(&mut self) {
+        for task in &self.0 {
+            task.abort();
+        }
+    }
+}
 
 struct ForwardingGuard {
     context: InvocationContext,
     id: i64,
-    call: Arc<Call>,
+    call: Arc<ForwardedCall>,
     calls: ForwardedCalls,
 }
 
 impl Drop for ForwardingGuard {
     fn drop(&mut self) {
-        if !self.call.is_finished() {
-            self.call.cancel();
+        if !self.call.rpc.is_finished() {
+            self.call.rpc.cancel();
         }
         let (id, call, calls) = (self.id, self.call.clone(), self.calls.clone());
         let context = self.context.clone();
@@ -79,6 +108,8 @@ impl Drop for ForwardingGuard {
 
 struct Forwarder {
     calls: ForwardedCalls,
+    #[cfg(feature = "rpc-streams")]
+    streams: Mutex<tokio::task::JoinSet<()>>,
     target: Session,
     factory: Option<SessionFactory>,
     callers: Mutex<Callers>,
@@ -117,6 +148,68 @@ impl Forwarder {
         Ok(session)
     }
 
+    async fn forward_streams(
+        &self,
+        context: &InvocationContext,
+        target: &Session,
+        args: &mut Option<Vec<Value>>,
+        direction: StreamDirection,
+    ) -> Result<StreamRelays, Error> {
+        let relays = StreamRelays::default();
+        #[cfg(feature = "rpc-streams")]
+        let mut relays = relays;
+        #[cfg(not(feature = "rpc-streams"))]
+        let _ = (context, target, args, direction);
+        #[cfg(feature = "rpc-streams")]
+        for value in args.iter_mut().flatten() {
+            if crate::async_::rpc_streams::token(value)?.is_none() {
+                continue;
+            }
+            let (reference, incoming, outgoing) = match direction {
+                StreamDirection::Input => {
+                    let incoming = context.open_stream_argument(value).await?;
+                    let (reference, outgoing) = target.offer_stream().await?;
+                    (reference, incoming, outgoing)
+                }
+                StreamDirection::Result => {
+                    let incoming = target.open_stream_argument(value).await?;
+                    let (reference, outgoing) = context.offer_stream().await?;
+                    (reference, incoming, outgoing)
+                }
+            };
+            let mut streams = self.streams.lock().await;
+            if *self.stopped.borrow() {
+                return Err(Error::new("bridge closed"));
+            }
+            // Reap finished transfers without retaining their task records for
+            // the lifetime of a long-running bridge.
+            while streams.try_join_next().is_some() {}
+            let mut stopped = self.stopped.subscribe();
+            let context = context.clone();
+            let target = target.clone();
+            let task = streams.spawn(async move {
+                let cancelled = async {
+                    context.cancelled().await;
+                    if matches!(direction, StreamDirection::Result) && !context.is_cancelled() {
+                        // Normal RPC completion releases the invocation watch.
+                        // A returned stream must survive that final reply.
+                        std::future::pending::<()>().await;
+                    }
+                };
+                tokio::select! {
+                    biased;
+                    _ = stopped.wait_for(|stopped| *stopped) => {},
+                    _ = target.wait_disconnect() => {},
+                    _ = cancelled => {},
+                    _ = crate::async_::rpc_streams::forward(incoming, outgoing) => {},
+                }
+            });
+            relays.0.push(task);
+            *value = reference;
+        }
+        Ok(relays)
+    }
+
     async fn forward(&self, context: InvocationContext, procedure: String, prefix: bool) -> RpcResult {
         let mut stopped = self.stopped.subscribe();
         tokio::select! {
@@ -132,15 +225,31 @@ impl Forwarder {
         let mut calls = self.calls.lock().await;
         if let Some(call) = calls.get(&context.request_id).cloned() {
             drop(calls);
-            let args = context.payload_args().clone().unwrap_or_default();
+            if call.rpc.is_finished() {
+                return RpcResult::no_result();
+            }
+            let mut args = context.payload_args().clone();
+            let relays = match self
+                .forward_streams(context, &call.target, &mut args, StreamDirection::Input)
+                .await
+            {
+                Ok(relays) => relays,
+                Err(_) => {
+                    call.rpc.cancel();
+                    return RpcResult::no_result();
+                }
+            };
+            let args = args.unwrap_or_default();
             let kwargs = context.payload_kwargs().clone().unwrap_or_default();
             let result = if more {
-                call.send(args, kwargs).await
+                call.rpc.send(args, kwargs).await
             } else {
-                call.finish(args, kwargs).await
+                call.rpc.finish(args, kwargs).await
             };
-            if result.is_err() && !call.is_finished() {
-                call.cancel();
+            if result.is_ok() {
+                relays.commit();
+            } else if !call.rpc.is_finished() {
+                call.rpc.cancel();
             }
             // The first handler owns the result path and sends the terminal reply.
             return RpcResult::no_result();
@@ -158,8 +267,16 @@ impl Forwarder {
             procedure
         };
         let mut request = CallRequest::new(procedure);
-        if let Some(args) = context.payload_args() {
-            request = request.args(args.clone());
+        let mut args = context.payload_args().clone();
+        let _input_relays = match self
+            .forward_streams(context, &target, &mut args, StreamDirection::Input)
+            .await
+        {
+            Ok(relays) => relays,
+            Err(error) => return failure(error),
+        };
+        if let Some(args) = args {
+            request = request.args(args);
         }
         if let Some(kwargs) = context.payload_kwargs() {
             request = request.kwargs(kwargs.clone());
@@ -173,7 +290,7 @@ impl Forwarder {
             Ok(call) => call,
             Err(error) => return failure(error),
         };
-        let call = Arc::new(call);
+        let call = Arc::new(ForwardedCall { rpc: call, target });
         calls.insert(context.request_id, call.clone());
         drop(calls);
         let _guard = ForwardingGuard {
@@ -182,20 +299,31 @@ impl Forwarder {
             call: call.clone(),
             calls: self.calls.clone(),
         };
-        self.receive_results(context, &call).await
+        self.receive_results(context, &call.rpc, &call.target).await
     }
 
-    async fn receive_results(&self, context: &InvocationContext, call: &Call) -> RpcResult {
+    async fn receive_results(&self, context: &InvocationContext, call: &Call, target: &Session) -> RpcResult {
         let mut stopped = self.stopped.subscribe();
         let results = async {
             loop {
                 match call.receive().await {
-                    Ok(Some(result)) if result.details.get("progress") == Some(&Value::Bool(true)) => {
+                    Ok(Some(mut result)) => {
+                        let relays = match self
+                            .forward_streams(context, target, &mut result.args, StreamDirection::Result)
+                            .await
+                        {
+                            Ok(relays) => relays,
+                            Err(error) => return failure(error),
+                        };
+                        if result.details.get("progress") != Some(&Value::Bool(true)) {
+                            relays.commit();
+                            return result;
+                        }
                         if let Err(error) = context.send_progress_payload(result.args, result.kwargs).await {
                             return failure(error);
                         }
+                        relays.commit();
                     }
-                    Ok(Some(result)) => return result,
                     Ok(None) => return RpcResult::error("wamp.error.canceled"),
                     Err(error) => return failure(error),
                 }
@@ -227,7 +355,13 @@ impl Inner {
         let _gate = self.close_gate.lock().await;
         self.forwarder.stopped.send_replace(true);
         for call in self.forwarder.calls.lock().await.drain().map(|(_, call)| call) {
-            call.cancel();
+            call.rpc.cancel();
+        }
+        #[cfg(feature = "rpc-streams")]
+        {
+            let mut streams = self.forwarder.streams.lock().await;
+            streams.abort_all();
+            while streams.join_next().await.is_some() {}
         }
         let sessions = {
             let mut callers = self.forwarder.callers.lock().await;
@@ -237,13 +371,19 @@ impl Inner {
         for session in sessions.into_values() {
             let _ = session.close().await;
         }
+        let registrations = std::mem::take(&mut *self.registrations.lock().await);
+        let subscription = self.subscription.lock().await.take();
+        // The router already removed these resources when the source left.
+        if !self.source.connected() {
+            return Ok(());
+        }
         let mut failure = None;
-        for id in self.registrations.lock().await.drain(..) {
+        for id in registrations {
             if let Err(error) = self.source.unregister(id).await {
                 failure.get_or_insert(error);
             }
         }
-        if let Some(subscription) = self.subscription.lock().await.take()
+        if let Some(subscription) = subscription
             && let Err(error) = subscription.unsubscribe().await
         {
             failure.get_or_insert(error);
@@ -272,6 +412,8 @@ impl Bridge {
         let stopped = watch::channel(false).0;
         let forwarder = Arc::new(Forwarder {
             calls: Arc::new(Mutex::new(HashMap::new())),
+            #[cfg(feature = "rpc-streams")]
+            streams: Mutex::new(tokio::task::JoinSet::new()),
             target,
             factory,
             callers: Mutex::new(Callers {

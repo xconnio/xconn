@@ -146,6 +146,15 @@ impl InvocationContext {
         super::rpc_streams::accept(open, value).await
     }
 
+    #[cfg(all(feature = "services", feature = "rpc-streams"))]
+    pub(crate) async fn offer_stream(&self) -> Result<(Value, super::rawsocket::BoxStream), Error> {
+        let open = self
+            .stream_opener
+            .as_ref()
+            .ok_or_else(|| Error::new("transport does not support RPC streams"))?;
+        super::rpc_streams::offer(open).await
+    }
+
     pub fn payload_args(&self) -> &Option<Vec<Value>> {
         &self.payload_args
     }
