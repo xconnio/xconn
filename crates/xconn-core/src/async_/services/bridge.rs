@@ -231,7 +231,11 @@ impl Forwarder {
                     _ = stopped.wait_for(|stopped| *stopped) => {},
                     _ = target.wait_disconnect() => {},
                     _ = cancelled => {},
-                    _ = crate::async_::rpc_streams::forward(incoming, outgoing) => {},
+                    result = crate::async_::rpc_streams::forward(incoming, outgoing) => {
+                        if let Err(error) = result {
+                            tracing::warn!(%error, "RPC stream forwarding failed");
+                        }
+                    },
                 }
             });
             relays.0.push(task);
