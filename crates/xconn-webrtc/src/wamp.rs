@@ -17,6 +17,20 @@ use xconn_core::{
     },
 };
 
+// The manager owns the complete direct connection, not only its WAMP channel.
+#[cfg(feature = "services")]
+#[async_trait]
+impl xconn_core::async_::services::peer::DirectConnection for WebRTCSession {
+    fn session(&self) -> &Session {
+        &self.session
+    }
+
+    async fn close(&self) {
+        let _ = self.close().await;
+        let _ = self.connection.close().await;
+    }
+}
+
 /// Bounds for initial connection setup, WAMP session opening, and incoming channel classification.
 #[derive(Clone, Copy, Debug)]
 pub struct Timeouts {

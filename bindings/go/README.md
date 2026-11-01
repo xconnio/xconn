@@ -227,6 +227,13 @@ authorization callback. Portable packet encryption lives in the `crypto` subpack
 See [ownership and service contracts](../../docs/services.md). DeskConn orchestration
 previously under `bindings/go/xconn` now lives in DeskConn’s `internal/connectivity`.
 
+## Managed direct connections
+
+`Client.Connect` returns a session that automatically prefers a direct connection
+and falls back to the hub for new calls. Set `Client.RoutedOnly` to disable direct
+discovery. `Session.Expose` accepts direct peers using standard realm-scoped signaling. See
+[peer connections and lifecycle rules](../../docs/peer-connections.md).
+
 ## Progressive RPC
 
 Use `Stream()` or `StreamContext(ctx)` to receive owned progressive results.

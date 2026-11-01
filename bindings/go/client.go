@@ -19,6 +19,13 @@ type Authenticator struct {
 }
 
 type Client struct {
+	// RoutedOnly disables automatic direct-path discovery for this connection.
+	RoutedOnly bool
+
+	// Direct optionally overrides direct authentication, ICE servers and retries.
+	// By default, direct connections reuse this client's authenticator.
+	Direct *DirectConfig
+
 	Authenticator     auth.ClientAuthenticator
 	Serializer        string
 	SerializerSpec    SerializerSpec
@@ -56,26 +63,8 @@ func (c *Client) Connect(ctx context.Context, uri, realm string) (*Session, erro
 
 func (c *Client) connect(ctx context.Context, method string, fields map[string]any) (*Session, error) {
 	uri := stringField(fields, "uri")
-	if c.NetDial != nil {
-		return nil, fmt.Errorf("custom NetDial is not exposed by the native binding yet")
-	}
-
-	if c.OutQueueSize != 0 {
-		return nil, fmt.Errorf("network OutQueueSize is not exposed by the native binding yet")
-	}
-
-	if c.SerializerSpec != nil {
-		switch c.SerializerSpec.SubProtocol() {
-		case JSONWebsocketProtocol, CBORWebsocketProtocol, MsgPackWebsocketProtocol:
-		default:
-			return nil, fmt.Errorf("custom serializer subprotocol is not exposed by the native binding yet")
-		}
-
-		switch c.SerializerSpec.SerializerID() {
-		case JSONSerializerID, CBORSerializerID, MsgPackSerializerID:
-		default:
-			return nil, fmt.Errorf("custom serializer ID is not exposed by the native binding yet")
-		}
+	if err := c.validate(); err != nil {
+		return nil, err
 	}
 
 	if c.DialTimeout > 0 {
@@ -89,65 +78,16 @@ func (c *Client) connect(ctx context.Context, method string, fields map[string]a
 		f["serializer"] = codecCBOR
 	}
 
-	var callbacks *foreignCallbacks
-	var customSerializer serializers.Serializer
-
-	if c.SerializerSpec != nil {
-		switch serializer := c.SerializerSpec.Serializer().(type) {
-		case *serializers.JSONSerializer, *serializers.MsgPackSerializer, *serializers.CBORSerializer:
-		default:
-			customSerializer = serializer
-		}
+	callbacks, usesCustomCodec, err := c.configureCallbacks(ctx, f)
+	if err != nil {
+		return nil, err
 	}
-
 	keepCallbacks := false
-	if c.Authenticator != nil || customSerializer != nil {
-		var err error
-		callbacks, err = newForeignCallbacks(ctx, func(method string, value any) (any, error) {
-			switch method {
-			case "authenticate":
-				fields := nativeFields(value)
-				challenge := messages.NewChallenge(stringField(fields, "method"), nativeFields(fields["extra"]))
-				response, err := c.Authenticator.Authenticate(*challenge)
-				if err != nil {
-					return nil, err
-				}
-
-				return map[string]any{"signature": response.Signature(), "extra": response.Extra()}, nil
-			case "serialize", "deserialize":
-				return serializerCallback(customSerializer, method, value)
-			default:
-				return nil, unexpectedCallback(method)
-			}
-		})
-
-		if err != nil {
-			return nil, err
+	defer func() {
+		if callbacks != nil && !keepCallbacks {
+			callbacks.close()
 		}
-
-		defer func() {
-			if !keepCallbacks {
-				callbacks.close()
-			}
-		}()
-
-		if c.Authenticator != nil {
-			f["auth"] = map[string]any{
-				"method":   c.Authenticator.AuthMethod(),
-				"authid":   c.Authenticator.AuthID(),
-				"extra":    c.Authenticator.AuthExtra(),
-				"callback": callbacks.handle,
-			}
-		}
-
-		if customSerializer != nil {
-			f["serializer"] = map[string]any{
-				"name":     f["serializer"],
-				"callback": callbacks.handle,
-				"static":   customSerializer.Static(),
-			}
-		}
-	}
+	}()
 
 	if c.KeepAliveInterval > 0 {
 		f["ping_interval"] = c.KeepAliveInterval.Seconds()
@@ -172,12 +112,34 @@ func (c *Client) connect(ctx context.Context, method string, fields map[string]a
 		return nil, err
 	}
 
-	if customSerializer != nil {
+	var session *Session
+	if usesCustomCodec {
 		keepCallbacks = true
-		return newSession(ctx, nativeFields(result), callbacks), nil
+		session = newSession(ctx, nativeFields(result), callbacks)
+	} else {
+		session = newSession(ctx, nativeFields(result))
 	}
-
-	return newSession(ctx, nativeFields(result)), nil
+	// Explicit WebRTC sessions keep their existing transport-specific ownership.
+	if c.RoutedOnly || (method != "connect" && method != "quic_session" && method != "webtransport_session") {
+		return session, nil
+	}
+	options := DirectConfig{Authenticator: c.Authenticator, Serializer: c.SerializerSpec}
+	if c.Direct != nil {
+		options = *c.Direct
+		if options.Authenticator == nil {
+			options.Authenticator = c.Authenticator
+		}
+		if options.Serializer == nil {
+			options.Serializer = c.SerializerSpec
+		}
+	}
+	// Connect's context bounds dialing; the manager belongs to the returned session.
+	session.peer, err = session.startPeer(context.WithoutCancel(ctx), &options)
+	if err != nil {
+		_ = session.Close()
+		return nil, err
+	}
+	return session, nil
 }
 
 func (a Authenticator) AuthMethod() string {
@@ -276,4 +238,89 @@ func serializerCallback(serializer serializers.Serializer, method string, value 
 	default:
 		return nil, unexpectedCallback(method)
 	}
+}
+
+func (c *Client) validate() error {
+	if c.NetDial != nil {
+		return fmt.Errorf("custom NetDial is not exposed by the native binding yet")
+	}
+
+	if c.OutQueueSize != 0 {
+		return fmt.Errorf("network OutQueueSize is not exposed by the native binding yet")
+	}
+
+	if c.SerializerSpec != nil {
+		switch c.SerializerSpec.SubProtocol() {
+		case JSONWebsocketProtocol, CBORWebsocketProtocol, MsgPackWebsocketProtocol:
+		default:
+			return fmt.Errorf("custom serializer subprotocol is not exposed by the native binding yet")
+		}
+
+		switch c.SerializerSpec.SerializerID() {
+		case JSONSerializerID, CBORSerializerID, MsgPackSerializerID:
+		default:
+			return fmt.Errorf("custom serializer ID is not exposed by the native binding yet")
+		}
+	}
+
+	return nil
+}
+
+// configureCallbacks adapts host authentication and custom serializers only.
+// Protocol discovery, signaling and transport scheduling stay in Rust.
+func (c *Client) configureCallbacks(ctx context.Context, f map[string]any) (*foreignCallbacks, bool, error) {
+	var callbacks *foreignCallbacks
+	var customSerializer serializers.Serializer
+
+	if c.SerializerSpec != nil {
+		switch serializer := c.SerializerSpec.Serializer().(type) {
+		case *serializers.JSONSerializer, *serializers.MsgPackSerializer, *serializers.CBORSerializer:
+		default:
+			customSerializer = serializer
+		}
+	}
+
+	if c.Authenticator != nil || customSerializer != nil {
+		var err error
+		callbacks, err = newForeignCallbacks(ctx, func(method string, value any) (any, error) {
+			switch method {
+			case "authenticate":
+				fields := nativeFields(value)
+				challenge := messages.NewChallenge(stringField(fields, "method"), nativeFields(fields["extra"]))
+				response, err := c.Authenticator.Authenticate(*challenge)
+				if err != nil {
+					return nil, err
+				}
+
+				return map[string]any{"signature": response.Signature(), "extra": response.Extra()}, nil
+			case "serialize", "deserialize":
+				return serializerCallback(customSerializer, method, value)
+			default:
+				return nil, unexpectedCallback(method)
+			}
+		})
+
+		if err != nil {
+			return nil, false, err
+		}
+
+		if c.Authenticator != nil {
+			f["auth"] = map[string]any{
+				"method":   c.Authenticator.AuthMethod(),
+				"authid":   c.Authenticator.AuthID(),
+				"extra":    c.Authenticator.AuthExtra(),
+				"callback": callbacks.handle,
+			}
+		}
+
+		if customSerializer != nil {
+			f["serializer"] = map[string]any{
+				"name":     f["serializer"],
+				"callback": callbacks.handle,
+				"static":   customSerializer.Static(),
+			}
+		}
+	}
+
+	return callbacks, customSerializer != nil, nil
 }

@@ -11,7 +11,7 @@ rpc-streams = ["quic", "xconn-core/rpc-streams", "xconn-webrtc?/rpc-streams"]
 yamux = ["xconn-core/yamux", "dep:rustls"]
 quic = ["xconn-core/quic", "dep:quinn", "dep:rustls", "dep:rustls-native-certs"]
 webtransport = ["quic", "xconn-core/webtransport"]
-webrtc = ["dep:xconn-webrtc"]
+webrtc = ["dep:xconn-webrtc", "xconn-webrtc/services"]
 
 [dependencies]
 xconn-core = { version = "0.1.0", path = "../../crates/xconn-core", default-features = false, features = ["async", "services", "crypto"] }

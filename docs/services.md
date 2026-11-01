@@ -105,3 +105,11 @@ data can authenticate application context without transmitting it. Key agreement
 does not authenticate a peer: the application must establish trust in the public
 key. Core does not impose an encrypted-stream handshake, replay policy, or key
 persistence format.
+
+## Managed direct connections
+
+The optional `async_::services::peer::Peer` owns direct connections and retry
+scheduling while borrowing a hub session. Select once before starting an RPC;
+existing calls and streams are never migrated or replayed. Go supplies
+automatic routing through `Client.Connect` and realm-scoped `Session.Expose`. See
+[peer connection APIs and lifecycle](peer-connections.md).
