@@ -47,3 +47,34 @@ def test_async_lifecycle_accepts_sync_callbacks_and_returned_awaitables(return_a
             assert observed == ["connect", "disconnect"]
 
     asyncio.run(asyncio.wait_for(scenario(), 5))
+
+
+@pytest.mark.parametrize("closing", [False, True])
+def test_async_reader_reports_unexpected_native_errors(closing):
+    from xconn_core.async_client import AsyncSession
+
+    async def scenario():
+        session = AsyncSession.__new__(AsyncSession)
+        session._closing = closing
+        session._tasks = set()
+        session._disconnect_callbacks = []
+        failure = RuntimeError("native queue failed")
+
+        async def request(method):
+            raise failure
+
+        session._request = request
+        observed = []
+        loop = asyncio.get_running_loop()
+        previous = loop.get_exception_handler()
+        loop.set_exception_handler(lambda loop, context: observed.append(context))
+        try:
+            await session._events()
+        finally:
+            loop.set_exception_handler(previous)
+
+        assert len(observed) == (0 if closing else 1)
+        if observed:
+            assert observed[0]["exception"] is failure
+
+    asyncio.run(scenario())

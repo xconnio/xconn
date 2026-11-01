@@ -58,7 +58,10 @@ class AsyncSession:
         self.details = SessionDetails(
             response["session_id"], response["authid"], response["authrole"], response.get("realm", "")
         )
-        self._callbacks, self._tasks, self._invocations = {}, set(), {}
+        self._callbacks = {}
+        self._tasks = set()
+        self._invocations = {}
+        self._closing = False
         self._tokens = itertools.count(1)
         self._reader = asyncio.create_task(self._events())
 
@@ -73,32 +76,12 @@ class AsyncSession:
                 if event is None:
                     break
 
-                if event["kind"] == "interrupt":
-                    task = self._invocations.get(event["id"])
-
-                    if task is not None:
-                        task.cancel()
-
-                    continue
-
-                callback = self._callbacks.get(event["token"])
-
-                if callback is None and event["kind"] == "invocation":
-                    try:
-                        await self._request("reply", id=event["id"], error={"uri": "wamp.error.canceled"})
-                    except RuntimeError:
-                        pass
-
-                if callback is not None:
-                    task = asyncio.create_task(self._dispatch(event, callback))
-                    self._tasks.add(task)
-                    task.add_done_callback(self._tasks.discard)
-
-                    if event["kind"] == "invocation":
-                        self._invocations[event["id"]] = task
-                        task.add_done_callback(lambda done, key=event["id"]: self._invocations.pop(key, None))
-        except RuntimeError:
-            pass
+                await self._dispatch_event(event)
+        except RuntimeError as error:
+            if not self._closing:
+                asyncio.get_running_loop().call_exception_handler(
+                    {"message": "XConn event reader failed", "exception": error}
+                )
         finally:
             for task in self._tasks:
                 task.cancel()
@@ -112,6 +95,31 @@ class AsyncSession:
                     asyncio.get_running_loop().call_exception_handler(
                         {"message": "XConn disconnect handler failed", "exception": error}
                     )
+
+    async def _dispatch_event(self, event):
+        if event["kind"] == "interrupt":
+            task = self._invocations.get(event["id"])
+            if task is not None:
+                task.cancel()
+            return
+
+        callback = self._callbacks.get(event["token"])
+        if callback is None:
+            if event["kind"] == "invocation":
+                try:
+                    await self._request("reply", id=event["id"], error={"uri": "wamp.error.canceled"})
+                except RuntimeError:
+                    # The native invocation can disappear during cancellation.
+                    pass
+            return
+
+        task = asyncio.create_task(self._dispatch(event, callback))
+        self._tasks.add(task)
+        task.add_done_callback(self._tasks.discard)
+
+        if event["kind"] == "invocation":
+            self._invocations[event["id"]] = task
+            task.add_done_callback(lambda done, key=event["id"]: self._invocations.pop(key, None))
 
     async def _dispatch(self, event, callback):
         if event["kind"] == "invocation":
@@ -140,8 +148,6 @@ class AsyncSession:
                 return
 
             response = bridge.failure(error)
-        finally:
-            self._invocations.pop(event.get("id"), None)
 
         try:
             await self._request("reply", id=event["id"], **response)
@@ -321,6 +327,8 @@ class AsyncSession:
             await self.close()
 
     async def close(self):
+        self._closing = True
+
         if self._host_callbacks is not None and self._base_session is not None and self._host_callbacks.claim_close():
             await self._base_session.close()
 
