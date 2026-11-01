@@ -596,6 +596,7 @@ func (d Dict) Raw() map[string]any {
 }
 
 type Invocation struct {
+	streams *streamPayload
 	args    List
 	kwargs  Dict
 	details Dict

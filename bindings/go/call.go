@@ -75,6 +75,12 @@ func (r *CallRequest) StreamContext(ctx context.Context, options ...StreamOption
 		return nil, fmt.Errorf("streaming calls use Send/Finish/Receive instead of callbacks")
 	}
 
+	for _, arg := range r.args {
+		if streamSource(arg) != nil {
+			return nil, fmt.Errorf("transport stream arguments currently require ExecuteContext")
+		}
+	}
+
 	lifetime, cancel := context.WithCancel(ctx)
 	value, err := r.session.request(lifetime, "stream_open", map[string]any{
 		"uri": r.procedure, "args": r.args, "kwargs": r.kwargs, "options": r.options,

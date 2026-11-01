@@ -53,5 +53,5 @@ of logical stream I/O. Yamux supplies flow control, half-close and stream resets
 the configuration allows 64 logical streams and a maximum aggregate receive window
 of 16 MiB per connection.
 
-This change exposes the WAMP transport. RPC-associated application streams and
-forwarding through bridges are separate additions.
+Enable `rpc-streams` as well to attach application byte streams to WAMP calls
+and results; see [RPC streams](rpc-streams.md). Bridge forwarding is separate.

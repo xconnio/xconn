@@ -291,6 +291,11 @@ impl xconn_core::async_::peer::Peer for SharedPeer {
         self.0.kind()
     }
 
+    #[cfg(feature = "rpc-streams")]
+    fn stream_opener(&self) -> Option<xconn_core::async_::peer::StreamOpener> {
+        self.0.stream_opener()
+    }
+
     fn try_write(&self, data: Vec<u8>) -> std::result::Result<bool, xconn_core::Error> {
         self.0.try_write(data)
     }

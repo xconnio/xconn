@@ -141,13 +141,25 @@ func (s *Session) events(ctx context.Context) {
 		s.invocations[id] = cancel
 		s.mu.Unlock()
 		go func() {
-			defer cancel()
+			var outgoing *streamTransfer
+			defer func() {
+				if outgoing == nil {
+					cancel()
+				} else {
+					go func() {
+						<-outgoing.done
+						cancel()
+					}()
+				}
+			}()
 			defer func() {
 				s.mu.Lock()
 				delete(s.invocations, id)
 				s.mu.Unlock()
 			}()
-			response, err := h.invocation(ctx, decodeResult(value))
+			invocation := decodeResult(value)
+			invocation.streams = &streamPayload{session: s, ctx: ctx}
+			response, err := h.invocation(ctx, invocation)
 			fields := map[string]any{"id": id}
 			if err != nil {
 				var app *Error
@@ -158,7 +170,18 @@ func (s *Session) events(ctx context.Context) {
 					fields["error"] = map[string]any{"uri": "wamp.error.runtime_error", "args": []any{err.Error()}}
 				}
 			} else if response != nil {
-				fields["args"], fields["kwargs"] = response.Args, response.Kwargs
+				args, transfer, streamErr := s.streamArguments(ctx, response.Args)
+				if streamErr != nil {
+					fields["error"] = map[string]any{"uri": "wamp.error.runtime_error", "args": []any{streamErr.Error()}}
+				} else {
+					fields["args"], fields["kwargs"] = args, response.Kwargs
+					if _, replyErr := s.request(ctx, "reply", fields); replyErr != nil {
+						transfer.close()
+					} else if transfer != nil {
+						outgoing = transfer
+					}
+					return
+				}
 			}
 
 			_, _ = s.request(ctx, "reply", fields)
@@ -173,17 +196,24 @@ func (s *Session) CallContext(
 	kwargs map[string]any,
 	options Options,
 ) (*Result, error) {
+	encoded, transfer, err := s.streamArguments(ctx, args)
+	if err != nil {
+		return nil, err
+	}
+	defer transfer.close()
 	value, err := s.request(
 		ctx,
 		"call",
-		map[string]any{"uri": procedure, "args": args, "kwargs": kwargs, "options": options},
+		map[string]any{"uri": procedure, "args": encoded, "kwargs": kwargs, "options": options},
 	)
 
 	if err != nil {
 		return nil, err
 	}
 
-	return decodeResult(value), nil
+	result := decodeResult(value)
+	result.streams = &streamPayload{session: s, ctx: ctx}
+	return result, nil
 }
 
 func (s *Session) PublishContext(

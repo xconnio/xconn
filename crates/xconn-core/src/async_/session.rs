@@ -69,6 +69,8 @@ struct Pending {
 
 #[derive(Default)]
 struct State {
+    #[cfg(feature = "rpc-streams")]
+    stream_opener: Option<super::peer::StreamOpener>,
     pending: HashMap<(i64, i64), Pending>,
     registrations: HashMap<i64, Handler>,
     subscriptions: HashMap<i64, Vec<(i64, SubscriptionHandler)>>,
@@ -117,11 +119,33 @@ pub struct InvocationContext {
     peer: Arc<dyn Peer>,
     serializer: Arc<Box<dyn Serializer>>,
     receive_progress: bool,
+    #[cfg(feature = "rpc-streams")]
+    stream_opener: Option<super::peer::StreamOpener>,
     payload_args: Option<Vec<Value>>,
     payload_kwargs: Option<HashMap<String, Value>>,
 }
 
 impl InvocationContext {
+    /// Open the transport stream at the same positional index as an ordinary argument.
+    #[cfg(feature = "rpc-streams")]
+    pub async fn arg_stream(&self, index: usize) -> Result<super::rawsocket::BoxStream, Error> {
+        let value = self
+            .invocation
+            .args
+            .get(index)
+            .ok_or_else(|| Error::new("argument index out of range"))?;
+        self.open_stream_argument(value).await
+    }
+
+    #[cfg(feature = "rpc-streams")]
+    pub(crate) async fn open_stream_argument(&self, value: &Value) -> Result<super::rawsocket::BoxStream, Error> {
+        let open = self
+            .stream_opener
+            .as_ref()
+            .ok_or_else(|| Error::new("transport does not support RPC streams"))?;
+        super::rpc_streams::accept(open, value).await
+    }
+
     pub fn payload_args(&self) -> &Option<Vec<Value>> {
         &self.payload_args
     }
@@ -347,7 +371,11 @@ impl Session {
     pub fn new(details: SessionDetails, peer: Box<dyn Peer>, serializer: Box<dyn Serializer>) -> Self {
         let peer: Arc<dyn Peer> = Arc::from(peer);
         let serializer = Arc::new(serializer);
-        let state = Arc::new(Mutex::new(State::default()));
+        let state = Arc::new(Mutex::new(State {
+            #[cfg(feature = "rpc-streams")]
+            stream_opener: peer.stream_opener(),
+            ..Default::default()
+        }));
         let (done, disconnected) = watch::channel(false);
         let (task_peer, task_serializer, task_state) = (peer.clone(), serializer.clone(), state.clone());
         let task = tokio::spawn(async move {
@@ -434,6 +462,8 @@ impl Session {
                                 details: v.details.clone(),
                             },
                             request_id: v.request_id,
+                            #[cfg(feature = "rpc-streams")]
+                            stream_opener: state.stream_opener.clone(),
                             payload_args: v.args.clone(),
                             payload_kwargs: v.kwargs.clone(),
                             cancelled,
@@ -639,6 +669,42 @@ impl Session {
         }
 
         true
+    }
+
+    #[cfg(all(
+        feature = "rpc-streams",
+        any(feature = "quic", feature = "webtransport", feature = "yamux")
+    ))]
+    pub(crate) fn with_stream_opener(self, open: super::peer::StreamOpener) -> Self {
+        self.state.lock().unwrap().stream_opener = Some(open);
+        self
+    }
+
+    /// Create an owned stream and its positional RPC argument reference.
+    /// Byte traffic uses the transport; WAMP carries only the reference.
+    #[cfg(feature = "rpc-streams")]
+    pub async fn offer_stream(&self) -> Result<(Value, super::rawsocket::BoxStream), Error> {
+        let open = self
+            .state
+            .lock()
+            .unwrap()
+            .stream_opener
+            .clone()
+            .ok_or_else(|| Error::new("transport does not support RPC streams"))?;
+        super::rpc_streams::offer(&open).await
+    }
+
+    /// Open a stream reference received in invocation or result arguments.
+    #[cfg(feature = "rpc-streams")]
+    pub async fn open_stream_argument(&self, value: &Value) -> Result<super::rawsocket::BoxStream, Error> {
+        let open = self
+            .state
+            .lock()
+            .unwrap()
+            .stream_opener
+            .clone()
+            .ok_or_else(|| Error::new("transport does not support RPC streams"))?;
+        super::rpc_streams::accept(&open, value).await
     }
 
     pub fn connected(&self) -> bool {

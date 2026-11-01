@@ -43,6 +43,7 @@ func (s *Session) register(
 		procedure,
 		func(ctx context.Context, result *Result) (*Result, error) {
 			invocation := NewInvocation(result.Args, result.Kwargs, result.Details)
+			invocation.streams = result.streams
 			invocation.SendProgress = func(args []any, kwargs map[string]any) error {
 				_, err := s.request(
 					ctx,

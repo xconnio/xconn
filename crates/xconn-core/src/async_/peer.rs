@@ -1,11 +1,24 @@
 use crate::{Error, TransportType};
 use async_trait::async_trait;
 use std::fmt::Debug;
+#[cfg(feature = "rpc-streams")]
+use std::{pin::Pin, sync::Arc};
 use tokio::sync::{Mutex, mpsc, watch};
+
+/// Opens a byte stream on a session's authenticated transport.
+#[cfg(feature = "rpc-streams")]
+pub type StreamOpener =
+    Arc<dyn Fn() -> Pin<Box<dyn Future<Output = Result<super::rawsocket::BoxStream, Error>> + Send>> + Send + Sync>;
 
 #[async_trait]
 pub trait Peer: Debug + Send + Sync {
     fn kind(&self) -> TransportType;
+
+    /// Optional RPC stream carrier bound to this peer's authenticated session.
+    #[cfg(feature = "rpc-streams")]
+    fn stream_opener(&self) -> Option<StreamOpener> {
+        None
+    }
 
     async fn ping(&self, _timeout: Option<std::time::Duration>) -> Result<std::time::Duration, Error> {
         Err(Error::new("ping is not supported by this transport"))
@@ -102,5 +115,57 @@ impl Peer for MemoryPeer {
     async fn close(&self) -> Result<(), Error> {
         self.closed.send_replace(true);
         Ok(())
+    }
+}
+
+// Preserve an authenticated in-process peer's byte-stream capability when a
+// binding transfers that peer into a Session (including BaseSession adapters).
+#[cfg(feature = "rpc-streams")]
+pub(crate) fn with_streams(peer: Box<dyn Peer>, opener: StreamOpener) -> Box<dyn Peer> {
+    Box::new(StreamPeer { peer, opener })
+}
+
+#[cfg(feature = "rpc-streams")]
+struct StreamPeer {
+    peer: Box<dyn Peer>,
+    opener: StreamOpener,
+}
+
+#[cfg(feature = "rpc-streams")]
+impl std::fmt::Debug for StreamPeer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.peer.fmt(f)
+    }
+}
+
+#[cfg(feature = "rpc-streams")]
+#[async_trait]
+impl Peer for StreamPeer {
+    fn kind(&self) -> TransportType {
+        self.peer.kind()
+    }
+
+    fn stream_opener(&self) -> Option<StreamOpener> {
+        Some(self.opener.clone())
+    }
+
+    async fn read(&self) -> Result<Vec<u8>, Error> {
+        self.peer.read().await
+    }
+
+    async fn write(&self, data: Vec<u8>) -> Result<(), Error> {
+        self.peer.write(data).await
+    }
+
+    fn try_write(&self, data: Vec<u8>) -> Result<bool, Error> {
+        self.peer.try_write(data)
+    }
+
+    async fn ping(&self, timeout: Option<std::time::Duration>) -> Result<std::time::Duration, Error> {
+        self.peer.ping(timeout).await
+    }
+
+    async fn close(&self) -> Result<(), Error> {
+        self.peer.close().await
     }
 }

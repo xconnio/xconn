@@ -9,6 +9,7 @@ readme = "README.md"
 
 [features]
 services = ["async"]
+rpc-streams = ["async"]
 yamux = ["async", "dep:yamux", "dep:tokio-util", "dep:tokio-rustls", "dep:rustls-native-certs"]
 crypto = ["dep:xconn-crypto"]
 default = ["async", "sync"]
