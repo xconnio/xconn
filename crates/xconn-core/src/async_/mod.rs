@@ -28,3 +28,6 @@ pub mod requests;
 
 #[cfg(feature = "services")]
 pub mod services;
+
+#[cfg(feature = "yamux")]
+pub mod yamux;

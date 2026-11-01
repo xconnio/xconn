@@ -2,6 +2,8 @@ package xconn
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"io"
 	"net"
@@ -60,14 +62,24 @@ func (s *Server) RegisterSpec(spec SerializerSpec) error {
 }
 
 func (s *Server) ListenAndServeWebSocket(network Network, address string) (*Listener, error) {
-	return s.listen(network, address, "websocket")
+	return s.listen(network, address, "websocket", nil)
 }
 
 func (s *Server) ListenAndServeRawSocket(network Network, address string) (*Listener, error) {
-	return s.listen(network, address, "rawsocket")
+	return s.listen(network, address, "rawsocket", nil)
 }
 
-func (s *Server) listen(network Network, address, transport string) (*Listener, error) {
+// ListenAndServeYamux serves WAMP over yamux on a Unix or TCP connection.
+func (s *Server) ListenAndServeYamux(network Network, address string) (*Listener, error) {
+	return s.listen(network, address, "yamux", nil)
+}
+
+// ListenAndServeYamuxTLS serves encrypted yamux over TCP using a server certificate.
+func (s *Server) ListenAndServeYamuxTLS(address string, certificate tls.Certificate) (*Listener, error) {
+	return s.listen(NetworkTCP, address, "yamux", &certificate)
+}
+
+func (s *Server) listen(network Network, address, transport string, certificate *tls.Certificate) (*Listener, error) {
 
 	if network != NetworkTCP && network != NetworkUnix {
 		return nil, fmt.Errorf("unsupported listener network %s", network)
@@ -78,6 +90,18 @@ func (s *Server) listen(network Network, address, transport string) (*Listener, 
 		"address":   address,
 		"transport": transport,
 		"network":   string(network),
+	}
+
+	if certificate != nil {
+		key, err := x509.MarshalPKCS8PrivateKey(certificate.PrivateKey)
+		if err != nil {
+			return nil, err
+		}
+		chain := make([]any, len(certificate.Certificate))
+		for index, der := range certificate.Certificate {
+			chain[index] = der
+		}
+		fields["certificates"], fields["private_key"] = chain, key
 	}
 
 	if err := serverConfiguration(fields, s.config); err != nil {

@@ -244,8 +244,21 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                 #[cfg(unix)]
                 {
                     let path = string_field(&f, "address")?;
-                    let websocket = string_field(&f, "transport")? == "websocket";
-                    let listener = xconn_core::async_::server::UnixServer::listen(r, &path, websocket)
+                    let transport = string_field(&f, "transport")?;
+                    #[cfg(feature = "yamux")]
+                    if transport == "yamux" {
+                        let listener = xconn_core::async_::server::UnixServer::yamux(r, &path)
+                            .await
+                            .map_err(|error| error.to_string())?;
+                        return Ok(Output::resource(
+                            Resource::UnixListener(listener),
+                            HashMap::from([("address".into(), Value::Str(path))]),
+                        ));
+                    }
+                    if transport != "websocket" && transport != "rawsocket" {
+                        return Err("unsupported Unix listener transport".into());
+                    }
+                    let listener = xconn_core::async_::server::UnixServer::listen(r, &path, transport == "websocket")
                         .await
                         .map_err(|error| error.to_string())?;
                     return Ok(Output::resource(
@@ -286,6 +299,33 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                         Server::websocket_with_protocols(r, address, protocols).await
                     } else {
                         Server::websocket(r, address).await
+                    }
+                }
+                #[cfg(feature = "yamux")]
+                "yamux" => {
+                    if let Some(Value::List(chain)) = f.get("certificates") {
+                        let certificates = chain
+                            .iter()
+                            .map(|value| match value {
+                                Value::Bytes(bytes) => Ok(rustls::pki_types::CertificateDer::from(bytes.0.clone())),
+                                _ => Err("expected DER certificate".to_string()),
+                            })
+                            .collect::<Result<Vec<_>>>()?;
+                        let Some(Value::Bytes(key)) = f.get("private_key") else {
+                            return Err("expected DER private key".into());
+                        };
+                        let key = rustls::pki_types::PrivateKeyDer::try_from(key.0.clone()).map_err(str::to_owned)?;
+                        let tls = rustls::ServerConfig::builder_with_provider(Arc::new(
+                            rustls::crypto::ring::default_provider(),
+                        ))
+                        .with_safe_default_protocol_versions()
+                        .map_err(|e| e.to_string())?
+                        .with_no_client_auth()
+                        .with_single_cert(certificates, key)
+                        .map_err(|e| e.to_string())?;
+                        Server::yamux_tls(r, address, Arc::new(tls)).await
+                    } else {
+                        Server::yamux(r, address).await
                     }
                 }
                 "rawsocket" => Server::rawsocket(r, address).await,

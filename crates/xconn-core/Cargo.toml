@@ -9,6 +9,7 @@ readme = "README.md"
 
 [features]
 services = ["async"]
+yamux = ["async", "dep:yamux", "dep:tokio-util", "dep:tokio-rustls", "dep:rustls-native-certs"]
 crypto = ["dep:xconn-crypto"]
 default = ["async", "sync"]
 sync = ["mio", "async"]
@@ -20,6 +21,9 @@ webtransport = ["async", "dep:webtrans-quion", "dep:rcgen"]
 router = ["async", "dep:clap", "dep:serde", "dep:serde_yaml_ng", "dep:tokio-rustls", "dep:rustls-pemfile", "dep:tracing", "dep:tracing-subscriber"]
 
 [dependencies]
+yamux = { version = "0.14", optional = true }
+tokio-util = { version = "0.7", features = ["compat"], optional = true }
+rustls-native-certs = { version = "0.8", optional = true }
 xconn-crypto = { version = "0.1.0", path = "../xconn-crypto", optional = true }
 # base dependencies
 wampproto = { version = "0.1.0", path = "../wampproto" }
