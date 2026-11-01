@@ -192,15 +192,7 @@ pub async fn serve(router: Router, stream: BoxStream) -> Result<(), Error> {
                     #[cfg(feature = "rpc-streams")]
                     let _ = super::multiplex::serve_stream(router, stream, authenticated, raw).await;
                     #[cfg(not(feature = "rpc-streams"))]
-                    {
-                    let handshake = tokio::time::timeout(
-                        std::time::Duration::from_secs(10),
-                        server_handshake(stream),
-                    ).await;
-                    if let Ok(Ok((peer, id))) = handshake {
-                        let _ = router.accept(peer, serializer(id)).await;
-                    }
-                    }
+                    serve_wamp_stream(router, stream).await;
                 });
             }
             Some(_) = streams.join_next(), if !streams.is_empty() => {}
@@ -210,6 +202,15 @@ pub async fn serve(router: Router, stream: BoxStream) -> Result<(), Error> {
     streams.abort_all();
     while streams.join_next().await.is_some() {}
     Ok(())
+}
+
+#[cfg(not(feature = "rpc-streams"))]
+async fn serve_wamp_stream(router: Router, stream: BoxStream) {
+    let handshake = tokio::time::timeout(std::time::Duration::from_secs(10), server_handshake(stream)).await;
+
+    if let Ok(Ok((peer, id))) = handshake {
+        let _ = router.accept(peer, serializer(id)).await;
+    }
 }
 
 pub(crate) async fn connect_uri(
