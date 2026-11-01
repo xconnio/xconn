@@ -41,6 +41,10 @@ impl Client {
     }
 
     async fn connect_inner(self, uri: &str, realm: &str) -> Result<Session, Error> {
+        #[cfg(feature = "yamux")]
+        if uri.starts_with("unix+yamux://") || uri.starts_with("yamux://") || uri.starts_with("yamuxs://") {
+            return super::yamux::connect_uri(uri, realm, self.serializer, self.authenticator).await;
+        }
         if uri.starts_with("ws://") || uri.starts_with("wss://") || uri.starts_with("unix+ws://") {
             let serializer = self.serializer.serializer();
             let joiner = WebSocketJoiner::new(self.serializer, self.authenticator);

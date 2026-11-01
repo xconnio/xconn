@@ -7,6 +7,7 @@ repository.workspace = true
 publish = false
 [features]
 default = []
+yamux = ["xconn-core/yamux", "dep:rustls"]
 quic = ["xconn-core/quic", "dep:quinn", "dep:rustls", "dep:rustls-native-certs"]
 webtransport = ["quic", "xconn-core/webtransport"]
 webrtc = ["dep:xconn-webrtc"]

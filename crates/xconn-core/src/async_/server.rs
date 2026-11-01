@@ -29,6 +29,14 @@ pub fn select_websocket_protocol<'a>(offered: &'a str, supported: &[String]) -> 
     })
 }
 
+#[derive(Clone)]
+enum Transport {
+    RawSocket,
+    WebSocket,
+    #[cfg(feature = "yamux")]
+    Yamux(Option<Arc<rustls::ServerConfig>>),
+}
+
 pub struct Server {
     pub local_addr: SocketAddr,
     stop: watch::Sender<bool>,
@@ -48,11 +56,11 @@ impl Server {
     }
 
     pub async fn rawsocket(router: Router, addr: SocketAddr) -> Result<Self, Error> {
-        Self::listen(router, addr, false, None).await
+        Self::listen(router, addr, Transport::RawSocket, None).await
     }
 
     pub async fn websocket(router: Router, addr: SocketAddr) -> Result<Self, Error> {
-        Self::listen(router, addr, true, None).await
+        Self::listen(router, addr, Transport::WebSocket, None).await
     }
 
     pub async fn websocket_with_protocols(
@@ -60,14 +68,24 @@ impl Server {
         addr: SocketAddr,
         protocols: WebSocketProtocols,
     ) -> Result<Self, Error> {
-        Self::listen(router, addr, true, Some(protocols)).await
+        Self::listen(router, addr, Transport::WebSocket, Some(protocols)).await
+    }
+
+    #[cfg(feature = "yamux")]
+    pub async fn yamux(router: Router, addr: SocketAddr) -> Result<Self, Error> {
+        Self::listen(router, addr, Transport::Yamux(None), None).await
+    }
+
+    #[cfg(feature = "yamux")]
+    pub async fn yamux_tls(router: Router, addr: SocketAddr, tls: Arc<rustls::ServerConfig>) -> Result<Self, Error> {
+        Self::listen(router, addr, Transport::Yamux(Some(tls)), None).await
     }
 
     #[allow(clippy::result_large_err)] // Required by tungstenite's callback signature.
     async fn listen(
         router: Router,
         addr: SocketAddr,
-        websocket: bool,
+        transport: Transport,
         protocols: Option<WebSocketProtocols>,
     ) -> Result<Self, Error> {
         let listener = TcpListener::bind(addr).await.map_err(|e| Error::new(e.to_string()))?;
@@ -86,8 +104,9 @@ impl Server {
                         let Ok((stream, _)) = incoming else { break };
                         let router = router.clone();
                         let protocols = protocols.clone();
+                        let transport = transport.clone();
                         connections.spawn(async move {
-                            serve_connection(router, stream, websocket, protocols).await;
+                            serve_connection(router, stream, transport, protocols).await;
                         });
                     }
                 }
@@ -102,10 +121,28 @@ impl Server {
 }
 
 #[allow(clippy::result_large_err)]
-async fn serve_connection<S>(router: Router, stream: S, websocket: bool, protocols: Option<WebSocketProtocols>)
+async fn serve_connection<S>(router: Router, stream: S, transport: Transport, protocols: Option<WebSocketProtocols>)
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin + Send + 'static,
 {
+    #[cfg(feature = "yamux")]
+    if let Transport::Yamux(tls) = transport {
+        let stream: super::rawsocket::BoxStream = match tls {
+            Some(config) => {
+                let stream = tokio::time::timeout(
+                    std::time::Duration::from_secs(10),
+                    tokio_rustls::TlsAcceptor::from(config).accept(stream),
+                )
+                .await;
+                let Ok(Ok(stream)) = stream else { return };
+                Box::new(stream)
+            }
+            None => Box::new(stream),
+        };
+        let _ = super::yamux::serve(router, stream).await;
+        return;
+    }
+    let websocket = matches!(transport, Transport::WebSocket);
     let session = async {
         if websocket {
             let selected = Arc::new(Mutex::new(None));
@@ -179,6 +216,20 @@ impl UnixServer {
     }
 
     pub async fn listen(router: Router, path: &str, websocket: bool) -> Result<Self, Error> {
+        let transport = if websocket {
+            Transport::WebSocket
+        } else {
+            Transport::RawSocket
+        };
+        Self::listen_transport(router, path, transport).await
+    }
+
+    #[cfg(feature = "yamux")]
+    pub async fn yamux(router: Router, path: &str) -> Result<Self, Error> {
+        Self::listen_transport(router, path, Transport::Yamux(None)).await
+    }
+
+    async fn listen_transport(router: Router, path: &str, transport: Transport) -> Result<Self, Error> {
         use std::os::unix::fs::FileTypeExt;
 
         if let Ok(metadata) = std::fs::symlink_metadata(path) {
@@ -207,8 +258,9 @@ impl UnixServer {
                             break;
                         };
                         let router = router.clone();
+                        let transport = transport.clone();
                         connections.spawn(async move {
-                            serve_connection(router, stream, websocket, None).await;
+                            serve_connection(router, stream, transport, None).await;
                         });
                     }
                 }
