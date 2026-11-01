@@ -45,6 +45,8 @@ pub(super) enum Resource {
     Bridge(Arc<xconn_core::async_::services::bridge::Bridge>),
     #[cfg(feature = "quic")]
     Quic(crate::quic::Resource),
+    #[cfg(feature = "quic")]
+    Io(crate::streams::Stream),
     #[cfg(feature = "webtransport")]
     WebTransport(crate::webtransport::Resource),
     #[cfg(feature = "webrtc")]
@@ -82,6 +84,8 @@ impl Resource {
             }
             #[cfg(feature = "quic")]
             Self::Quic(resource) => resource.close(),
+            #[cfg(feature = "quic")]
+            Self::Io(stream) => stream.close(),
             #[cfg(feature = "webtransport")]
             Self::WebTransport(resource) => resource.close(),
             #[cfg(feature = "webrtc")]

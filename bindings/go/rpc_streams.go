@@ -48,7 +48,7 @@ func (s *rpcStream) Write(buffer []byte) (int, error) {
 func (s *rpcStream) Close() error {
 	s.once.Do(func() {
 		s.stop()
-		_ = s.QUICStream.Close()
+		_ = s.nativeStream.Close()
 	})
 	return nil
 }
@@ -77,11 +77,11 @@ func (p *streamPayload) open(args []any, index int) (io.ReadWriteCloser, error) 
 		return nil, err
 	}
 	stream := &rpcStream{nativeStreamConn: &nativeStreamConn{
-		QUICStream: &QUICStream{handle: nativeUint64(nativeFields(value)["handle"])},
-		local:      &net.UnixAddr{Name: "local", Net: "xconn-rpc"},
-		remote:     &net.UnixAddr{Name: "remote", Net: "xconn-rpc"},
+		nativeStream: &nativeStream{handle: nativeUint64(nativeFields(value)["handle"])},
+		local:        &net.UnixAddr{Name: "local", Net: "xconn-rpc"},
+		remote:       &net.UnixAddr{Name: "remote", Net: "xconn-rpc"},
 	}, ctx: p.ctx}
-	stream.stop = context.AfterFunc(p.ctx, func() { _ = stream.QUICStream.Close() })
+	stream.stop = context.AfterFunc(p.ctx, func() { _ = stream.nativeStream.Close() })
 	if p.claimed == nil {
 		p.claimed = make(map[int]bool)
 	}
@@ -151,7 +151,7 @@ func (s *Session) streamArguments(ctx context.Context, args []any) ([]any, *stre
 			return nil, nil, err
 		}
 		fields := nativeFields(native)
-		stream := &QUICStream{handle: nativeUint64(fields["handle"])}
+		stream := &nativeStream{handle: nativeUint64(fields["handle"])}
 		workers.Add(1)
 		transfer.cleanup = append(transfer.cleanup, source.start(ctx, s.done, stream, workers.Done))
 		if !copied {
@@ -171,7 +171,7 @@ func (s *Session) streamArguments(ctx context.Context, args []any) ([]any, *stre
 
 // start adapts host I/O to the native stream and returns idempotent cleanup.
 func (source *StreamSource) start(
-	ctx context.Context, sessionDone <-chan struct{}, stream *QUICStream, complete func(),
+	ctx context.Context, sessionDone <-chan struct{}, stream *nativeStream, complete func(),
 ) func() {
 	finished := make(chan struct{})
 	var once sync.Once

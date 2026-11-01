@@ -10,6 +10,8 @@ mod resources;
 mod router;
 mod services;
 #[cfg(feature = "quic")]
+mod streams;
+#[cfg(feature = "quic")]
 mod tls;
 mod values;
 #[cfg(feature = "webtransport")]
@@ -75,7 +77,15 @@ async fn dispatch_fields(f: HashMap<String, Value>) -> Result<resources::Output>
     }
     #[cfg(feature = "rpc-streams")]
     if method.starts_with("rpc_stream_") {
-        return quic::dispatch(&method, f).await;
+        return streams::dispatch(&method, f).await;
+    }
+
+    #[cfg(feature = "quic")]
+    if matches!(
+        method.as_str(),
+        "quic_read" | "quic_write" | "quic_finish" | "quic_deadlines"
+    ) {
+        return streams::dispatch(&method, f).await;
     }
 
     #[cfg(feature = "quic")]

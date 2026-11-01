@@ -5,7 +5,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
-	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -121,13 +120,6 @@ func (l *QUICListener) Close() error {
 	return nil
 }
 
-// QUICStream supports concurrent reading and writing. CloseWrite sends EOF in one direction.
-// Context methods allow blocked operations to be cancelled without closing sibling streams.
-type QUICStream struct {
-	handle uint64
-	once   sync.Once
-}
-
 func (c *QUICConnection) OpenStream(ctx context.Context) (*QUICStream, error) {
 	value, err := invoke(ctx, "quic_open", map[string]any{"handle": c.handle})
 	if err != nil {
@@ -152,65 +144,6 @@ func (l *QUICListener) AcceptStream(ctx context.Context) (*QUICStream, *SessionD
 		nativeFields(fields["authextra"]),
 	)
 	return &QUICStream{handle: nativeUint64(fields["handle"])}, details, nil
-}
-
-func (s *QUICStream) Read(data []byte) (int, error) { return s.ReadContext(context.Background(), data) }
-
-func (s *QUICStream) ReadContext(ctx context.Context, data []byte) (int, error) {
-	if len(data) == 0 {
-		return 0, nil
-	}
-	size := min(len(data), 1024*1024)
-	value, err := invoke(ctx, "quic_read", map[string]any{"handle": s.handle, "size": size})
-	if err != nil {
-		return 0, err
-	}
-	bytes := value.([]byte)
-	if len(bytes) == 0 {
-		return 0, io.EOF
-	}
-	return copy(data, bytes), nil
-}
-
-func (s *QUICStream) Write(data []byte) (int, error) {
-	return s.WriteContext(context.Background(), data)
-}
-
-func (s *QUICStream) WriteContext(ctx context.Context, data []byte) (int, error) {
-	written := 0
-	for len(data) > 0 {
-		size := min(len(data), 1024*1024)
-		value, err := invoke(ctx, "quic_write", map[string]any{"handle": s.handle, "data": data[:size]})
-		if err != nil {
-			return written, err
-		}
-		nativeCount := nativeUint64(value)
-		if nativeCount > 1024*1024 {
-			return written, fmt.Errorf("invalid QUIC write count")
-		}
-		count := int(nativeCount)
-		if count > size {
-			return written, fmt.Errorf("invalid QUIC write count")
-		}
-		if count == 0 {
-			return written, io.ErrNoProgress
-		}
-		written += count
-		data = data[count:]
-	}
-	return written, nil
-}
-
-func (s *QUICStream) CloseWrite() error { return s.CloseWriteContext(context.Background()) }
-
-func (s *QUICStream) CloseWriteContext(ctx context.Context) error {
-	_, err := invoke(ctx, "quic_finish", map[string]any{"handle": s.handle})
-	return err
-}
-
-func (s *QUICStream) Close() error {
-	s.once.Do(func() { closeHandle(s.handle) })
-	return nil
 }
 
 // AcceptConnection returns the connection and its first authenticated WAMP identity.
