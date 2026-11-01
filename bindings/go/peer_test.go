@@ -111,6 +111,7 @@ func TestPeerRoutesNewCallsAndStreamsWithoutReplayingInterruptedWork(t *testing.
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = endpoint.Close() })
 	require.Eventually(t, func() bool { return peer.Path() == api.PathDirect }, 5*time.Second, time.Millisecond)
+	require.Zero(t, api.CachedPeerSessions(peer), "status must not create adapters or reader tasks")
 	require.Equal(t, "direct", request.ExecuteContext(ctx).ArgStringOr(0, ""), "select at execution, not construction")
 	require.NoError(t, peer.Call("wamp.session.get").Arg(peer.ID()).ExecuteContext(ctx).Err,
 		"meta calls must use the hub's session identity")

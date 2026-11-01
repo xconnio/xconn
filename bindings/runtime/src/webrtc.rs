@@ -2,7 +2,9 @@
 use crate::{
     ByteArray, Result, Value,
     callbacks::{authenticator, codec, server_authentication},
-    resources::{ForeignSession, Output, Resource as BridgeResource, get_resource, get_router, get_session},
+    resources::{
+        ForeignSession, Output, OwnedResource, Resource as BridgeResource, get_resource, get_router, get_session,
+    },
     runtime,
     values::{duration_field, handle_field, request_options, session_fields, string_field},
 };
@@ -218,20 +220,13 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                         authenticator(&fields).map_err(xconn_core::Error::new)?,
                     )
                     .await?;
-                    let output = Output::resource(
-                        BridgeResource::Session(Arc::new(ForeignSession::new(session.session.clone()))),
-                        session_fields(session.details()),
-                    )
-                    .with_resource(
-                        "connection",
-                        BridgeResource::WebRTC(Resource::Connection(session.connection.clone())),
-                    );
-                    let value = output.take();
-                    let Value::Dict(fields) = value else { unreachable!() };
+                    let view = OwnedResource::new(BridgeResource::SessionView(Arc::new(ForeignSession::new(
+                        session.session.clone(),
+                    ))));
                     Ok(ManagedDirect {
-                        handle: handle_field(&fields, "handle").map_err(xconn_core::Error::new)?,
-                        connection: handle_field(&fields, "connection").map_err(xconn_core::Error::new)?,
+                        view,
                         session,
+                        executor: tokio::runtime::Handle::current(),
                     })
                 })
             });
@@ -243,7 +238,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                 HashMap::new(),
             ))
         }
-        "webrtc_peer_select" | "webrtc_peer_error" | "webrtc_peer_wait" => {
+        "webrtc_peer_select" | "webrtc_peer_status" | "webrtc_peer_error" | "webrtc_peer_wait" => {
             let resource = get_resource(handle_field(&f, "handle")?)?;
             let BridgeResource::WebRTC(Resource::Peer(peer)) = resource.as_ref() else {
                 return Err("expected peer manager".into());
@@ -261,13 +256,28 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                     ) {
                         Some(direct) => {
                             let mut fields = session_fields(direct.session.details());
-                            fields.insert("handle".into(), Value::UInt(direct.handle));
-                            fields.insert("connection".into(), Value::UInt(direct.connection));
+                            fields.insert("handle".into(), Value::UInt(direct.view.handle()));
                             fields
                         }
                         None => HashMap::from([("handle".into(), Value::UInt(peer.hub_handle))]),
                     };
                     plain(Value::Dict(fields))
+                }
+                "webrtc_peer_status" => {
+                    use xconn_core::async_::services::peer::ConnectionPath;
+                    let status = peer.manager.status();
+                    let path = match status.path {
+                        ConnectionPath::Routed => "routed",
+                        ConnectionPath::Direct => "direct",
+                        ConnectionPath::Closed => "closed",
+                    };
+                    plain(Value::Dict(HashMap::from([
+                        ("path".into(), Value::Str(path.into())),
+                        (
+                            "direct_error".into(),
+                            status.direct_error.map_or(Value::Null, Value::Str),
+                        ),
+                    ])))
                 }
                 "webrtc_peer_error" => plain(peer.manager.last_error().map_or(Value::Null, Value::Str)),
                 _ => {
@@ -529,10 +539,11 @@ pub(super) struct ManagedPeer {
     hub_handle: u64,
 }
 
+// Sole owner of a managed direct transport. Foreign session handles are views.
 struct ManagedDirect {
-    handle: u64,
-    connection: u64,
+    view: OwnedResource,
     session: WebRTCSession,
+    executor: tokio::runtime::Handle,
 }
 
 #[async_trait::async_trait]
@@ -543,15 +554,16 @@ impl xconn_core::async_::services::peer::DirectConnection for ManagedDirect {
 
     async fn close(&self) {
         let _ = self.session.connection.close().await;
-        crate::resources::close(self.handle);
-        crate::resources::close(self.connection);
     }
 }
 
 impl Drop for ManagedDirect {
     fn drop(&mut self) {
-        crate::resources::close(self.handle);
-        crate::resources::close(self.connection);
+        // Also covers a completed connector discarded during cancellation.
+        let connection = self.session.connection.clone();
+        self.executor.spawn(async move {
+            let _ = connection.close().await;
+        });
     }
 }
 

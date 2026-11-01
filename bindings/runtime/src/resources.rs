@@ -54,6 +54,8 @@ pub(super) enum Resource {
         _management: Option<Box<xconn_core::async_::management::Management>>,
     },
     Session(Arc<ForeignSession>),
+    #[cfg(feature = "webrtc")]
+    SessionView(Arc<ForeignSession>),
     Listener(Server),
     #[cfg(unix)]
     UnixListener(xconn_core::async_::server::UnixServer),
@@ -85,6 +87,8 @@ impl Resource {
             #[cfg(feature = "webrtc")]
             Self::WebRTC(resource) => resource.close(),
             Self::Router { router, .. } => router.close(),
+            #[cfg(feature = "webrtc")]
+            Self::SessionView(_) => {}
             Self::Session(s) => {
                 if let Some(heartbeat) = s.heartbeat.lock().unwrap().take() {
                     heartbeat.abort();
@@ -137,6 +141,8 @@ pub(super) fn get_resource(handle: u64) -> Result<Arc<Resource>> {
 pub(super) fn get_session(handle: u64) -> Result<Arc<ForeignSession>> {
     match get_resource(handle)?.as_ref() {
         Resource::Session(s) => Ok(s.clone()),
+        #[cfg(feature = "webrtc")]
+        Resource::SessionView(s) => Ok(s.clone()),
         _ => Err("expected session".into()),
     }
 }
@@ -208,6 +214,30 @@ pub(super) enum Cleanup {
     Handle(u64),
     Registration(Arc<ForeignSession>, i64),
     Subscription(Arc<ForeignSession>, u64),
+}
+
+/// Owns a registry entry until it is dropped. Adapter views never own transports.
+#[cfg(feature = "webrtc")]
+pub(super) struct OwnedResource(u64);
+
+#[cfg(feature = "webrtc")]
+impl OwnedResource {
+    pub(super) fn new(resource: Resource) -> Self {
+        let handle = id();
+        resources().lock().unwrap().insert(handle, Arc::new(resource));
+        Self(handle)
+    }
+
+    pub(super) fn handle(&self) -> u64 {
+        self.0
+    }
+}
+
+#[cfg(feature = "webrtc")]
+impl Drop for OwnedResource {
+    fn drop(&mut self) {
+        close(self.0);
+    }
 }
 
 pub(super) struct Output {

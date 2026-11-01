@@ -104,8 +104,7 @@ func (p *peerManager) selectSession(ctx context.Context, procedure string) (*Ses
 			p.mu.Lock()
 			delete(p.sessions, handle)
 			p.mu.Unlock()
-			_ = session.Close()
-			closeHandle(session.connectionHandle)
+			session.cancel() // The native manager owns this borrowed transport.
 		}()
 	}
 	p.mu.Unlock()
@@ -128,14 +127,11 @@ func (s *Session) Path() ConnectionPath {
 		}
 		return PathClosed
 	}
-	session, err := s.peer.selectSession(context.Background(), "")
+	value, err := invoke(context.Background(), "webrtc_peer_status", map[string]any{"handle": s.peer.handle})
 	if err != nil {
 		return PathClosed
 	}
-	if session == s {
-		return PathRouted
-	}
-	return PathDirect
+	return ConnectionPath(stringField(nativeFields(value), "path"))
 }
 
 // DirectError returns the last failed direct connection attempt, or nil after

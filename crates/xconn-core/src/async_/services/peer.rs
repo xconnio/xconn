@@ -38,6 +38,19 @@ impl Default for RetryPolicy {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConnectionPath {
+    Routed,
+    Direct,
+    Closed,
+}
+
+#[derive(Clone, Debug)]
+pub struct Status {
+    pub path: ConnectionPath,
+    pub direct_error: Option<String>,
+}
+
 /// Borrows the hub session and owns only its direct connections and retry worker.
 /// Subscriptions and registrations belong on the original hub session.
 pub struct Peer<C: DirectConnection> {
@@ -152,6 +165,20 @@ impl<C: DirectConnection> Peer<C> {
             return None;
         }
         self.direct()
+    }
+
+    pub fn status(&self) -> Status {
+        let path = if self.ensure_open().is_err() {
+            ConnectionPath::Closed
+        } else if self.direct().is_some() {
+            ConnectionPath::Direct
+        } else {
+            ConnectionPath::Routed
+        };
+        Status {
+            path,
+            direct_error: self.last_error(),
+        }
     }
 
     pub fn last_error(&self) -> Option<String> {
