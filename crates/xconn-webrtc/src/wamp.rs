@@ -59,7 +59,7 @@ impl Drop for ConnectionGuard {
     }
 }
 
-struct ChannelGuard(Option<Arc<DataChannel>>);
+pub(crate) struct ChannelGuard(pub(crate) Option<Arc<DataChannel>>);
 
 impl Drop for ChannelGuard {
     fn drop(&mut self) {
@@ -193,7 +193,11 @@ impl WebRTCSession {
     ) -> std::result::Result<Self, Error> {
         let mut cleanup = ChannelGuard(Some(channel.clone()));
         let timeouts = timeouts.validate()?;
+        #[cfg(feature = "rpc-streams")]
+        let primary = connection.rpc_session.clone();
         let operation = async {
+            #[cfg(feature = "rpc-streams")]
+            let mut primary = primary.lock().await;
             channel
                 .wait_open(timeouts.open_session)
                 .await
@@ -221,8 +225,20 @@ impl WebRTCSession {
                 auth,
             )
             .await?;
+            let session = Session::new(details, peer, spec.serializer());
+            #[cfg(feature = "rpc-streams")]
+            let session = if !*primary {
+                *primary = true;
+                session.with_stream_opener(crate::rpc_streams::opener(
+                    connection.clone(),
+                    channel.clone(),
+                    timeouts.handshake,
+                ))
+            } else {
+                session
+            };
             Ok(Self {
-                session: Session::new(details, peer, spec.serializer()),
+                session,
                 connection,
                 channel: channel.clone(),
                 timeouts,
@@ -391,6 +407,8 @@ async fn serve_connection_configured(
     let _cleanup = ConnectionGuard(Some(connection.clone()));
     let mut sessions = tokio::task::JoinSet::new();
     let mut first = true;
+    #[cfg(feature = "rpc-streams")]
+    let stream_capacity = crate::rpc_streams::capacity();
     let (authenticated, _) = tokio::sync::watch::channel(None);
     let (authentication_failed, _) = tokio::sync::watch::channel(false);
 
@@ -404,9 +422,26 @@ async fn serve_connection_configured(
                 let authenticated = authenticated.clone();
                 let authentication_failed = authentication_failed.clone();
                 let is_first = first;
+                #[cfg(feature = "rpc-streams")]
+                let stream_capacity = stream_capacity.clone();
                 first = false;
                 sessions.spawn(async move {
                     let result = async {
+                        #[cfg(feature = "rpc-streams")]
+                        if channel.protocol() == crate::rpc_streams::PROTOCOL {
+                            wait_raw_authentication(&authenticated, &authentication_failed, timeouts.handshake).await?;
+                            let identity = authenticated.borrow().clone()
+                                .ok_or_else(|| Error::new("RPC stream requires authentication"))?;
+                            let opener = router.rpc_stream_opener(&identity)?;
+                            let permit = stream_capacity.try_acquire_owned()
+                                .map_err(|_| Error::new("too many RPC streams"))?;
+                            let mut incoming = crate::rpc_streams::ChannelStream::new(channel.clone(), permit)
+                                .map_err(|error| Error::new(error.to_string()))?;
+                            let mut outgoing = opener().await?;
+                            return tokio::io::copy_bidirectional(&mut incoming, &mut outgoing).await
+                                .map(|_| ()).map_err(|error| Error::new(error.to_string()));
+                        }
+
                         if channel.protocol() == crate::RAW_CHANNEL_PROTOCOL {
                             wait_raw_authentication(&authenticated, &authentication_failed, timeouts.handshake).await?;
                             if let Some(raw) = raw {

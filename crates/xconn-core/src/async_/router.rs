@@ -358,6 +358,31 @@ impl Router {
         Ok(super::peer::with_streams(peer, opener))
     }
 
+    /// Bind an external stream carrier to an authenticated session.
+    /// Host adapters must use details from `accept_notified`, not wire headers.
+    #[cfg(feature = "rpc-streams")]
+    pub fn rpc_stream_opener(&self, identity: &SessionDetails) -> Result<super::peer::StreamOpener, Error> {
+        let realm = self
+            .realms
+            .lock()
+            .unwrap()
+            .get(&identity.realm)
+            .cloned()
+            .ok_or_else(|| Error::new("stream realm no longer exists"))?;
+        let realm = realm.lock().unwrap();
+        let client = realm
+            .clients
+            .get(&identity.id)
+            .ok_or_else(|| Error::new("stream session is no longer attached"))?;
+        if client.details.authid != identity.authid
+            || client.details.auth_role != identity.auth_role
+            || client.details.created_at != identity.created_at
+        {
+            return Err(Error::new("stream session identity mismatch"));
+        }
+        realm.rpc_streams.memory_opener(identity.id)
+    }
+
     pub fn new() -> Self {
         Self::default()
     }

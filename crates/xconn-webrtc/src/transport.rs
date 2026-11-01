@@ -160,7 +160,23 @@ impl DataChannel {
             let errors = errors.clone();
             let weak_channel = weak_channel.clone();
             Box::pin(async move {
-                // Never block the SCTP callback: a slow consumer closes its own channel.
+                #[cfg(feature = "rpc-streams")]
+                if weak_channel
+                    .upgrade()
+                    .is_some_and(|channel| channel.protocol() == crate::rpc_streams::PROTOCOL)
+                {
+                    // webrtc-rs invokes this on the channel's own reader task.
+                    // Pausing it propagates SCTP receive backpressure instead
+                    // of dropping packets when the application reads slowly.
+                    let mut closed = ended.subscribe();
+                    tokio::select! {
+                        biased;
+                        _ = closed.wait_for(|closed| *closed) => {},
+                        _ = tx.send(Packet { data: message.data, is_string: message.is_string }) => {},
+                    }
+                    return;
+                }
+                // Packet-oriented consumers retain their overflow/error behavior.
                 if tx
                     .try_send(Packet {
                         data: message.data,
@@ -208,6 +224,13 @@ impl DataChannel {
 
     pub fn label(&self) -> &str {
         self.channel.label()
+    }
+
+    #[cfg(feature = "rpc-streams")]
+    pub(crate) fn reliable_ordered(&self) -> bool {
+        self.channel.ordered()
+            && self.channel.max_retransmits().is_none()
+            && self.channel.max_packet_lifetime().is_none()
     }
 
     pub fn protocol(&self) -> &str {
@@ -416,6 +439,8 @@ pub struct Description {
 
 #[derive(Clone)]
 pub struct Connection {
+    #[cfg(feature = "rpc-streams")]
+    pub(crate) rpc_session: Arc<Mutex<bool>>,
     pub peer: Arc<RTCPeerConnection>,
     incoming: Arc<Mutex<mpsc::Receiver<Arc<DataChannel>>>>,
     candidates: Arc<Mutex<mpsc::UnboundedReceiver<RTCIceCandidateInit>>>,
@@ -500,6 +525,8 @@ impl Connection {
             })
         }));
         Ok(Self {
+            #[cfg(feature = "rpc-streams")]
+            rpc_session: Arc::new(Mutex::new(false)),
             closed,
             peer,
             incoming: Arc::new(Mutex::new(rx)),

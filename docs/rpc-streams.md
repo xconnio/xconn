@@ -6,7 +6,8 @@ endpoints return streams in result arguments. WAMP selects and authorizes the
 procedure; the native transport carries the bytes.
 
 Enable Rust's optional `rpc-streams` feature together with `quic`, `webtransport`
-or [yamux](yamux.md). In-process sessions also support the extension. The native
+or [yamux](yamux.md). Native WebRTC uses `xconn-webrtc/rpc-streams`.
+In-process sessions also support the extension. The native
 FFI SDK enables RPC streams by default; Go requires an SDK built with this support.
 Existing WAMP and progressive RPC APIs retain their behavior.
 
@@ -138,7 +139,7 @@ side; no application-level stream relay is required.
 Each bridge opens a stream on its next session, replaces the reference in the
 forwarded payload, and copies opaque bytes with bounded buffers and backpressure.
 References stay authorized to their session pair on each router. Bridges can be
-chained across QUIC, WebTransport, Yamux and in-process sessions.
+chained across QUIC, WebTransport, Yamux, native WebRTC and in-process sessions.
 
 Write-side EOF preserves the reverse direction until its reply drains. Input
 streams end with the source invocation; result streams survive the final RPC
@@ -151,17 +152,32 @@ a caller's departure closes its target without affecting other callers. Factory
 mode retains its existing caller-disclosure and session-meta requirements. See
 [bridge ownership](services.md#rpc-bridges).
 
+## Native WebRTC carrier
+
+Native Rust and Go WebRTC sessions use the same RPC stream APIs above. Each byte
+stream opens a reliable, ordered SCTP data channel with protocol
+`xconn.rpc.stream.v1`; WebRTC supplies multiplexing without a Yamux layer.
+
+Binary packets contain a zero byte followed by up to 16 KiB of data. A single
+`1` byte signals write-side EOF, preserving the reverse direction. Closing a
+channel before receiving EOF produces an I/O error. Unordered and partially
+reliable channels are rejected. Each connection allows up to 64 stream channels,
+with bounded packet queues and 64 KiB duplex buffers.
+
+SCTP has a shared receive window: a paused stream can also stall other data
+channels until its consumer resumes reading. Browser and Dart adapters do not yet
+implement this RPC stream carrier.
+
 ## Current boundaries
 
 - The stream-capable endpoints and router must use this implementation. There is
   no negotiation or compatibility promise with an older router for this extension.
-- The first authenticated WAMP session on each QUIC/WebTransport connection owns
+- The first authenticated WAMP session on each QUIC/WebTransport/WebRTC connection owns
   its stream capability. Secondary sessions retain ordinary WAMP support and reject
   stream offers explicitly.
 - Only top-level positional arguments/results are supported, through Go's
   `Execute`/`ExecuteContext` API. Keyword and nested streams, byte streams combined
   with progressive RPC, and automatic direct-peer selection are subsequent work.
-- WebRTC carriers are a separate addition.
 - Plain WebSocket/RawSocket sessions have no byte-stream carrier in this slice.
   Yamux provides a stream-capable Unix/TCP alternative. Other language bindings
   are not exposed yet.
