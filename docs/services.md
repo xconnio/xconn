@@ -38,6 +38,11 @@ finishes writing the final reply or is interrupted. Trailing input chunks cannot
 reopen an already-completed backend invocation. Tests cover this race, independent
 input/results options, and cancellation of the backend handler.
 
+With `rpc-streams` enabled, bridges also translate stream arguments/results and
+own byte forwarding across session boundaries. Result streams can outlive the
+final RPC reply; closing the bridge stops its transfers while leaving shared
+sessions open. See [RPC stream forwarding](rpc-streams.md#rpc-bridges).
+
 ## Attachment lifecycle
 
 `async_::services::attachment::supervise` runs application-provided attachment
