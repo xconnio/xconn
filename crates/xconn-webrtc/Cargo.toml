@@ -11,6 +11,7 @@ readme = "README.md"
 default = ["wamp"]
 wamp = ["dep:xconn-core"]
 rpc-streams = ["wamp", "xconn-core/rpc-streams"]
+services = ["wamp", "xconn-core/services"]
 
 [dependencies]
 xconn-framing = { version = "0.1.0", path = "../xconn-framing" }

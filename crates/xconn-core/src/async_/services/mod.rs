@@ -2,3 +2,4 @@
 pub mod attachment;
 pub mod bridge;
 pub mod discovery;
+pub mod peer;

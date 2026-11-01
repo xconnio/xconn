@@ -7,3 +7,6 @@ pub use transport::*;
 
 #[cfg(feature = "rpc-streams")]
 mod rpc_streams;
+
+#[cfg(feature = "services")]
+pub mod peer;
