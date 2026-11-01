@@ -141,14 +141,16 @@ class Session {
     } else if (event["kind"] == "interrupt") {
       session._invocations.remove(event["id"])?.markCancelled();
     } else if (event["kind"] == "event") {
-      final result = resultFromNative(event);
-      try {
-        session._eventsByToken[event["token"]]?.call(
-          Event(args: result.args, kwargs: result.kwargs, details: result.details),
-        );
-      } on Object catch (error, stack) {
-        Zone.current.handleUncaughtError(error, stack);
-      }
+      session._deliverEvent(event);
+    }
+  }
+
+  void _deliverEvent(Map<String, dynamic> event) {
+    final result = resultFromNative(event);
+    try {
+      _eventsByToken[event["token"]]?.call(Event(args: result.args, kwargs: result.kwargs, details: result.details));
+    } on Object catch (error, stack) {
+      Zone.current.handleUncaughtError(error, stack);
     }
   }
 
@@ -206,16 +208,7 @@ class Session {
         return;
       }
 
-      if ((result == null && payload.details["progress"] == true) || result?.details["progress"] == true) {
-        if (result != null) {
-          await invocation.sendProgress(result.args, result.kwargs);
-        }
-
-        reply["error"] = {"uri": "io.xconn.no_result"};
-      } else {
-        reply["args"] = result?.args ?? const [];
-        reply["kwargs"] = result?.kwargs ?? const <String, Object?>{};
-      }
+      reply.addAll(await _invocationReply(invocation, result));
     } on ApplicationError catch (error) {
       reply["error"] = {"uri": error.message, "args": error.args, "kwargs": error.kwargs};
     } on Object catch (error) {
@@ -230,6 +223,22 @@ class Session {
     } on Exception {
       // Cancellation can remove an invocation before its Dart handler returns.
     }
+  }
+
+  Future<Map<String, Object?>> _invocationReply(Invocation invocation, Result? result) async {
+    final intermediateInput = result == null && invocation.details["progress"] == true;
+    final progressiveResult = result?.details["progress"] == true;
+
+    if (intermediateInput || progressiveResult) {
+      if (result != null) {
+        await invocation.sendProgress(result.args, result.kwargs);
+      }
+      return {
+        "error": {"uri": "io.xconn.no_result"},
+      };
+    }
+
+    return {"args": result?.args ?? const [], "kwargs": result?.kwargs ?? const <String, Object?>{}};
   }
 
   CallRequest call(String procedure) => CallRequest(procedure, session: this);
