@@ -477,19 +477,7 @@ export class Session {
         }
 
         if (code === Code.INTERRUPT) {
-            const controller = this.invocations.get(fields.request_id);
-            if (controller) {
-                this.invocations.delete(fields.request_id);
-                controller.abort(new DOMException("Invocation cancelled", "AbortError"));
-                if (fields.options?.mode === "kill") {
-                    this.send(Code.ERROR, {
-                        message_type: Code.INVOCATION,
-                        request_id: fields.request_id,
-                        details: {},
-                        uri: "wamp.error.canceled",
-                    });
-                }
-            }
+            this.interrupt(fields);
             return;
         }
 
@@ -569,6 +557,22 @@ export class Session {
         } else {
             // Install callbacks synchronously before the next queued message is delivered.
             this.settle(fields.request_id, pending.parse(fields));
+        }
+    }
+
+    private interrupt(fields: Dictionary): void {
+        const controller = this.invocations.get(fields.request_id);
+        if (controller) {
+            this.invocations.delete(fields.request_id);
+            controller.abort(new DOMException("Invocation cancelled", "AbortError"));
+            if (fields.options?.mode === "kill") {
+                this.send(Code.ERROR, {
+                    message_type: Code.INVOCATION,
+                    request_id: fields.request_id,
+                    details: {},
+                    uri: "wamp.error.canceled",
+                });
+            }
         }
     }
 
