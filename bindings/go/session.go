@@ -22,6 +22,7 @@ type handler struct {
 }
 
 type Session struct {
+	peer             *peerManager
 	connectionHandle uint64
 	closeBase        func()
 	base             *nativeBase
@@ -196,6 +197,16 @@ func (s *Session) CallContext(
 	kwargs map[string]any,
 	options Options,
 ) (*Result, error) {
+	selected, err := s.callSession(ctx, procedure)
+	if err != nil {
+		return nil, err
+	}
+	return selected.callContext(ctx, procedure, args, kwargs, options)
+}
+
+func (s *Session) callContext(
+	ctx context.Context, procedure string, args []any, kwargs map[string]any, options Options,
+) (*Result, error) {
 	encoded, transfer, err := s.streamArguments(ctx, args)
 	if err != nil {
 		return nil, err
@@ -318,6 +329,9 @@ func (s *Subscription) UnsubscribeContext(ctx context.Context) error {
 func (s *Session) Close() error {
 	s.closeOnce.Do(func() {
 		s.cancel()
+		if s.peer != nil {
+			s.peer.close()
+		}
 
 		if s.closeBase != nil {
 			s.closeBase()
@@ -343,3 +357,10 @@ func (s *Session) LeaveContext(ctx context.Context) error {
 }
 
 func (s *Session) Done() <-chan struct{} { return s.done }
+
+func (s *Session) callSession(ctx context.Context, procedure string) (*Session, error) {
+	if s.peer != nil {
+		return s.peer.selectSession(ctx, procedure)
+	}
+	return s, nil
+}

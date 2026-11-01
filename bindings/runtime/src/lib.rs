@@ -59,6 +59,11 @@ async fn dispatch(request_value: Value) -> Result<resources::Output> {
 async fn dispatch_fields(f: HashMap<String, Value>) -> Result<resources::Output> {
     let method = values::string_field(&f, "method")?;
 
+    #[cfg(not(feature = "webrtc"))]
+    if method == "webrtc_peer_start" {
+        return Ok(resources::Output::plain(Value::Null));
+    }
+
     #[cfg(feature = "webrtc")]
     if method.starts_with("webrtc_") {
         return webrtc::dispatch(&method, f).await;

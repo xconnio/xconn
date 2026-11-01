@@ -16,7 +16,7 @@ func (s *Session) callWithRequest(ctx context.Context, request *CallRequest) *Re
 		return s.callProgressive(ctx, request)
 	}
 
-	result, err := s.CallContext(ctx, request.procedure, request.args, request.kwargs, request.options)
+	result, err := s.callContext(ctx, request.procedure, request.args, request.kwargs, request.options)
 	if err != nil {
 		return &Result{Err: err}
 	}

@@ -2,6 +2,7 @@ package xconn
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/xconnio/xconn-core/bindings/go/messages"
 	"github.com/xconnio/xconn-core/bindings/go/protocol"
@@ -76,7 +77,24 @@ func (c *CallRequest) Execute() *Result {
 }
 
 func (c *CallRequest) ExecuteContext(ctx context.Context) *Result {
-	return c.session.callWithRequest(ctx, c)
+	session, err := c.selectSession(ctx)
+	if err != nil {
+		for _, arg := range c.args {
+			if source := streamSource(arg); source != nil && source.reader != nil && source.used.CompareAndSwap(false, true) {
+				_ = source.reader.Close()
+			}
+		}
+		return &Result{Err: err}
+	}
+
+	return session.callWithRequest(ctx, c)
+}
+
+func (c *CallRequest) selectSession(ctx context.Context) (*Session, error) {
+	if c.session == nil {
+		return nil, fmt.Errorf("CallRequest is not attached to a session")
+	}
+	return c.session.callSession(ctx, c.procedure)
 }
 
 func (c *CallRequest) Option(key string, value any) *CallRequest {

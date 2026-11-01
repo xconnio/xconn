@@ -81,8 +81,12 @@ func (r *CallRequest) StreamContext(ctx context.Context, options ...StreamOption
 		}
 	}
 
+	session, err := r.selectSession(ctx)
+	if err != nil {
+		return nil, err
+	}
 	lifetime, cancel := context.WithCancel(ctx)
-	value, err := r.session.request(lifetime, "stream_open", map[string]any{
+	value, err := session.request(lifetime, "stream_open", map[string]any{
 		"uri": r.procedure, "args": r.args, "kwargs": r.kwargs, "options": r.options,
 		"progressive_input": config.ProgressiveInput, "buffer_size": config.BufferSize,
 		"progressive_results": config.Results != ResultsFinalOnly,
