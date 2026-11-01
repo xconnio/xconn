@@ -45,6 +45,8 @@ impl AsyncWrite for Stream {
 
 #[derive(Clone)]
 pub struct Connection {
+    #[cfg(feature = "rpc-streams")]
+    rpc_session: Arc<Mutex<bool>>,
     pub connection: quinn::Connection,
     _endpoint: quinn::Endpoint,
 }
@@ -62,6 +64,8 @@ impl Connection {
         Ok(Self {
             connection,
             _endpoint: endpoint,
+            #[cfg(feature = "rpc-streams")]
+            rpc_session: Arc::new(Mutex::new(false)),
         })
     }
 
@@ -89,10 +93,24 @@ impl Connection {
         spec: Box<dyn SerializerSpec>,
         auth: Box<dyn wampproto::authenticators::authenticator::ClientAuthenticator + Send + Sync>,
     ) -> Result<Session, Error> {
+        #[cfg(feature = "rpc-streams")]
+        let mut primary = self.rpc_session.lock().await;
         let stream = self.open_raw().await?;
         let peer = client_handshake(Box::new(stream), spec.serializer_id()).await?;
         let (peer, details) = join(peer, realm, spec.serializer(), auth).await?;
-        Ok(Session::new(details, peer, spec.serializer()))
+        let session = Session::new(details, peer, spec.serializer());
+        #[cfg(feature = "rpc-streams")]
+        let session = if *primary {
+            session
+        } else {
+            *primary = true;
+            let connection = self.clone();
+            session.with_stream_opener(Arc::new(move || {
+                let connection = connection.clone();
+                Box::pin(async move { Ok(Box::new(connection.open_raw().await?) as super::rawsocket::BoxStream) })
+            }))
+        };
+        Ok(session)
     }
 
     pub fn close(&self) {
@@ -201,7 +219,12 @@ impl Listener {
                                 return;
                             };
                             let (authenticated, mut identity) = watch::channel(None);
-                            let accepted = Connection { connection: connection.clone(), _endpoint: endpoint };
+                            let accepted = Connection {
+                                connection: connection.clone(),
+                                _endpoint: endpoint,
+                                #[cfg(feature = "rpc-streams")]
+                                rpc_session: Arc::new(Mutex::new(false)),
+                            };
                             let mut announced = false;
                             let mut streams = tokio::task::JoinSet::new();
 

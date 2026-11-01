@@ -2,13 +2,17 @@
 use super::{
     joiner::join,
     peer::Peer,
-    rawsocket::{BoxStream, client_handshake, server_handshake},
-    router::{Router, serializer},
+    rawsocket::{BoxStream, client_handshake},
+    router::Router,
     session::Session,
 };
+#[cfg(not(feature = "rpc-streams"))]
+use super::{rawsocket::server_handshake, router::serializer};
 use crate::{Error, SerializerSpec, TransportType};
 use futures_util::future::poll_fn;
 use std::sync::{Arc, Mutex};
+#[cfg(feature = "rpc-streams")]
+use tokio::sync::watch;
 use tokio::sync::{Mutex as AsyncMutex, Notify, mpsc};
 use tokio_util::compat::{FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
 use wampproto::authenticators::authenticator::ClientAuthenticator;
@@ -157,26 +161,45 @@ pub async fn connect(
         peer,
         connection: connection.clone(),
     });
-    Ok(Session::new(details, peer, spec.serializer()))
+    let session = Session::new(details, peer, spec.serializer());
+    #[cfg(feature = "rpc-streams")]
+    let session = session.with_stream_opener(Arc::new(move || {
+        let connection = connection.clone();
+        Box::pin(async move { connection.open().await })
+    }));
+    Ok(session)
 }
 
 /// Serve a single yamux connection. The listener owns this future and all
 /// logical-stream tasks, including their cancellation on listener shutdown.
 pub async fn serve(router: Router, stream: BoxStream) -> Result<(), Error> {
     let connection = Connection::new(stream, ::yamux::Mode::Server);
+    #[cfg(feature = "rpc-streams")]
+    let (authenticated, _) = watch::channel(None);
+    #[cfg(feature = "rpc-streams")]
+    let (raw, unused) = mpsc::channel(1);
+    #[cfg(feature = "rpc-streams")]
+    drop(unused);
     let mut streams = tokio::task::JoinSet::new();
     loop {
         tokio::select! {
             incoming = connection.accept() => {
                 let Some(stream) = incoming else { break };
                 let router = router.clone();
+                #[cfg(feature = "rpc-streams")]
+                let (authenticated, raw) = (authenticated.clone(), raw.clone());
                 streams.spawn(async move {
+                    #[cfg(feature = "rpc-streams")]
+                    let _ = super::multiplex::serve_stream(router, stream, authenticated, raw).await;
+                    #[cfg(not(feature = "rpc-streams"))]
+                    {
                     let handshake = tokio::time::timeout(
                         std::time::Duration::from_secs(10),
                         server_handshake(stream),
                     ).await;
                     if let Ok(Ok((peer, id))) = handshake {
                         let _ = router.accept(peer, serializer(id)).await;
+                    }
                     }
                 });
             }

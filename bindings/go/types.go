@@ -8,6 +8,7 @@ type Options = map[string]any
 // Result carries the same payload in handler replies and received RPC results.
 // Err contains a native error when an operation or application reply fails.
 type Result struct {
+	streams      *streamPayload
 	invocationID uint64
 	Err          error
 	Args         []any

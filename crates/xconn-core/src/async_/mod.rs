@@ -11,7 +11,11 @@ pub use types::*;
 pub mod router;
 pub mod server;
 
-#[cfg(any(feature = "quic", feature = "webtransport"))]
+#[cfg(any(
+    feature = "quic",
+    feature = "webtransport",
+    all(feature = "yamux", feature = "rpc-streams")
+))]
 mod multiplex;
 
 #[cfg(feature = "quic")]
@@ -31,3 +35,6 @@ pub mod services;
 
 #[cfg(feature = "yamux")]
 pub mod yamux;
+
+#[cfg(feature = "rpc-streams")]
+mod rpc_streams;

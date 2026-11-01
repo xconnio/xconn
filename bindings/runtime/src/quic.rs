@@ -124,6 +124,23 @@ pub(super) fn stream_output(stream: BoxStream, fields: HashMap<String, Value>) -
 pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<Output> {
     let plain = |value| Ok(Output::plain(value));
     match method {
+        #[cfg(feature = "rpc-streams")]
+        "rpc_stream_offer" => {
+            let session = crate::resources::get_session(handle_field(&f, "handle")?)?;
+            let (reference, stream) = session.session.offer_stream().await.map_err(|e| e.to_string())?;
+            Ok(stream_output(stream, HashMap::from([("reference".into(), reference)])))
+        }
+        #[cfg(feature = "rpc-streams")]
+        "rpc_stream_accept" => {
+            let session = crate::resources::get_session(handle_field(&f, "handle")?)?;
+            let reference = f.get("reference").ok_or("stream reference is required")?;
+            let stream = session
+                .session
+                .open_stream_argument(reference)
+                .await
+                .map_err(|e| e.to_string())?;
+            Ok(stream_output(stream, HashMap::new()))
+        }
         "quic_listen" => {
             let router = server_router(&f)?;
             let address = string_field(&f, "address")?

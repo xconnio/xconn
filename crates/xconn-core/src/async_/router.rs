@@ -97,6 +97,8 @@ struct Client {
 }
 
 struct Realm {
+    #[cfg(feature = "rpc-streams")]
+    rpc_streams: Arc<super::rpc_streams::Registry>,
     config: RealmConfig,
     broker: Broker,
     dealer: Dealer,
@@ -110,6 +112,8 @@ impl Realm {
         let mut dealer = Dealer::new();
         dealer.auto_disclose_caller(config.disclose_caller);
         Self {
+            #[cfg(feature = "rpc-streams")]
+            rpc_streams: Arc::new(super::rpc_streams::Registry::default()),
             config,
             broker,
             dealer,
@@ -131,11 +135,23 @@ impl Realm {
 
     fn routed(&self, messages: Vec<RoutedMessage>) {
         for routed in messages {
+            #[cfg(feature = "rpc-streams")]
+            if let Some(interrupt) = routed
+                .message
+                .as_any()
+                .downcast_ref::<wampproto::messages::interrupt::Interrupt>()
+            {
+                self.rpc_streams
+                    .finish_invocation(routed.recipient, interrupt.request_id);
+            }
+
             let _ = self.deliver(routed.recipient, routed.message.as_ref());
         }
     }
 
     fn detach(&mut self, id: i64) {
+        #[cfg(feature = "rpc-streams")]
+        self.rpc_streams.detach(id);
         if self.config.meta_api && self.clients.contains_key(&id) {
             self.meta_event(id, false);
         }
@@ -256,14 +272,27 @@ impl Realm {
                 Ok(true)
             }
             8 | 48 | 64 | 66 | 70 => {
-                if let Some(out) = self.dealer.receive_message(id, msg)?
-                    && let Err(err) = self.deliver(out.recipient, out.message.as_ref())
+                #[cfg(feature = "rpc-streams")]
                 {
-                    // Remove a blocked callee so pending calls receive disconnect errors.
-                    self.detach(out.recipient);
+                    if let Some(reply) = msg.as_any().downcast_ref::<wampproto::messages::yield_::Yield>() {
+                        if reply.options.get("progress") != Some(&Value::Bool(true)) {
+                            self.rpc_streams.finish_invocation(id, reply.request_id);
+                        }
+                    } else if let Some(error) = msg.as_any().downcast_ref::<ProtocolError>()
+                        && error.message_type == Value::Int(68)
+                    {
+                        self.rpc_streams.finish_invocation(id, error.request_id);
+                    }
+                }
 
-                    if out.recipient == id {
-                        return Err(err);
+                if let Some(out) = self.dealer.receive_message(id, msg)? {
+                    #[cfg(feature = "rpc-streams")]
+                    self.rpc_streams.route(id, out.recipient, out.message.as_ref())?;
+                    if let Err(err) = self.deliver(out.recipient, out.message.as_ref()) {
+                        self.detach(out.recipient);
+                        if out.recipient == id {
+                            return Err(err);
+                        }
                     }
                 }
 
@@ -294,6 +323,39 @@ impl Router {
         }
         self.keepalive = Some((interval, timeout));
         Ok(self)
+    }
+
+    #[cfg(all(
+        feature = "rpc-streams",
+        any(feature = "quic", feature = "webtransport", feature = "yamux")
+    ))]
+    pub(crate) async fn relay_rpc_stream(
+        &self,
+        identity: &SessionDetails,
+        stream: super::rawsocket::BoxStream,
+    ) -> Result<(), Error> {
+        let realm = self
+            .realms
+            .lock()
+            .unwrap()
+            .get(&identity.realm)
+            .cloned()
+            .ok_or_else(|| Error::new("stream realm no longer exists"))?;
+        let registry = realm.lock().unwrap().rpc_streams.clone();
+        registry.relay(identity.id, stream).await
+    }
+
+    #[cfg(feature = "rpc-streams")]
+    fn memory_stream_peer(&self, peer: Box<dyn Peer>, details: &crate::SessionDetails) -> Result<Box<dyn Peer>, Error> {
+        let realm = self
+            .realms
+            .lock()
+            .unwrap()
+            .get(&details.realm())
+            .cloned()
+            .ok_or_else(|| Error::new("no such realm"))?;
+        let opener = realm.lock().unwrap().rpc_streams.memory_opener(details.id())?;
+        Ok(super::peer::with_streams(peer, opener))
     }
 
     pub fn new() -> Self {
@@ -356,14 +418,21 @@ impl Router {
         let (client, server) = MemoryPeer::pair(256);
         let router = self.clone();
         let serializer = spec.serializer();
+        let (ready, mut waiting) = tokio::sync::watch::channel(None);
         tokio::spawn(async move {
-            let _ = router.accept(server, serializer).await;
+            let _ = router.accept_notified(server, serializer, ready).await;
         });
         let serializer = spec.serializer();
         let (peer, details) =
             tokio::time::timeout(Duration::from_secs(10), join(client, realm, spec.serializer(), auth))
                 .await
                 .map_err(|_| Error::new("handshake timeout"))??;
+        waiting
+            .wait_for(|value| value.is_some())
+            .await
+            .map_err(|_| Error::new("internal attachment failed"))?;
+        #[cfg(feature = "rpc-streams")]
+        let peer = self.memory_stream_peer(peer, &details)?;
         Ok(Session::new(details, peer, serializer))
     }
 
@@ -456,6 +525,8 @@ impl Router {
                 return Err(err.into());
             }
 
+            #[cfg(feature = "rpc-streams")]
+            realm.rpc_streams.attach(id);
             realm.clients.insert(
                 id,
                 Client {
@@ -1040,7 +1111,10 @@ impl Router {
             .wait_for(|value| value.is_some())
             .await
             .map_err(|_| Error::new("internal attachment failed"))?;
-        Ok((client, crate::SessionDetails::from_protocol(&details)))
+        let details = crate::SessionDetails::from_protocol(&details);
+        #[cfg(feature = "rpc-streams")]
+        let client = self.memory_stream_peer(client, &details)?;
+        Ok((client, details))
     }
 
     pub fn kill_session(&self, realm_name: &str, id: i64, reason: &str) -> Result<(), Error> {

@@ -78,6 +78,10 @@ jobs:
       - if: runner.os == 'Linux'
         run: cargo check --locked -p xconn-core --no-default-features --features yamux
       - if: runner.os == 'Linux'
+        run: cargo check --locked -p xconn-core --no-default-features --features rpc-streams
+      - if: runner.os == 'Linux'
+        run: cargo check --locked -p xconn-core --no-default-features --features yamux,rpc-streams
+      - if: runner.os == 'Linux'
         run: cargo check --locked -p xconn-core --no-default-features --features crypto
       - run: cargo check --locked -p xconn-core --no-default-features --features async
       - run: cargo check --locked -p xconn-core --no-default-features --features sync

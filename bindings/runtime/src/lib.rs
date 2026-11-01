@@ -68,6 +68,11 @@ async fn dispatch_fields(f: HashMap<String, Value>) -> Result<resources::Output>
     if method.starts_with("webtransport_") {
         return webtransport::dispatch(&method, f).await;
     }
+    #[cfg(feature = "rpc-streams")]
+    if method.starts_with("rpc_stream_") {
+        return quic::dispatch(&method, f).await;
+    }
+
     #[cfg(feature = "quic")]
     if method.starts_with("quic_") {
         return quic::dispatch(&method, f).await;
