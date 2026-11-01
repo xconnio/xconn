@@ -429,4 +429,57 @@ mod tests {
         drop(stream);
         registry.detach(1);
     }
+
+    #[cfg(feature = "rpc-streams")]
+    #[tokio::test]
+    async fn external_carriers_require_the_live_authenticated_identity() {
+        use crate::async_::router::{RealmConfig, Router};
+        use crate::async_::{joiner::join, peer::MemoryPeer, session::Session};
+        use wampproto::authenticators::anonymous::AnonymousAuthenticator;
+
+        let router = Router::new();
+        router.add_realm("test", RealmConfig::default()).unwrap();
+        let (client, server) = MemoryPeer::pair(16);
+        let (ready, mut waiting) = watch::channel(None);
+        let host = router.clone();
+        let accepted = tokio::spawn(async move {
+            host.accept_notified(server, Box::new(wampproto::serializers::json::JSONSerializer {}), ready)
+                .await
+        });
+        let (peer, details) = join(
+            client,
+            "test",
+            Box::new(wampproto::serializers::json::JSONSerializer {}),
+            Box::new(AnonymousAuthenticator::default()),
+        )
+        .await
+        .unwrap();
+        let session = Session::new(details, peer, Box::new(wampproto::serializers::json::JSONSerializer {}));
+        let mut identity = waiting
+            .wait_for(|details| details.is_some())
+            .await
+            .unwrap()
+            .clone()
+            .unwrap();
+        let original = identity.clone();
+        assert!(router.rpc_stream_opener(&identity).is_ok());
+        identity.authid.push_str("-forged");
+        assert!(router.rpc_stream_opener(&identity).is_err());
+        identity.authid = original.authid.clone();
+        identity.auth_role.push_str("-forged");
+        assert!(router.rpc_stream_opener(&identity).is_err());
+        identity.auth_role = original.auth_role.clone();
+        identity.created_at.push_str("-stale");
+        assert!(router.rpc_stream_opener(&identity).is_err());
+        identity.created_at = original.created_at.clone();
+        session.leave().await.unwrap();
+        accepted.await.unwrap().unwrap();
+        tokio::time::timeout(Duration::from_secs(2), async {
+            while router.rpc_stream_opener(&identity).is_ok() {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
 }

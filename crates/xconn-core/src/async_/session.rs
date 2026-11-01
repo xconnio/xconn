@@ -680,11 +680,10 @@ impl Session {
         true
     }
 
-    #[cfg(all(
-        feature = "rpc-streams",
-        any(feature = "quic", feature = "webtransport", feature = "yamux")
-    ))]
-    pub(crate) fn with_stream_opener(self, open: super::peer::StreamOpener) -> Self {
+    /// Attach a stream factory supplied by a trusted transport adapter.
+    /// The adapter must bind streams to this session's authenticated connection.
+    #[cfg(feature = "rpc-streams")]
+    pub fn with_stream_opener(self, open: super::peer::StreamOpener) -> Self {
         self.state.lock().unwrap().stream_opener = Some(open);
         self
     }
