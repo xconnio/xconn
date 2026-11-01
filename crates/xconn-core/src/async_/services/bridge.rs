@@ -6,7 +6,12 @@ use crate::async_::{
 };
 use crate::wampproto::messages::schema::WireValue;
 use crate::{CallRequest, Error, RpcResult, StreamOptions, Value, WampError};
-use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
+use std::{
+    collections::HashMap,
+    future::Future,
+    pin::Pin,
+    sync::{Arc, Mutex as SyncMutex},
+};
 use tokio::sync::{Mutex, watch};
 
 /// The application chooses how a disclosed caller obtains a backend session.
@@ -45,7 +50,7 @@ impl BridgeRoute {
 
 struct Callers {
     closed: bool,
-    sessions: HashMap<i64, Session>,
+    sessions: HashMap<i64, Arc<Mutex<Option<Session>>>>,
 }
 
 struct ForwardedCall {
@@ -53,7 +58,13 @@ struct ForwardedCall {
     target: Session,
 }
 
-type ForwardedCalls = Arc<Mutex<HashMap<i64, Arc<ForwardedCall>>>>;
+enum CallState {
+    Finished,
+    Active(Arc<ForwardedCall>),
+}
+
+type CallSlot = Arc<Mutex<Option<CallState>>>;
+type ForwardedCalls = Arc<Mutex<HashMap<i64, CallSlot>>>;
 
 #[derive(Clone, Copy)]
 enum StreamDirection {
@@ -82,16 +93,19 @@ impl Drop for StreamRelays {
 struct ForwardingGuard {
     context: InvocationContext,
     id: i64,
-    call: Arc<ForwardedCall>,
+    call: Option<Arc<ForwardedCall>>,
+    slot: CallSlot,
     calls: ForwardedCalls,
 }
 
 impl Drop for ForwardingGuard {
     fn drop(&mut self) {
-        if !self.call.rpc.is_finished() {
-            self.call.rpc.cancel();
+        if let Some(call) = &self.call
+            && !call.rpc.is_finished()
+        {
+            call.rpc.cancel();
         }
-        let (id, call, calls) = (self.id, self.call.clone(), self.calls.clone());
+        let (id, slot, calls) = (self.id, self.slot.clone(), self.calls.clone());
         let context = self.context.clone();
         tokio::spawn(async move {
             // A backend may finish before the caller's final input. Retain its
@@ -99,7 +113,7 @@ impl Drop for ForwardingGuard {
             // or is interrupted, so already-queued chunks cannot reopen it.
             context.cancelled().await;
             let mut calls = calls.lock().await;
-            if calls.get(&id).is_some_and(|current| Arc::ptr_eq(current, &call)) {
+            if calls.get(&id).is_some_and(|current| Arc::ptr_eq(current, &slot)) {
                 calls.remove(&id);
             }
         });
@@ -112,16 +126,12 @@ struct Forwarder {
     streams: Mutex<tokio::task::JoinSet<()>>,
     target: Session,
     factory: Option<SessionFactory>,
-    callers: Mutex<Callers>,
+    callers: SyncMutex<Callers>,
     stopped: watch::Sender<bool>,
 }
 
 impl Forwarder {
     async fn target(&self, context: &InvocationContext) -> Result<Session, Error> {
-        let mut callers = self.callers.lock().await;
-        if callers.closed {
-            return Err(Error::new("bridge closed"));
-        }
         let Some(factory) = &self.factory else {
             return Ok(self.target.clone());
         };
@@ -131,7 +141,15 @@ impl Forwarder {
             .and_then(Value::integer)
             .filter(|id| *id > 0)
             .ok_or_else(|| Error::new("caller disclosure is required"))?;
-        if let Some(session) = callers.sessions.get(&session_id) {
+        let slot = {
+            let mut callers = self.callers.lock().unwrap();
+            if callers.closed {
+                return Err(Error::new("bridge closed"));
+            }
+            callers.sessions.entry(session_id).or_default().clone()
+        };
+        let mut cached = slot.lock().await;
+        if let Some(session) = &*cached {
             return Ok(session.clone());
         }
         let text = |key: &str| match fields.get(key) {
@@ -144,7 +162,19 @@ impl Forwarder {
             authrole: text("caller_authrole"),
         })
         .await?;
-        callers.sessions.insert(session_id, session.clone());
+        let attached = {
+            let callers = self.callers.lock().unwrap();
+            !callers.closed
+                && callers
+                    .sessions
+                    .get(&session_id)
+                    .is_some_and(|current| Arc::ptr_eq(current, &slot))
+        };
+        if !attached {
+            let _ = session.close().await;
+            return Err(Error::new("caller left during backend session creation"));
+        }
+        *cached = Some(session.clone());
         Ok(session)
     }
 
@@ -222,9 +252,14 @@ impl Forwarder {
 
     async fn forward_call(&self, context: &InvocationContext, procedure: String, prefix: bool) -> RpcResult {
         let more = context.invocation.details.get("progress") == Some(&Value::Bool(true));
-        let mut calls = self.calls.lock().await;
-        if let Some(call) = calls.get(&context.request_id).cloned() {
-            drop(calls);
+        let slot = self.calls.lock().await.entry(context.request_id).or_default().clone();
+        let mut state = slot.lock().await;
+        if let Some(existing) = &*state {
+            let call = match existing {
+                CallState::Finished => return RpcResult::no_result(),
+                CallState::Active(call) => call.clone(),
+            };
+            drop(state);
             if call.rpc.is_finished() {
                 return RpcResult::no_result();
             }
@@ -254,6 +289,16 @@ impl Forwarder {
             // The first handler owns the result path and sends the terminal reply.
             return RpcResult::no_result();
         }
+        // Reserve this invocation before awaiting. Later chunks wait on this
+        // slot only; unrelated invocations never share its initialization lock.
+        *state = Some(CallState::Finished);
+        let mut guard = ForwardingGuard {
+            context: context.clone(),
+            id: context.request_id,
+            call: None,
+            slot: slot.clone(),
+            calls: self.calls.clone(),
+        };
         let target = match self.target(context).await {
             Ok(target) => target,
             Err(error) => return failure(error),
@@ -291,14 +336,9 @@ impl Forwarder {
             Err(error) => return failure(error),
         };
         let call = Arc::new(ForwardedCall { rpc: call, target });
-        calls.insert(context.request_id, call.clone());
-        drop(calls);
-        let _guard = ForwardingGuard {
-            context: context.clone(),
-            id: context.request_id,
-            call: call.clone(),
-            calls: self.calls.clone(),
-        };
+        guard.call = Some(call.clone());
+        *state = Some(CallState::Active(call.clone()));
+        drop(state);
         self.receive_results(context, &call.rpc, &call.target).await
     }
 
@@ -354,8 +394,11 @@ impl Inner {
     async fn close(&self) -> Result<(), Error> {
         let _gate = self.close_gate.lock().await;
         self.forwarder.stopped.send_replace(true);
-        for call in self.forwarder.calls.lock().await.drain().map(|(_, call)| call) {
-            call.rpc.cancel();
+        let calls = std::mem::take(&mut *self.forwarder.calls.lock().await);
+        for slot in calls.into_values() {
+            if let Some(CallState::Active(call)) = &*slot.lock().await {
+                call.rpc.cancel();
+            }
         }
         #[cfg(feature = "rpc-streams")]
         {
@@ -364,12 +407,14 @@ impl Inner {
             while streams.join_next().await.is_some() {}
         }
         let sessions = {
-            let mut callers = self.forwarder.callers.lock().await;
+            let mut callers = self.forwarder.callers.lock().unwrap();
             callers.closed = true;
             std::mem::take(&mut callers.sessions)
         };
-        for session in sessions.into_values() {
-            let _ = session.close().await;
+        for slot in sessions.into_values() {
+            if let Some(session) = slot.lock().await.take() {
+                let _ = session.close().await;
+            }
         }
         let registrations = std::mem::take(&mut *self.registrations.lock().await);
         let subscription = self.subscription.lock().await.take();
@@ -416,7 +461,7 @@ impl Bridge {
             streams: Mutex::new(tokio::task::JoinSet::new()),
             target,
             factory,
-            callers: Mutex::new(Callers {
+            callers: SyncMutex::new(Callers {
                 closed: false,
                 sessions: HashMap::new(),
             }),
@@ -441,8 +486,10 @@ impl Bridge {
                         let Some(id) = event.args.first().and_then(Value::integer) else {
                             return;
                         };
-                        let session = callers.callers.lock().await.sessions.remove(&id);
-                        if let Some(session) = session {
+                        let slot = callers.callers.lock().unwrap().sessions.remove(&id);
+                        if let Some(slot) = slot
+                            && let Some(session) = slot.lock().await.take()
+                        {
                             let _ = session.close().await;
                         }
                     }

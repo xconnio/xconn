@@ -135,20 +135,27 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
                 Some(Arc::new(move |caller| {
                     let callbacks = callbacks.clone();
                     Box::pin(async move {
-                        let value = callbacks
-                            .call(
-                                "bridge_session",
-                                object_value([
-                                    ("session_id", Value::Int(caller.session_id)),
-                                    ("authid", Value::Str(caller.authid)),
-                                    ("authrole", Value::Str(caller.authrole)),
-                                ]),
-                            )
-                            .map_err(xconn_core::Error::new)?;
-                        let fields = dictionary(&value).map_err(xconn_core::Error::new)?;
-                        let session = get_session(handle_field(&fields, "handle").map_err(xconn_core::Error::new)?)
-                            .map_err(xconn_core::Error::new)?;
-                        Ok(session.session.clone())
+                        // A host callback may block. Yield before invoking it so
+                        // the source session reader can dispatch other calls.
+                        let created = tokio::task::spawn_blocking(move || {
+                            let value = callbacks
+                                .call(
+                                    "bridge_session",
+                                    object_value([
+                                        ("session_id", Value::Int(caller.session_id)),
+                                        ("authid", Value::Str(caller.authid)),
+                                        ("authrole", Value::Str(caller.authrole)),
+                                    ]),
+                                )
+                                .map_err(xconn_core::Error::new)?;
+                            let fields = dictionary(&value).map_err(xconn_core::Error::new)?;
+                            let session = get_session(handle_field(&fields, "handle").map_err(xconn_core::Error::new)?)
+                                .map_err(xconn_core::Error::new)?;
+                            Ok::<_, xconn_core::Error>(PendingFactorySession(Some(session.session.clone())))
+                        })
+                        .await
+                        .map_err(|error| xconn_core::Error::new(error.to_string()))??;
+                        Ok(created.into_session())
                     })
                 }))
             } else {
@@ -168,5 +175,24 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
             Ok(Output::plain(Value::Null))
         }
         _ => Err(format!("unknown service operation {method}")),
+    }
+}
+
+// A canceled factory future must still close a session returned by the host.
+struct PendingFactorySession(Option<xconn_core::async_::session::Session>);
+
+impl PendingFactorySession {
+    fn into_session(mut self) -> xconn_core::async_::session::Session {
+        self.0.take().expect("factory session is present")
+    }
+}
+
+impl Drop for PendingFactorySession {
+    fn drop(&mut self) {
+        if let Some(session) = self.0.take() {
+            crate::runtime().spawn(async move {
+                let _ = session.close().await;
+            });
+        }
     }
 }
