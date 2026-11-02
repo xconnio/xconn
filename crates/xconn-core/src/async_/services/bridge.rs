@@ -263,7 +263,8 @@ impl Forwarder {
                 CallState::Finished => return RpcResult::no_result(),
                 CallState::Active(call) => call.clone(),
             };
-            drop(state);
+            // Serialize stream setup and sending for this invocation. A later
+            // chunk must not overtake an earlier chunk waiting on its transport.
             if call.rpc.is_finished() {
                 return RpcResult::no_result();
             }
@@ -285,6 +286,7 @@ impl Forwarder {
             } else {
                 call.rpc.finish(args, kwargs).await
             };
+            drop(state);
             if result.is_ok() {
                 relays.commit();
             } else if !call.rpc.is_finished() {
