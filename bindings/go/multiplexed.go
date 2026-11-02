@@ -114,7 +114,7 @@ func (c *QUICConn) OpenRawStream(ctx context.Context) (net.Conn, error) {
 		return nil, err
 	}
 
-	return &nativeStreamConn{QUICStream: stream, local: c.localAddr, remote: c.remoteAddr}, nil
+	return &nativeStreamConn{nativeStream: stream, local: c.localAddr, remote: c.remoteAddr}, nil
 }
 
 func (c *QUICConn) AcceptRawStream(ctx context.Context) (net.Conn, error) {
@@ -123,11 +123,11 @@ func (c *QUICConn) AcceptRawStream(ctx context.Context) (net.Conn, error) {
 		return nil, err
 	}
 
-	return &nativeStreamConn{QUICStream: stream, local: c.localAddr, remote: c.remoteAddr}, nil
+	return &nativeStreamConn{nativeStream: stream, local: c.localAddr, remote: c.remoteAddr}, nil
 }
 
 type nativeStreamConn struct {
-	*QUICStream
+	*nativeStream
 	local  net.Addr
 	remote net.Addr
 }
@@ -137,12 +137,12 @@ func (s *nativeStreamConn) LocalAddr() net.Addr { return s.local }
 func (s *nativeStreamConn) RemoteAddr() net.Addr { return s.remote }
 
 func (s *nativeStreamConn) Read(data []byte) (int, error) {
-	n, err := s.QUICStream.Read(data)
+	n, err := s.nativeStream.Read(data)
 	return n, streamDeadlineError(err)
 }
 
 func (s *nativeStreamConn) Write(data []byte) (int, error) {
-	n, err := s.QUICStream.Write(data)
+	n, err := s.nativeStream.Write(data)
 	return n, streamDeadlineError(err)
 }
 
@@ -239,7 +239,7 @@ func (s *WebTransportSession) OpenStream() (net.Conn, error) {
 		return nil, err
 	}
 
-	return &nativeStreamConn{QUICStream: stream, local: s.connection.localAddr, remote: s.connection.remoteAddr}, nil
+	return &nativeStreamConn{nativeStream: stream, local: s.connection.localAddr, remote: s.connection.remoteAddr}, nil
 }
 
 func (c *WebTransportConn) CloseWithError(code uint64, reason string) error {

@@ -40,12 +40,15 @@ impl Default for Config {
 }
 
 impl Config {
-    fn signaling(&self, offerer: bool) -> SignalingConfig {
-        let (remote, local) = if offerer {
-            (ANSWERER_CANDIDATES, OFFERER_CANDIDATES)
-        } else {
-            (OFFERER_CANDIDATES, ANSWERER_CANDIDATES)
-        };
+    fn client_signaling(&self) -> SignalingConfig {
+        self.signaling(ANSWERER_CANDIDATES, OFFERER_CANDIDATES)
+    }
+
+    fn provider_signaling(&self) -> SignalingConfig {
+        self.signaling(OFFERER_CANDIDATES, ANSWERER_CANDIDATES)
+    }
+
+    fn signaling(&self, remote: &str, local: &str) -> SignalingConfig {
         SignalingConfig {
             offer_procedure: OFFER.into(),
             remote_candidates_topic: remote.into(),
@@ -72,7 +75,7 @@ pub async fn connect_once(
 ) -> Result<WebRTCSession, Error> {
     let capability = hub.call(RESOLVE).execute().await?;
     if let Some(error) = capability.error {
-        return Err(Error::new(error.uri));
+        return Err(Error::application(error));
     }
     let args = capability.args.unwrap_or_default();
     if args.get(1).and_then(Value::integer) == Some(hub.details().id()) {
@@ -83,7 +86,7 @@ pub async fn connect_once(
     }
     connect_with_timeouts(
         hub,
-        config.signaling(true),
+        config.client_signaling(),
         &hub.details().realm(),
         spec,
         auth,
@@ -129,9 +132,13 @@ pub struct Endpoint {
 
 impl Endpoint {
     pub async fn expose(signaling: Session, router: Router, config: Config) -> Result<Self, Error> {
-        let provider =
-            Provider::start_with_timeouts(signaling.clone(), router, config.signaling(false), config.timeouts())
-                .await?;
+        let provider = Provider::start_with_timeouts(
+            signaling.clone(),
+            router,
+            config.provider_signaling(),
+            config.timeouts(),
+        )
+        .await?;
         let id = signaling.details().id();
         let registered = signaling
             .register(RESOLVE, move |_| async move {
@@ -141,7 +148,7 @@ impl Endpoint {
             .await?;
         if let Some(error) = registered.error {
             provider.close().await;
-            return Err(Error::new(error.uri));
+            return Err(Error::application(error));
         }
         let registration = registered.registration_id;
         let (stop, mut stopping) = watch::channel(false);

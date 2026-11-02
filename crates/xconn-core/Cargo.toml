@@ -8,7 +8,7 @@ description = "Async and blocking WAMP clients, routers, and transports"
 readme = "README.md"
 
 [features]
-services = ["async"]
+services = ["async", "dep:tracing"]
 rpc-streams = ["async"]
 yamux = ["async", "dep:yamux", "dep:tokio-util", "dep:tokio-rustls", "dep:rustls-native-certs"]
 crypto = ["dep:xconn-crypto"]

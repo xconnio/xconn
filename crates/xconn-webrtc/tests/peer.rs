@@ -153,3 +153,43 @@ async fn rust_discovery_advertisement_and_recovery_need_no_binding_callbacks() {
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn discovery_preserves_application_error_payloads() {
+    let router = Router::new();
+    router.add_realm("edge", RealmConfig::default()).unwrap();
+    let endpoint = join(&router).await;
+    let caller = join(&router).await;
+    endpoint
+        .register(peer::RESOLVE, |_| async {
+            RpcResult {
+                error: Some(xconn_core::WampError {
+                    uri: "app.discovery_denied".into(),
+                    args: Some(vec!["reason".into()]),
+                    kwargs: Some(std::collections::HashMap::from([("retry".into(), false.into())])),
+                }),
+                ..Default::default()
+            }
+        })
+        .execute()
+        .await
+        .unwrap();
+
+    let result = peer::connect_once(
+        &caller,
+        &Config::default(),
+        Box::new(CBORSerializerSpec),
+        Box::new(AnonymousAuthenticator::default()),
+    )
+    .await;
+    let Err(error) = result else {
+        panic!("discovery should fail")
+    };
+    let application = error.application.expect("structured WAMP error");
+    assert_eq!(application.uri, "app.discovery_denied");
+    assert_eq!(application.args, Some(vec!["reason".into()]));
+    assert_eq!(application.kwargs.unwrap().get("retry"), Some(&false.into()));
+
+    caller.close().await.unwrap();
+    endpoint.close().await.unwrap();
+}
