@@ -1,3 +1,5 @@
+import { exerciseRPCStreams } from "./rpc-streams.mjs";
+
 function check(value, message) {
     if (!value) throw new Error(message);
 }
@@ -86,9 +88,17 @@ export async function exerciseWebRTC(api, server, variant) {
         for (const serializer of serializers) {
             const session = await peer.connection.openSession("realm", { serializer });
             sessions.push(session);
+            let secondaryRejected = false;
+            try {
+                await session.offerStream();
+            } catch {
+                secondaryRejected = true;
+            }
+            check(secondaryRejected, "secondary WAMP session accepted RPC streams");
             const large = "rtc".repeat(50000);
             check((await session.call("echo").arg(large).execute()).args[0] === large, "chunked WAMP RPC failed");
         }
+        await exerciseRPCStreams(peer);
         const largeResult = await peer.call("large_result").execute();
         check(largeResult.args[0] === "rtc".repeat(700000), "multi-megabyte WebRTC response changed");
         check(

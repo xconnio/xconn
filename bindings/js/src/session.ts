@@ -1,3 +1,4 @@
+import { acceptStream, offerStream, type StreamOpener } from "./rpc-streams.js";
 import { Discovery } from "./discovery.js";
 import { Call } from "./call.js";
 import type { StreamOptions } from "./call.js";
@@ -43,6 +44,7 @@ interface Subscribed {
 
 export interface SessionOptions {
     closeTimeout?: number;
+    streamOpener?: StreamOpener;
 }
 
 export class Session {
@@ -62,15 +64,29 @@ export class Session {
         this.resolveClosed = resolve;
     });
     private readonly closeTimeout: number;
+    private readonly streamOpener?: StreamOpener;
 
     constructor(
         private readonly base: BaseSession,
         options: SessionOptions = {},
     ) {
+        this.streamOpener = options.streamOpener;
         this.closeTimeout = timeoutValue(options.closeTimeout ?? 10000, "closeTimeout");
         this.ids = new (getNative().RequestIds)();
         base.onDisconnect((reason) => this.finish(reason ?? "Connection closed"));
         void this.receiveLoop();
+    }
+
+    offerStream() {
+        if (this.closed || this.closing) throw new ProtocolError("Session closed");
+        if (!this.streamOpener) throw new ProtocolError("Session transport does not support RPC streams");
+        return offerStream(this.streamOpener);
+    }
+
+    openStreamArgument(reference: unknown) {
+        if (this.closed || this.closing) throw new ProtocolError("Session closed");
+        if (!this.streamOpener) throw new ProtocolError("Session transport does not support RPC streams");
+        return acceptStream(this.streamOpener, reference);
     }
 
     discovery(prefix: string): Discovery {
@@ -277,7 +293,10 @@ export class Session {
             Code.CALL,
             Code.RESULT,
             { procedure, args, kwargs, options: requestOptions },
-            (fields) => new Result(fields.args, fields.kwargs, fields.details),
+            (fields) =>
+                new Result(fields.args, fields.kwargs, fields.details, (reference) =>
+                    this.openStreamArgument(reference),
+                ),
             {
                 ...control,
                 opened: (id) => {
@@ -319,7 +338,10 @@ export class Session {
             Code.CALL,
             Code.RESULT,
             { procedure, args, kwargs, options: requestOptions },
-            (fields) => new Result(fields.args, fields.kwargs, fields.details),
+            (fields) =>
+                new Result(fields.args, fields.kwargs, fields.details, (reference) =>
+                    this.openStreamArgument(reference),
+                ),
             control,
         );
     }
@@ -533,7 +555,13 @@ export class Session {
             if (pending.receiver) {
                 const receiver = pending.receiver;
                 pending.progress = pending.progress
-                    .then(() => receiver(new Result(fields.args, fields.kwargs, fields.details)))
+                    .then(() =>
+                        receiver(
+                            new Result(fields.args, fields.kwargs, fields.details, (reference) =>
+                                this.openStreamArgument(reference),
+                            ),
+                        ),
+                    )
                     .catch((error) => this.cancel(fields.request_id, error));
             }
 
@@ -609,6 +637,7 @@ export class Session {
                     fields.details ?? {},
                     controller.signal,
                     progress,
+                    (reference) => this.openStreamArgument(reference),
                 ),
             );
 

@@ -24,3 +24,5 @@ export { ByteStream, WebTransportConnection } from "./webtransport.js";
 export type { WebTransportOptions } from "./webtransport.js";
 export { DataChannel, WebRTCConnection, WebRTCSession } from "./webrtc.js";
 export type { WebRTCOptions, ChannelOptions } from "./webrtc.js";
+
+export type { RPCStream } from "./rpc-streams.js";
