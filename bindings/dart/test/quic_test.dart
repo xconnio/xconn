@@ -4,6 +4,7 @@ import "package:crypto/crypto.dart";
 import "package:test/test.dart";
 import "package:xconn_core/quic.dart";
 
+import "rpc_streams.dart";
 import "transport_peer.dart";
 
 void main() {
@@ -25,6 +26,7 @@ void main() {
     );
     addTearDown(connection.close);
     final first = await connection.openSession("realm");
+    await exerciseRPCStreams(first);
     final second = await connection.openSession("realm");
     addTearDown(second.close);
     expect((await first.call("echo").arg("hello").execute()).args, ["hello"]);

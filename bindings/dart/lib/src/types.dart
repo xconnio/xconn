@@ -4,6 +4,7 @@ import "package:xconn_core/auth.dart";
 import "package:xconn_core/messages.dart";
 import "package:xconn_core/serializers.dart";
 import "package:xconn_core/src/payload.dart";
+import "package:xconn_core/src/rpc_streams.dart";
 import "package:xconn_core/src/session.dart";
 
 abstract class BaseSession {
@@ -81,12 +82,28 @@ abstract class Peer {
 }
 
 class Result with PayloadAccess {
-  Result({List<dynamic>? args, Map<String, dynamic>? kwargs, Map<String, dynamic>? details})
-    : args = args ?? [],
-      kwargs = kwargs ?? {},
-      details = details ?? {};
+  Result({
+    List<dynamic>? args,
+    Map<String, dynamic>? kwargs,
+    Map<String, dynamic>? details,
+    Future<RPCStream> Function(Object?)? openStream,
+  }) : args = args ?? [],
+       kwargs = kwargs ?? {},
+       details = details ?? {},
+       _openStream = openStream;
 
   factory Result.create(List<dynamic> args, [Map<String, dynamic>? kwargs]) => Result(args: args, kwargs: kwargs);
+
+  final Future<RPCStream> Function(Object?)? _openStream;
+
+  Future<RPCStream> argStream(int index) {
+    final open = _openStream;
+    if (open == null) {
+      throw StateError("Result has no stream transport");
+    }
+    RangeError.checkValidIndex(index, args);
+    return open(args[index]);
+  }
 
   bool get progress => details["progress"] == true;
 
@@ -110,10 +127,26 @@ class Registration {
 }
 
 class Invocation with PayloadAccess {
-  Invocation({List<dynamic>? args, Map<String, dynamic>? kwargs, Map<String, dynamic>? details})
-    : args = args ?? [],
-      kwargs = kwargs ?? {},
-      details = details ?? {};
+  Invocation({
+    List<dynamic>? args,
+    Map<String, dynamic>? kwargs,
+    Map<String, dynamic>? details,
+    Future<RPCStream> Function(Object?)? openStream,
+  }) : args = args ?? [],
+       kwargs = kwargs ?? {},
+       details = details ?? {},
+       _openStream = openStream;
+
+  final Future<RPCStream> Function(Object?)? _openStream;
+
+  Future<RPCStream> argStream(int index) {
+    final open = _openStream;
+    if (open == null) {
+      throw StateError("Invocation has no stream transport");
+    }
+    RangeError.checkValidIndex(index, args);
+    return open(args[index]);
+  }
 
   @override
   final List<dynamic> args;

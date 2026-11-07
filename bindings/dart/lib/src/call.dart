@@ -1,17 +1,18 @@
 import "dart:async";
 
 import "package:xconn_core/src/native.dart" as native;
-import "package:xconn_core/src/session.dart" show resultFromNative;
+import "package:xconn_core/src/session.dart" show Session, resultFromNative;
 import "package:xconn_core/src/types.dart";
 
 /// An owned progressive RPC. Send inputs while consuming results independently.
 class Call {
-  Call.fromNative(this._handle) {
+  Call.fromNative(this._handle, {Session? session}) : _session = session {
     _finalizer.attach(this, _handle, detach: this);
   }
 
   static final _finalizer = Finalizer<int>((handle) => native.execute("close", {"handle": handle}));
   final int _handle;
+  final Session? _session;
   bool _closed = false;
   bool _receiving = false;
   Object? _error;
@@ -51,7 +52,7 @@ class Call {
         return null;
       }
 
-      final result = resultFromNative(response);
+      final result = resultFromNative(response, session: _session);
 
       if (!result.progress) {
         _complete();

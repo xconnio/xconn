@@ -9,14 +9,16 @@ import "package:xconn_core/src/discovery.dart";
 import "package:xconn_core/src/exception.dart";
 import "package:xconn_core/src/native.dart" as native;
 import "package:xconn_core/src/requests.dart";
+import "package:xconn_core/src/rpc_streams.dart";
 import "package:xconn_core/src/types.dart";
 
-Result resultFromNative(Object? value) {
+Result resultFromNative(Object? value, {Session? session}) {
   final response = fields(value);
   return Result(
     args: (response["args"] as List?)?.cast<Object?>(),
     kwargs: (response["kwargs"] as Map?)?.cast<String, Object?>(),
     details: (response["details"] as Map?)?.cast<String, Object?>(),
+    openStream: session?.openStreamArgument,
   );
 }
 
@@ -180,16 +182,22 @@ class Session {
 
       final payload = resultFromNative(event);
       var progress = Future<void>.value();
-      final invocation = Invocation(args: payload.args, kwargs: payload.kwargs, details: payload.details)
-        ..sendProgress = (List<dynamic>? args, Map<String, dynamic>? kwargs) {
-          final sent = progress.then((_) async {
-            await _request("invocation_progress", {"id": event["id"], "args": args, "kwargs": kwargs});
-          });
-          progress = sent;
-          // The handler may use the original fire-and-forget calling convention.
-          sent.ignore();
-          return sent;
-        };
+      final invocation =
+          Invocation(
+              args: payload.args,
+              kwargs: payload.kwargs,
+              details: payload.details,
+              openStream: openStreamArgument,
+            )
+            ..sendProgress = (List<dynamic>? args, Map<String, dynamic>? kwargs) {
+              final sent = progress.then((_) async {
+                await _request("invocation_progress", {"id": event["id"], "args": args, "kwargs": kwargs});
+              });
+              progress = sent;
+              // The handler may use the original fire-and-forget calling convention.
+              sent.ignore();
+              return sent;
+            };
       final id = event["id"] as int;
       _invocations[id] = invocation;
       Result? result;
@@ -241,6 +249,18 @@ class Session {
     return {"args": result?.args ?? const [], "kwargs": result?.kwargs ?? const <String, Object?>{}};
   }
 
+  /// Offer a byte stream before passing its reference as an RPC argument.
+  Future<({Object reference, RPCStream stream})> offerStream() async {
+    final response = fields(await _request("rpc_stream_offer"));
+    return (reference: response["reference"]! as Object, stream: RPCStream.fromNative(response["handle"] as int));
+  }
+
+  /// Open an RPC stream reference received in a result or invocation.
+  Future<RPCStream> openStreamArgument(Object? reference) async {
+    final response = fields(await _request("rpc_stream_accept", {"reference": reference}));
+    return RPCStream.fromNative(response["handle"] as int);
+  }
+
   CallRequest call(String procedure) => CallRequest(procedure, session: this);
 
   RegisterRequest register(String procedure, Future<Result?> Function(Invocation) invocationHandler) =>
@@ -270,7 +290,7 @@ class Session {
         "timeout": timeout == null ? null : timeout.inMicroseconds / Duration.microsecondsPerSecond,
       }),
     );
-    return Call.fromNative(response["handle"] as int);
+    return Call.fromNative(response["handle"] as int, session: this);
   }
 
   Future<Result> executeCall(CallRequest req) {
@@ -302,8 +322,10 @@ class Session {
     List<dynamic>? args,
     Map<String, dynamic>? kwargs,
     Map<String, dynamic>? options,
-  }) async =>
-      resultFromNative(await _request("call", {"uri": procedure, "args": args, "kwargs": kwargs, "options": options}));
+  }) async => resultFromNative(
+    await _request("call", {"uri": procedure, "args": args, "kwargs": kwargs, "options": options}),
+    session: this,
+  );
 
   Future<Registration> _register(
     String procedure,
