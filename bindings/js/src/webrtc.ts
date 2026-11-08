@@ -1,3 +1,4 @@
+import type { RPCStream } from "./rpc-streams.js";
 import type { ClientOptions } from "./client.js";
 import { ProtocolError } from "./exception.js";
 import { Inbox } from "./inbox.js";
@@ -425,6 +426,7 @@ export class WebRTCSession extends Session {
 
 /** Browser ICE, DTLS and SCTP; WAMP and message framing remain in Rust/WASM. */
 export class WebRTCConnection {
+    private rpcSessionOpened = false;
     private readonly incoming = new Inbox<DataChannel>(() => 1, 256, 256);
     private readonly channels = new Set<DataChannel>();
     private initial?: DataChannel;
@@ -656,6 +658,8 @@ export class WebRTCConnection {
     }
 
     openSession(realm: string, options: ClientOptions = {}): Promise<WebRTCSession> {
+        const streamOpener = this.rpcSessionOpened ? undefined : () => this.openRPCStream();
+        this.rpcSessionOpened = true;
         return connectPeer(
             async (serializer, signal) => {
                 if (this.closed) {
@@ -694,8 +698,25 @@ export class WebRTCConnection {
             },
             realm,
             { connectTimeout: this.options.openTimeout ?? 20000, ...options },
-            (base, config) => new WebRTCSession(base, this, config),
+            (base, config) => new WebRTCSession(base, this, { ...config, streamOpener }),
         );
+    }
+
+    async openRPCStream(): Promise<RPCStream> {
+        if (this.closed) throw new ProtocolError("WebRTC connection closed");
+        const channel = this.track(
+            this.peer.createDataChannel("xconn.rpc.stream.v1", {
+                ordered: true,
+                protocol: "xconn.rpc.stream.v1",
+            }),
+        );
+        try {
+            await this.waitChannel(channel);
+            return new ChannelStream(channel);
+        } catch (error) {
+            await channel.close();
+            throw error;
+        }
     }
 
     async openChannel(label: string, options: ChannelOptions = {}): Promise<DataChannel> {
@@ -760,5 +781,49 @@ export class WebRTCConnection {
             this.remotePending.length = 0;
             this.localPending.length = 0;
         })());
+    }
+}
+
+/** SCTP carries independent streams; one marker distinguishes bytes from write EOF. */
+class ChannelStream implements RPCStream {
+    private writes = Promise.resolve();
+    private eof = false;
+    private finished = false;
+
+    constructor(private readonly channel: DataChannel) {}
+
+    async read(): Promise<Uint8Array | undefined> {
+        if (this.eof) return undefined;
+        const packet = await this.channel.receive();
+        if (!(packet instanceof Uint8Array) || packet.length === 0 || packet.length > 16385) {
+            throw new ProtocolError("Invalid RPC stream packet");
+        }
+        if (packet[0] === 1 && packet.length === 1) {
+            this.eof = true;
+            return undefined;
+        }
+        if (packet[0] !== 0 || packet.length === 1) throw new ProtocolError("Invalid RPC stream packet");
+        return packet.subarray(1);
+    }
+
+    write(data: Uint8Array): Promise<void> {
+        if (this.finished) return Promise.reject(new ProtocolError("RPC stream write side closed"));
+        return (this.writes = this.writes.then(async () => {
+            for (let offset = 0; offset < data.length; offset += 16384) {
+                await this.channel.send(new Uint8Array([0, ...data.subarray(offset, offset + 16384)]));
+            }
+        }));
+    }
+
+    writeEof(): Promise<void> {
+        if (!this.finished) {
+            this.finished = true;
+            this.writes = this.writes.then(() => this.channel.send(new Uint8Array([1])));
+        }
+        return this.writes;
+    }
+
+    close(): Promise<void> {
+        return this.channel.close();
     }
 }

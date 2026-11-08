@@ -29,6 +29,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .execute()
         .await?;
+    #[cfg(feature = "rpc-streams")]
+    {
+        let backend = local.clone();
+        local
+            .register("rpc.stream", move |_| {
+                let backend = backend.clone();
+                async move {
+                    match backend.offer_stream().await {
+                        Ok((reference, stream)) => {
+                            tokio::spawn(echo_stream(stream));
+                            RpcResult::args(vec![xconn_core::Value::Null, reference])
+                        }
+                        Err(_) => RpcResult::error("wamp.error.runtime_error"),
+                    }
+                }
+            })
+            .execute()
+            .await?;
+        let backend = local.clone();
+        local
+            .register("rpc.upload", move |inv| {
+                let backend = backend.clone();
+                async move {
+                    match backend.open_stream_argument(&inv.args[1]).await {
+                        Ok(stream) => {
+                            echo_stream(stream).await;
+                            RpcResult::default()
+                        }
+                        Err(_) => RpcResult::error("wamp.error.runtime_error"),
+                    }
+                }
+            })
+            .execute()
+            .await?;
+    }
     let server = Server::websocket(router.clone(), "127.0.0.1:0".parse()?).await?;
     let quic = Arc::new(quic::Listener::bind(router.clone(), "127.0.0.1:0".parse()?).await?);
     let mut params = rcgen::CertificateParams::new(vec!["localhost".into(), "127.0.0.1".into()])?;

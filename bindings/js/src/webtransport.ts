@@ -5,7 +5,7 @@ import { connectPeer, payloadBytes } from "./peer.js";
 import type { MessagePeer } from "./peer.js";
 import { getSubProtocol } from "./serializers.js";
 import type { Payload, Serializer } from "./serializers.js";
-import type { Session } from "./session.js";
+import { Session } from "./session.js";
 import { abortable, timeoutValue } from "./util.js";
 import type { RawSocketFraming } from "./wasm/xconn_browser.js";
 
@@ -185,6 +185,7 @@ class RawSocketPeer implements MessagePeer {
 
 /** Browser QUIC connectivity uses HTTP/3 WebTransport, not arbitrary QUIC sockets. */
 export class WebTransportConnection {
+    private rpcSessionOpened = false;
     private readonly incoming: ReadableStreamDefaultReader<WebTransportBidirectionalStream>;
     private closed = false;
     private constructor(private readonly transport: WebTransport) {
@@ -231,6 +232,8 @@ export class WebTransportConnection {
     }
 
     openSession(realm: string, options: ClientOptions = {}): Promise<Session> {
+        const streamOpener = this.rpcSessionOpened ? undefined : () => this.openStream();
+        this.rpcSessionOpened = true;
         return connectPeer(
             async (serializer, signal) => {
                 const stream = await abortable(
@@ -255,6 +258,7 @@ export class WebTransportConnection {
             },
             realm,
             options,
+            (base, config) => new Session(base, { ...config, streamOpener }),
         );
     }
 

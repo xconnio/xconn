@@ -4,6 +4,7 @@ import "package:test/test.dart";
 import "package:xconn_core/webrtc.dart";
 import "package:xconn_core/xconn_core.dart";
 
+import "rpc_streams.dart";
 import "transport_peer.dart";
 
 void main() {
@@ -31,6 +32,7 @@ void main() {
       peer.connection.acceptChannel(timeout: const Duration(milliseconds: 10)),
       throwsA(isA<ProtocolError>().having((error) => error.message, "message", contains("timed out"))),
     );
+    await exerciseRPCStreams(peer);
     final second = await peer.connection.openSession("realm");
     addTearDown(second.close);
     expect((await peer.call("echo").arg("rtc").execute()).args, ["rtc"]);

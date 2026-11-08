@@ -1,3 +1,4 @@
+import type { RPCStream } from "./rpc-streams.js";
 import { Payload as PayloadAccess } from "./payload.js";
 import type { Session } from "./session.js";
 import type { Serializer, Payload } from "./serializers.js";
@@ -80,9 +81,22 @@ export class Result extends PayloadAccess {
 
     details: Dictionary;
 
-    constructor(args?: unknown[] | null, kwargs?: Dictionary | null, details?: Dictionary | null) {
+    constructor(
+        args?: unknown[] | null,
+        kwargs?: Dictionary | null,
+        details?: Dictionary | null,
+        private readonly openStream?: (reference: unknown) => Promise<RPCStream>,
+    ) {
         super(args ?? [], kwargs ?? {});
         this.details = details ?? {};
+    }
+
+    argStream(index: number): Promise<RPCStream> {
+        if (!this.openStream) throw new Error("Result has no stream transport");
+        if (!Number.isInteger(index) || index < 0 || index >= this.args.length) {
+            throw new RangeError("Stream argument index out of range");
+        }
+        return this.openStream(this.args[index]);
     }
 }
 
@@ -93,8 +107,17 @@ export class Invocation extends PayloadAccess {
         readonly details: Dictionary = {},
         readonly signal: AbortSignal = new AbortController().signal,
         private readonly progress?: (args: unknown[], kwargs: Dictionary) => void,
+        private readonly openStream?: (reference: unknown) => Promise<RPCStream>,
     ) {
         super(args, kwargs);
+    }
+
+    argStream(index: number): Promise<RPCStream> {
+        if (!this.openStream) throw new Error("Invocation has no stream transport");
+        if (!Number.isInteger(index) || index < 0 || index >= this.args.length) {
+            throw new RangeError("Stream argument index out of range");
+        }
+        return this.openStream(this.args[index]);
     }
 
     async sendProgress(args: unknown[] = [], kwargs: Dictionary = {}): Promise<void> {

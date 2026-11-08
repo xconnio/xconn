@@ -8,6 +8,8 @@ publish = false
 [lib]
 name = "xconn_native"
 crate-type = ["cdylib"]
+# Behavioral tests run through pytest; this crate has no Rust unit tests.
+test = false
 [dependencies]
 xconn-binding-runtime = { path = "../runtime", features = ["webtransport", "webrtc"] }
 pyo3 = { version = "0.28", features = ["abi3-py310"] }

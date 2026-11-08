@@ -10,6 +10,7 @@ export "package:xconn_core/src/discovery.dart" show Discovery, Endpoint;
 export "package:xconn_core/src/exception.dart" show ApplicationError, ProtocolError;
 export "package:xconn_core/src/payload.dart" show PayloadError;
 export "package:xconn_core/src/requests.dart" show CallRequest, PublishRequest, RegisterRequest, SubscribeRequest;
+export "package:xconn_core/src/rpc_streams.dart" show RPCStream;
 export "package:xconn_core/src/session.dart" show Session;
 export "package:xconn_core/src/types.dart"
     show

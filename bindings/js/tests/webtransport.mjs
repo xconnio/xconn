@@ -1,3 +1,5 @@
+import { exerciseRPCStreams } from "./rpc-streams.mjs";
+
 function check(value, message) {
     if (!value) throw new Error(message);
 }
@@ -47,8 +49,16 @@ export async function exerciseWebTransport(api, peer, variant) {
             );
         }
         const subscriber = sessions[0];
+        await exerciseRPCStreams(subscriber);
         const callee = await connection.openSession("realm");
         sessions.push(callee);
+        let secondaryRejected = false;
+        try {
+            await callee.offerStream();
+        } catch {
+            secondaryRejected = true;
+        }
+        check(secondaryRejected, "secondary WAMP session accepted RPC streams");
         const registration = await callee
             .register("browser.wt.echo", (inv) => new api.Result(inv.args, inv.kwargs))
             .execute();

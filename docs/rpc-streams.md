@@ -185,3 +185,34 @@ implement this RPC stream carrier.
   `InvocationContext::arg_stream`; fluent adapters for Rust-owned I/O are separate
   work. The Go binding adapts host-owned readers/writers to these native streams.
 
+
+## Browser and Dart adapters
+
+A received result exposes the stream at its positional argument index:
+
+```typescript
+const result = await session.call("app.download").arg("report.pdf").execute();
+const stream = await result.argStream(1);
+try {
+    for (;;) {
+        const bytes = await stream.read();
+        if (bytes === undefined) break;
+        // Consume bytes without buffering the complete file.
+    }
+} finally {
+    await stream.close();
+}
+```
+
+Dart uses `await result.argStream(1)` as well; `read()` returns an empty
+`Uint8List` at EOF. Both adapters expose `session.offerStream()` for a duplex
+upload: pass the returned `reference` as a positional argument and use its
+`stream` for byte I/O while the call is pending. Close the stream when finished.
+`writeEof()` closes only the sending direction.
+
+The browser supports WebTransport and reliable ordered WebRTC data channels.
+Dart delegates stream creation, authorization and I/O to the native runtime.
+Plain WebSocket and RawSocket sessions reject stream operations. On a
+QUIC/WebTransport connection, use its first authenticated WAMP session for RPC
+streams; additional machine realms need dedicated connections. WAMP protocol
+options, procedure authorization and stream-reference binding remain unchanged.

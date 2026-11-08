@@ -95,6 +95,7 @@ async function browser(uri, discoveryUri, rustURI, transportPeer) {
                 "/streaming-interop.mjs",
                 "/webtransport.mjs",
                 "/webrtc.mjs",
+                "/rpc-streams.mjs",
             ].includes(url.pathname);
             const file = testFile
                 ? path.join(import.meta.dirname, url.pathname.slice(1))
