@@ -1,94 +1,102 @@
-# Binding distribution
+# Releases
 
-Source, CI, and local packaging live in this repository. Publishing registry
-packages and platform artifacts is a separate release step; no public release
-is implied by local tests.
+Use one version and one root Git tag for the native SDK, public Rust crates and
+language bindings. For example, `v0.1.6` releases version `0.1.6` everywhere.
+The only additional tag is `bindings/go/v0.1.6`, required by Go for the module in
+`bindings/go`; CI creates it automatically after the SDK is published.
 
-| Consumer | Distribution | Consumer requirement |
+| Distribution | Workflow | Starts after |
 | --- | --- | --- |
-| Rust | crates.io packages | Rust toolchain |
-| Python | `xconn-core` ABI3 wheels on PyPI | Matching supported wheel |
-| Go | `github.com/xconnio/xconn-core/bindings/go` plus native SDK | Cgo toolchain and matching SDK |
-| Dart / Flutter | `xconn_core` plus platform native library | Native asset integration |
-| Browser JS / TS | `@xconnio/core` on npm with WASM | Browser WebSocket and WASM support |
+| Native SDK archives on GitHub | `native-release.yaml` | Root tag push |
+| `wampproto`, `xconn-framing`, `xconn-crypto`, `xconn-core` on crates.io | `crates-release.yaml` | Root tag push |
+| `@xconnio/core` on npm | `npm-release.yaml` | Root tag push |
+| `xconn-core` ABI3 wheels/source on PyPI | `python-release.yaml` | Root tag push |
+| `xconn_core` on pub.dev | `dart-release.yaml`, called by the SDK workflow | SDK publication |
+| Go submodule tag | SDK workflow | SDK publication |
 
-## Native SDK
+`xconn-webrtc` is not added to crates.io by this flow. Its native builds include
+the workspace's pinned SCTP patch; see [SCTP provenance](sctp-patch.md).
 
-[`scripts/package-native.py`](../scripts/package-native.py) stages or archives
-headers, the shared or static Rust library, pkg-config metadata, checksums, and
-build provenance. Archives support native Linux/macOS builds, Windows amd64 GNU
-builds, and an Android ARM64 cross-build. Linux, macOS and Windows GNU static SDK
-staging is also available. See [native installation](native-install.md).
-Build outputs belong in release artifacts, not Git source history.
+## Prepare and release
 
-The `Native SDK release` workflow builds and checks nine archives across Linux, macOS,
-Windows and Android, then creates the GitHub Release after every matrix job passes. It runs
-on tags named `vVERSION`; the tag must match `bindings/ffi/Cargo.toml`. It can
-also be dispatched manually with an existing tag. Both paths check out the tag,
-so the manifest's source revision identifies the released code.
+1. Update the public crate versions and internal dependency requirements, the
+   FFI package version, Python's project version, both npm manifests, Dart's
+   `pubspec.yaml`, the installer default, Cargo.lock and the changelogs.
+2. Run `python3 ci/release_version.py vVERSION`. Every distributed package must
+   match the intended tag. No language-specific tags are needed for npm or Dart.
+3. Land the release preparation on main and wait for its checks.
+4. Tag the reviewed main commit and push it:
 
-Merge the release workflow and intended source changes before creating a tag.
-Android ARM64 is prepared for native SDK `v0.1.1`; create that tag on the
-reviewed commit after merging. Do not replace the existing `v0.1.0` tag or
-release assets. This changes the internal FFI package version; the published
-Rust libraries remain at `0.1.0`.
-No extra publishing token is needed: only the final job receives the repository
-`GITHUB_TOKEN` with release-write permission. Existing releases/assets are not
-overwritten; a failed upload may require removing an incomplete draft before
-retrying. The archives include WebRTC with the workspace's pinned SCTP fix.
-The workflow calls `ci/check-native-release.sh` to check the tag/host,
-`ci/test-native-sdk.sh` to exercise extracted SDKs, and
-`ci/publish-native-sdk.sh` to verify checksums and create the release. The smoke
-test can also run locally with an archive directory as its argument.
-Android uses `ci/build-android-sdk.sh` with the pinned NDK and
-`ci/test-android-sdk.sh` for ELF/API linking checks. Android binaries are not
-executed on the Linux runner. Windows uses the GNU toolchain and `ci/test-windows-sdk.sh` to compile and run
-C and Go consumers against both SDK variants. Publication waits for all platform jobs.
-See [native installation](native-install.md) for the platform matrix and limits.
+   ```sh
+   git tag -a v0.1.6 -m 'XConn 0.1.6'
+   git push origin v0.1.6
+   ```
 
-Native SDK `v0.1.2` adds the macOS ARM64 static archive and the Go installer.
-After merging, release SDK `v0.1.2`, then tag the Go module `bindings/go/v0.1.2`.
-The single shell installer downloads from the SDK tag without building a helper
-or depending on a Go module release. The Go module tag is only needed for
-`go get`. Linux installer checks can also use existing SDK 0.1.1 before tagging.
-Native SDK checks build a standalone Go consumer through the installed static SDK.
+Approve publishing environments if they require review. Builds and registry
+publications run independently; a failure does not roll back an already-published
+package. Retry the failed jobs from their original run. Never move a published
+tag or replace a release asset to retry a release.
 
-Go modules in this repository use tags such as `bindings/go/v0.1.2`. Installing
-the Go module alone does not install the native SDK. The installer runs first
-and configures ordinary Go builds to select the static archive through pkg-config.
+The existing `v0.1.5` tag predates this automation and is left untouched. These
+workflows apply to a fresh tag created after they land.
 
-## Python
+## One-time publisher configuration
 
-Maturin builds the PyO3 extension and Python package together. Wheels target the
-CPython 3.10+ stable ABI. Platform wheels must be built and validated on the
-supported target or repaired using the appropriate platform tooling before
-publication. Consumers of a compatible wheel do not need Rust or a separate SDK.
-The package imports as `xconn_core` and has no required Python runtime dependency.
+Create GitHub environments named `npm`, `pypi`, `pub.dev` and `crates.io`. They can
+require reviewer approval. Registry authentication uses short-lived OIDC tokens;
+no registry token is stored in this repository.
 
-Use `uv build bindings/python --out-dir target/python-dist` for local source and
-wheel builds. `uv` builds the wheel from the source archive, checking that the
-workspace crates and pinned SCTP dependency survive source packaging.
-The manually dispatched `Python release artifacts` workflow calls
-`ci/build-python-release.sh` on Linux x86-64/ARM64 in manylinux 2.28 containers
-and on macOS ARM64. It repairs Linux wheels, checks metadata with `uvx twine`,
-tests native crypto from the installed wheel, and uploads artifacts only.
-It neither publishes to PyPI nor creates a GitHub release.
+- npm: retain the trusted publisher for owner `xconnio`, repository `xconn`,
+  workflow `npm-release.yaml`, environment `npm`.
+- PyPI: configure the existing `xconn-core` project's GitHub trusted publisher
+  for owner `xconnio`, repository `xconn`, workflow `python-release.yaml`,
+  environment `pypi`.
+- pub.dev: enable GitHub Actions publishing for `xconn_core` from `xconnio/xconn`,
+  with tag pattern `v{{version}}` and required environment `pub.dev`.
+- crates.io: configure each of the four existing public crates for repository
+  `xconnio/xconn`, workflow `crates-release.yaml`, environment `crates.io`.
+  The authentication action obtains and revokes a temporary publishing token.
 
-After reviewing the artifacts, combine all wheels with one copy of the source
-archive, check them with `uvx twine check`, and publish with `uv publish` using
-PyPI credentials. Do not upload an unrepaired local `linux_x86_64` wheel.
-The optional Cap'n Proto serializer must be installed separately; its GitHub
-URL is not included in PyPI dependency metadata.
+The Go-tag job uses GitHub's workflow token with repository write permission.
+It only creates the expected submodule tag at the SDK commit; an existing tag
+pointing elsewhere is an error, never overwritten.
 
-## Dart and Flutter
+See the official [PyPI trusted publishing guide](https://docs.pypi.org/trusted-publishers/using-a-publisher/),
+[pub.dev automation guide](https://dart.dev/tools/pub/automated-publishing), and
+[crates.io authentication action](https://github.com/rust-lang/crates-io-auth-action)
+for registry setup.
 
-Dart uses the shared C ABI through FFI. Local tests can set `XCONN_LIBRARY` to an
-explicit native library. Flutter platform packaging needs to deliver and load
-that library for each supported target; this repository does not yet automate
-all platform distributions. Python and Dart expose clients only.
+## What is verified
 
-## Browser package
+SDK builds retain the Linux x86-64/ARM64, macOS ARM64, Windows amd64 GNU and
+Android ARM64 matrix. Shared/static archives include headers, pkg-config files,
+checksums and build provenance. C and Go consumers verify host linking; Android
+checks verify ELF/API compatibility. See [native installation](native-install.md).
 
-The npm package includes compiled JS, TypeScript declarations, and WASM. Its
-browser networking uses native WebSocket APIs; it does not load the native C ABI.
-Build and test the full package and the reduced WASM variants before release.
+The Rust job verifies each crate as it publishes dependencies before `xconn-core`.
+Manual runs verify all four crates without uploading. On retry, already-published
+versions are skipped without replacement.
+Cargo waits for newly uploaded dependencies to appear in the registry index.
+
+The npm workflow tests the packed package, including browser WebRTC and
+WebTransport. The Python matrix builds Linux x86-64/ARM64 manylinux 2.28 wheels
+and a macOS ARM64 wheel, checks repaired metadata and installed native crypto, and
+publishes one source archive plus the wheels. Python/Go consumers do not need to
+build Rust when using the supported published artifacts.
+
+Dart packaging reads `SHA256SUMS` from that tag's completed SDK release and
+replaces only `nativeSdkVersion` and `nativeSdkChecksums` in its staged source.
+Those generated values are included in the tested package artifact. This avoids
+a second source commit after the SDK build while keeping every downloaded
+archive pinned by its exact checksum. Publication installs and publishes that
+same staged package. Its consumer smoke test verifies automatic native-library
+download and loading without a Rust toolchain.
+
+The npm, Python and crates.io workflows can also run manually to build/test
+without publishing. Manual runs never publish. To retry publication, rerun the failed jobs from
+the original tag-push run. This also preserves the tag-push identity required
+by pub.dev.
+
+No package version or tag is changed automatically on main. Source changes,
+version updates, the root tag, and any environment approvals remain maintainer
+choices.
