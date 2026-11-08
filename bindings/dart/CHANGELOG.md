@@ -1,3 +1,5 @@
+## 0.1.6
+
 ## 0.1.5
 
 - RPC-associated byte streams with indexed access on results and invocations.
