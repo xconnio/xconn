@@ -74,16 +74,12 @@ cargo build -p xconn-core --features router --bin xconn-router
 target/python-release-venv/bin/python -m pytest bindings/python/tests
 ```
 
-The manually triggered `Python release artifacts` workflow uses `uv` to build
-manylinux 2.28 wheels for Linux x86-64/ARM64 and a macOS ARM64 wheel. It repairs
-Linux wheels, checks metadata, tests the installed extension, and uploads artifacts
-without publishing. Windows, Intel macOS and other targets are not in this matrix.
-
-Before publishing, download those artifacts, keep one source archive, run
-`uvx twine check target/python-dist/*`, and test the installed wheels. A local
-Linux wheel is not a replacement for a repaired manylinux release wheel.
-`uv publish target/python-dist/*` is a separate maintainer action requiring
-PyPI credentials; building and testing do not publish anything.
+The `Python release` workflow builds and tests wheels and one source archive on
+Linux x86-64/ARM64 and macOS ARM64. A shared `vVERSION` tag publishes the verified
+artifacts to PyPI using trusted publishing and the `pypi` environment. Manual
+runs build artifacts without publishing. To retry publication, rerun the failed
+jobs from the original tag-push run. See
+[binding distribution](../../docs/releases.md) for setup and release ordering.
 
 The Rust executable is used only by test fixtures. Client tests also exercise the
 independent original Go router when `XCONN_REFERENCE_GO_BIN` is configured.

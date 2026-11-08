@@ -259,10 +259,8 @@ concurrently and handle explicit queue-limit errors. Close resources explicitly.
 
 The `npm release` GitHub Actions workflow builds and tests the packed package,
 including browser WebRTC and WebTransport, before publishing `@xconnio/core`.
-Manual runs produce a tested package artifact without publishing by default.
-To retry a failed publication, run the workflow on `main` with `publish` enabled;
-the same build, tests, and environment approval still apply.
-
+Manual runs produce a tested package artifact without publishing.
+To retry publication, rerun the failed jobs from the original tag-push run.
 One-time setup:
 
 1. Create a GitHub environment named `npm` with a required reviewer.
@@ -270,14 +268,15 @@ One-time setup:
    owner `xconnio`, repository `xconn`, workflow `npm-release.yaml`,
    environment `npm`. Allow publishing. No npm token secret is needed.
 
-For a release, update `package.json`, `package-lock.json`, and `CHANGELOG.md`,
-then merge the changes. Tag that commit with the matching package version:
+For a release, align the SDK and package versions, then merge the changes and
+push the shared root tag:
 
 ```sh
-git tag bindings/js/v0.1.1
-git push origin bindings/js/v0.1.1
+git tag -a v0.1.6 -m 'XConn 0.1.6'
+git push origin v0.1.6
 ```
 
 Approve the `npm` environment deployment after the build succeeds. The publish
 job uploads the tested tarball using npm trusted publishing with provenance.
-Native SDK and other language releases are independent of this tag.
+The same root tag starts the other XConn releases; see
+[binding distribution](../../docs/releases.md).

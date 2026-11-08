@@ -6,20 +6,19 @@ import "dart:typed_data";
 import "package:archive/archive.dart";
 import "package:crypto/crypto.dart";
 
-const nativeSdkVersion = "0.1.1";
+const nativeSdkVersion = "0.1.5";
 const nativeSdkChecksums = {
-  "aarch64-apple-darwin": "ab0e3a84bb3ca13c2e078f7798c38390322b594d123f5099d1af1ed09f2bc24f",
-  "aarch64-linux-android": "7e7e92a6817333bc73d883e712ea598b6bfc2a7dabc703d1ddbe5b23bce4b327",
-  "aarch64-unknown-linux-gnu": "0939e739afccd5343eeb2a0f4ef3c090f40c39c82b92c1e2f1026bfd0946be3d",
-  "x86_64-unknown-linux-gnu": "7af03bfd01e0b8ae9353cfa0dd336f875d26639c3839e798894e2eda2f65ef14",
+  "aarch64-apple-darwin": "34c355dc8369375d267a9853fd558e57bcc9ad4b0f9fa057dbb4a3b232f931bf",
+  "aarch64-linux-android": "256da26cbeddf2ea826367fdf4d2b5264cdba1f52b2620e6d8078da69c7224ab",
+  "aarch64-unknown-linux-gnu": "648368099442c72c22b0b62f0b0f2b50641ab86179aa68017de240993502d683",
+  "x86_64-unknown-linux-gnu": "76e7aa7ab807621f8484955d70222db1fc534768d0e74c7b02cc57aa6f4197ab",
 };
 
 /// Downloads an exact SDK release and atomically caches its verified library.
 class NativeSdk {
   NativeSdk({required Directory cacheDirectory, required this.target, required this.archiveSha256, Uri? releaseBase})
     : _directory = Directory.fromUri(cacheDirectory.uri.resolve("$nativeSdkVersion/$target/")),
-      _releaseBase =
-          releaseBase ?? Uri.parse("https://github.com/xconnio/xconn-core/releases/download/v$nativeSdkVersion/");
+      _releaseBase = releaseBase ?? Uri.parse("https://github.com/xconnio/xconn/releases/download/v$nativeSdkVersion/");
 
   final String target;
   final String archiveSha256;

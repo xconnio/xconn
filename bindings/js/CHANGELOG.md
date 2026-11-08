@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+
+- RPC-associated byte streams over WebTransport and WebRTC, with indexed stream access.
+- Publish the tested npm package from the shared XConn release tag.
+
 ## 0.1.2
 
 - Allow WebRTC WAMP responses up to 16 MiB and advertise that receive limit

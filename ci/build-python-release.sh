@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+if [[ -n "${RELEASE_TAG:-}" || "${PUBLISH_RELEASE:-false}" == true ]]; then
+  python3 ci/release_version.py "${RELEASE_TAG:-}"
+fi
 output="$(pwd)/target/python-release"
 uv build bindings/python --python "${PYTHON_BIN:-python3}" --out-dir "$output/build"
 mkdir -p "$output/dist"

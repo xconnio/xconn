@@ -1,0 +1,66 @@
+name: Dart release
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.13.5'
+      - name: Pin Dart to the published SDK archives
+        run: |
+          mkdir -p target/dart-release
+          gh release download "$RELEASE_TAG" --pattern SHA256SUMS --dir target/dart-release
+          python3 ci/prepare_dart_release.py "$RELEASE_TAG" target/dart-release/SHA256SUMS
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+      - name: Test the package and native SDK download
+        run: ci/build-dart-release.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dart-package
+          path: target/dart-release/xconn_core-*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pub.dev
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dart-package
+          path: package
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: '3.13.5'
+      - name: Publish the tested package
+        run: |
+          mkdir unpacked
+          tar -xzf package/xconn_core-*.tar.gz -C unpacked
+          cd unpacked
+          dart pub get
+          dart pub publish --force

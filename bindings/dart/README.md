@@ -85,8 +85,10 @@ hooks:
       native_library: /absolute/path/to/libxconn_ffi.so
 ```
 
-To update the bundled SDK version, update `nativeSdkVersion` and all target
-checksums in `lib/src/native_sdk.dart` together. Never replace release assets.
+The shared release workflow pins `nativeSdkVersion` and all target checksums in
+the staged package after the native SDK is published. No second tag or source
+commit is required for those generated values. Never replace release assets.
+See [release setup](../../docs/releases.md) for pub.dev trusted publishing.
 
 For a standalone Dart application, use `dart build cli` (Dart 3.13+) to produce
 an executable **and its bundled native library**. `dart compile exe` alone does

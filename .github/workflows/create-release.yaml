@@ -1,0 +1,51 @@
+name: Create release tag
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, without v (for example 0.1.6)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: create-release
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Validate package versions and successful main CI
+        run: |
+          python3 ci/release_version.py "$RELEASE_TAG"
+          conclusion=$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yaml/runs" \
+            -f head_sha="$(git rev-parse HEAD)" -f branch=main -f event=push -f per_page=1 \
+            --jq '.workflow_runs[0].conclusion')
+          [[ "$conclusion" == success ]] || { echo 'Main CI must pass before tagging' >&2; exit 1; }
+        env:
+          RELEASE_TAG: v${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/create-github-app-token@v2
+        id: app
+        with:
+          app-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: Create and push the release tag
+        run: |
+          gh auth setup-git
+          ci/create-release-tag.sh "$RELEASE_TAG"
+        env:
+          RELEASE_TAG: v${{ inputs.version }}
+          GH_TOKEN: ${{ steps.app.outputs.token }}

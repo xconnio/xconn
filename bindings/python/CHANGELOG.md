@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+
+- Align package versions with the shared XConn SDK and Rust release.
+- Publish verified ABI3 wheels through PyPI trusted publishing.
+
 ## 0.1.0
 
 - Initial blocking and asyncio Python clients backed by the shared Rust runtime.

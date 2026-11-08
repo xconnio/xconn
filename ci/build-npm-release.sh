@@ -3,9 +3,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${CHROMIUM_BIN:?path to Chromium is required}"
 version="$(node -p "require('./bindings/js/package.json').version")"
-if [[ -n "${RELEASE_TAG:-}" && "$RELEASE_TAG" != "bindings/js/v$version" ]]; then
-  echo "Release tag must match bindings/js/v$version" >&2
-  exit 1
+if [[ -n "${RELEASE_TAG:-}" || "${PUBLISH_RELEASE:-false}" == true ]]; then
+  python3 ci/release_version.py "${RELEASE_TAG:-}"
 fi
 npm --prefix bindings/js ci --ignore-scripts
 npm --prefix bindings/js run lint

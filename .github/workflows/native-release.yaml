@@ -143,3 +143,29 @@ jobs:
           merge-multiple: true
       - name: Verify checksums and create release
         run: ci/publish-native-sdk.sh "$RELEASE_TAG" native-dist
+
+  go-tag:
+    name: Tag Go module after SDK publication
+    needs: publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: refs/tags/${{ inputs.tag || github.ref_name }}
+      - run: ci/tag-go-release.sh "$RELEASE_TAG"
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+  dart:
+    name: Publish Dart after SDK publication
+    if: github.event_name == 'push'
+    needs: publish
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/dart-release.yaml
+    with:
+      tag: ${{ github.ref_name }}

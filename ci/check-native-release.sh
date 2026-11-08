@@ -9,12 +9,7 @@ if [[ ! -f .github/workflows/native-release.yaml ]]; then
   exit 1
 fi
 
-package=$(cargo pkgid -p xconn-ffi)
-version=${package##*@}
-if [[ "$RELEASE_TAG" != "v$version" ]]; then
-  echo 'Release tag must match the native package version' >&2
-  exit 1
-fi
+python ci/release_version.py "${RELEASE_TAG:-}"
 
 host=$(rustc -vV | sed -n 's/^host: //p')
 if [[ "$host" != "$EXPECTED_TARGET" ]]; then
