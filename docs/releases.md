@@ -19,11 +19,15 @@ the workspace's pinned SCTP patch; see [SCTP provenance](sctp-patch.md).
 
 ## Prepare and release
 
-1. Update the public crate versions and internal dependency requirements, the
-   FFI package version, Python's project version, both npm manifests, Dart's
-   `pubspec.yaml`, the installer default, Cargo.lock and the changelogs.
-2. Run `python3 ci/release_version.py vVERSION`. Every distributed package must
-   match the intended tag. No language-specific tags are needed for npm or Dart.
+1. Open **Actions → Prepare release → Run workflow**, select `main`, and enter
+   the new version without `v` (for example `0.1.6`). It opens a
+   `release/v0.1.6` branch and PR with package versions, local Rust dependency
+   requirements, lockfiles, the installer default and changelog headings updated.
+   It rejects versions that are not newer and never overwrites an existing branch.
+2. Review the PR and fill in the new changelog sections. SDK checksums remain
+   pinned to the existing SDK until release packaging generates the new values.
+   To prepare locally instead, run `python3 ci/prepare_release.py VERSION`.
+   Verify with `python3 ci/release_version.py vVERSION`.
 3. Land the release preparation on main and wait for its checks.
 4. Open **Actions → Create release tag → Run workflow**, select `main`, and
    enter the version without `v` (for example `0.1.6`). The workflow checks all
@@ -62,12 +66,17 @@ no registry token is stored in this repository.
   `xconnio/xconn`, workflow `crates-release.yaml`, environment `crates.io`.
   The authentication action obtains and revokes a temporary publishing token.
 
-For the release button, create a GitHub App with **Contents: read and write**
-and install it only on `xconnio/xconn`. Set the repository Actions variable
+For the release workflows, create a GitHub App with **Contents: read and write**
+and **Pull requests: read and write**, then install it only on `xconnio/xconn`. Set the repository Actions variable
 `RELEASE_APP_ID` to its App ID and Actions secret
 `RELEASE_APP_PRIVATE_KEY` to its generated private key. The workflow requests a
 short-lived token scoped to this repository and revokes it afterward. Existing
-tags are rejected and never moved. No commits or version bumps are created.
+tags are rejected and never moved. Only **Prepare release** creates a version
+commit and PR; **Create release tag** only tags the reviewed main commit.
+
+If the App is already installed, add its Pull requests permission and approve
+the updated installation permissions. The existing App ID and private key
+remain valid.
 
 The App token is needed because tags pushed with the built-in `GITHUB_TOKEN`
 do not start other workflows. See [GitHub's workflow triggering documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).

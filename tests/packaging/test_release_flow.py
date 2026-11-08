@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 # CI helpers are standalone scripts rather than an installed package.
 sys.path.insert(0, str(ROOT / "ci"))
 from prepare_dart_release import TARGETS, sdk_metadata  # noqa: E402
+from prepare_release import prepare_release  # noqa: E402
 from release_version import check_versions, release_version  # noqa: E402
 
 
@@ -48,6 +50,79 @@ class ReleaseVersionTests(unittest.TestCase):
                 with self.subTest(filename=filename), self.assertRaises(ValueError):
                     check_versions("v0.1.5", root)
                 path.write_text(text)
+
+
+class ReleasePreparationTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
+        paths = [
+            ROOT / "Cargo.toml",
+            ROOT / "Cargo.lock",
+            ROOT / "scripts/install-xconn-sdk.sh",
+            *ROOT.glob("crates/*/Cargo.toml"),
+            *ROOT.glob("bindings/*/Cargo.toml"),
+            ROOT / "bindings/js/wasm/Cargo.toml",
+            ROOT / "bindings/python/pyproject.toml",
+            ROOT / "bindings/dart/pubspec.yaml",
+            ROOT / "bindings/js/package.json",
+            ROOT / "bindings/js/package-lock.json",
+            *ROOT.glob("bindings/*/CHANGELOG.md"),
+        ]
+        for source in paths:
+            destination = self.root / source.relative_to(ROOT)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+        current = json.loads((self.root / "bindings/js/package.json").read_text())["version"]
+        major, minor, patch = map(int, current.split("."))
+        self.version = f"{major}.{minor}.{patch + 1}"
+
+    def test_updates_packages_local_requirements_and_only_workspace_lock_entries(self):
+        original_lock = (self.root / "Cargo.lock").read_text()
+        original_npm = json.loads((self.root / "bindings/js/package-lock.json").read_text())
+        prepare_release(self.version, self.root)
+        self.assertEqual(check_versions(f"v{self.version}", self.root), self.version)
+        updated_lock = (self.root / "Cargo.lock").read_text()
+        old_blocks = original_lock.split("[[package]]")
+        new_blocks = updated_lock.split("[[package]]")
+        for old, new in zip(old_blocks, new_blocks, strict=True):
+            if old != new:
+                self.assertNotIn("source =", old)
+                self.assertIn(f'version = "{self.version}"', new)
+        updated_npm = json.loads((self.root / "bindings/js/package-lock.json").read_text())
+        for name, package in original_npm["packages"].items():
+            if name:
+                self.assertEqual(updated_npm["packages"][name], package)
+        for language in ("js", "python", "dart"):
+            self.assertIn(f"## {self.version}\n", (self.root / f"bindings/{language}/CHANGELOG.md").read_text())
+        for relative in (
+            "crates/xconn-core/Cargo.toml",
+            "crates/xconn-webrtc/Cargo.toml",
+            "bindings/runtime/Cargo.toml",
+            "bindings/js/wasm/Cargo.toml",
+        ):
+            for line in (self.root / relative).read_text().splitlines():
+                if "path =" in line and "version =" in line:
+                    self.assertIn(f'version = "{self.version}"', line)
+
+    def test_invalid_repeated_and_older_versions_do_not_change_files(self):
+        snapshots = {path: path.read_bytes() for path in self.root.rglob("*") if path.is_file()}
+        current = json.loads((self.root / "bindings/js/package.json").read_text())["version"]
+        for version in (current, "0.0.0", "v0.1.6", "../bad"):
+            with self.subTest(version=version), self.assertRaises(ValueError):
+                prepare_release(version, self.root)
+            for path, content in snapshots.items():
+                self.assertEqual(path.read_bytes(), content)
+
+    def test_malformed_lockfile_leaves_all_files_unchanged(self):
+        path = self.root / "Cargo.lock"
+        path.write_text("")
+        snapshots = {file: file.read_bytes() for file in self.root.rglob("*") if file.is_file()}
+        with self.assertRaises(ValueError):
+            prepare_release(self.version, self.root)
+        for file, content in snapshots.items():
+            self.assertEqual(file.read_bytes(), content)
 
 
 class DartMetadataTests(unittest.TestCase):
