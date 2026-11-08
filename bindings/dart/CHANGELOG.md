@@ -1,4 +1,7 @@
-## Unreleased
+## 0.1.5
+
+- RPC-associated byte streams with indexed access on results and invocations.
+- Pin SDK archives and checksums during the shared release workflow.
 
 - QUIC: `verifyPeerCertificate` lets callers verify the server certificate chain
   themselves, e.g. to pin a self-signed certificate.
