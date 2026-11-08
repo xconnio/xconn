@@ -201,10 +201,11 @@ impl Registry {
     }
 
     pub(crate) fn finish_invocation(&self, session: i64, request: i64) {
+        // Paired streams must drain independently of the RPC reply.
         self.grants
             .lock()
             .unwrap()
-            .retain(|_, grant| grant.invocation != Some((session, request)));
+            .retain(|_, grant| grant.joined || grant.invocation != Some((session, request)));
         self.changed.notify_waiters();
     }
 
@@ -332,7 +333,7 @@ mod tests {
             registry.attach(1);
             registry.attach(2);
             registry.attach(3);
-            registry.grant(1, 2, &[reference([7; 32])], None).unwrap();
+            registry.grant(1, 2, &[reference([7; 32])], Some((2, 9))).unwrap();
             let (mut attacker, incoming) = duplex(64);
             attacker.write_all(&[7; 32]).await.unwrap();
             assert!(registry.relay(3, Box::new(incoming)).await.is_err());
@@ -361,6 +362,8 @@ mod tests {
                 let mut request = Vec::new();
                 backend.read_to_end(&mut request).await.unwrap();
                 assert_eq!(request, b"request");
+                registry.finish_invocation(2, 9);
+                tokio::task::yield_now().await;
                 backend.write_all(&vec![42; 128 * 1024]).await.unwrap();
                 backend.shutdown().await.unwrap();
             };
