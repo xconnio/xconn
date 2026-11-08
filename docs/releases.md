@@ -25,7 +25,12 @@ the workspace's pinned SCTP patch; see [SCTP provenance](sctp-patch.md).
 2. Run `python3 ci/release_version.py vVERSION`. Every distributed package must
    match the intended tag. No language-specific tags are needed for npm or Dart.
 3. Land the release preparation on main and wait for its checks.
-4. Tag the reviewed main commit and push it:
+4. Open **Actions → Create release tag → Run workflow**, select `main`, and
+   enter the version without `v` (for example `0.1.6`). The workflow checks all
+   package versions and requires the latest main CI run for that commit to
+   have succeeded. It creates a new tag and starts the release workflows.
+
+   Alternatively, tag the reviewed main commit locally and push it:
 
    ```sh
    git tag -a v0.1.6 -m 'XConn 0.1.6'
@@ -56,6 +61,16 @@ no registry token is stored in this repository.
 - crates.io: configure each of the four existing public crates for repository
   `xconnio/xconn`, workflow `crates-release.yaml`, environment `crates.io`.
   The authentication action obtains and revokes a temporary publishing token.
+
+For the release button, create a GitHub App with **Contents: read and write**
+and install it only on `xconnio/xconn`. Set the repository Actions variable
+`RELEASE_APP_ID` to its App ID and Actions secret
+`RELEASE_APP_PRIVATE_KEY` to its generated private key. The workflow requests a
+short-lived token scoped to this repository and revokes it afterward. Existing
+tags are rejected and never moved. No commits or version bumps are created.
+
+The App token is needed because tags pushed with the built-in `GITHUB_TOKEN`
+do not start other workflows. See [GitHub's workflow triggering documentation](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow).
 
 The Go-tag job uses GitHub's workflow token with repository write permission.
 It only creates the expected submodule tag at the SDK commit; an existing tag
