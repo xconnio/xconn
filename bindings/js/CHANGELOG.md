@@ -1,5 +1,7 @@
 # Changelog
 
+## 0.1.6
+
 ## 0.1.5
 
 - RPC-associated byte streams over WebTransport and WebRTC, with indexed stream access.

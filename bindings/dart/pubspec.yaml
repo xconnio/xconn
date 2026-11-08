@@ -2,7 +2,7 @@ name: xconn_core
 description: WAMP clients with Rust networking, authentication, progressive RPCs, and direct WebRTC and QUIC connections.
 repository: https://github.com/xconnio/xconn/tree/main/bindings/dart
 issue_tracker: https://github.com/xconnio/xconn/issues
-version: 0.1.5
+version: 0.1.6
 
 platforms:
   android:
