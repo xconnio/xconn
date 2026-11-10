@@ -22,7 +22,7 @@ jobs:
           python-version: '3.12'
       - run: |
           python -m venv "$RUNNER_TEMP/venv"
-          "$RUNNER_TEMP/venv/bin/pip" install maturin pytest pytest-asyncio ruff==0.17.1
+          "$RUNNER_TEMP/venv/bin/pip" install maturin pytest pytest-asyncio ruff==0.17.1 pydantic pyyaml python-dotenv
           echo "$RUNNER_TEMP/venv/bin" >> "$GITHUB_PATH"
           echo "VIRTUAL_ENV=$RUNNER_TEMP/venv" >> "$GITHUB_ENV"
       - uses: ./.github/actions/ci-artifacts
