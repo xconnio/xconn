@@ -97,10 +97,18 @@ def connect_async(app: str, config: ClientConfig, directory: str = "."):
 async def resolve_dependencies(meta: ProcedureMetadata) -> AsyncGenerator:
     result = {}
 
+    # Async handlers get plain and generator dependencies too. Sync handlers can't await, so registration refuses
+    # async dependencies for them.
+    for key, value in meta.dependencies.items():
+        result[key] = value()
+
     for key, value in meta.async_dependencies.items():
         result[key] = await value()
 
     async with contextlib.AsyncExitStack() as stack:
+        for name, dependency in meta.ctx_dependencies.items():
+            result[name] = stack.enter_context(dependency())
+
         for name, dependency in meta.async_ctx_dependencies.items():
             result[name] = await stack.enter_async_context(dependency())
 
