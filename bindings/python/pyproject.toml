@@ -3,7 +3,7 @@ requires = ["maturin>=1.12,<2"]
 build-backend = "maturin"
 [project]
 name = "xconn-core"
-version = "0.1.6"
+version = "0.1.7"
 description = "Blocking and asyncio Python client APIs backed by the shared Rust XConn runtime"
 readme = "README.md"
 requires-python = ">=3.10"
