@@ -1,4 +1,4 @@
-import "package:xconn_core/xconn_core.dart";
+import "package:xconn/xconn.dart";
 
 void main() {
   final auth = CryptoSignAuthenticator("native-assets", "11" * 32);

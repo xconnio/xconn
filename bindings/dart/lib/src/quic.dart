@@ -1,10 +1,10 @@
 import "dart:typed_data";
 
-import "package:xconn_core/src/callbacks.dart";
-import "package:xconn_core/src/client.dart";
-import "package:xconn_core/src/native_transport.dart";
-import "package:xconn_core/src/rpc_streams.dart";
-import "package:xconn_core/src/session.dart";
+import "package:xconn/src/callbacks.dart";
+import "package:xconn/src/client.dart";
+import "package:xconn/src/native_transport.dart";
+import "package:xconn/src/rpc_streams.dart";
+import "package:xconn/src/session.dart";
 
 /// Independent bidirectional stream owned by its transport connection.
 class ByteStream extends RPCStream {

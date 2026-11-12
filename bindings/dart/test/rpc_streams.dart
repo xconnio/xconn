@@ -1,7 +1,7 @@
 import "dart:typed_data";
 
 import "package:test/test.dart";
-import "package:xconn_core/xconn_core.dart";
+import "package:xconn/xconn.dart";
 
 Future<void> exerciseRPCStreams(Session session) async {
   await expectLater(session.openStreamArgument({}), throwsA(isA<ProtocolError>()));

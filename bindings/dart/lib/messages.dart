@@ -1,4 +1,4 @@
-import "package:xconn_core/src/protocol.dart";
+import "package:xconn/src/protocol.dart";
 
 abstract class Message {
   int messageType();

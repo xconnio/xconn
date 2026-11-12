@@ -1,4 +1,4 @@
-import "package:xconn_core/xconn_core.dart";
+import "package:xconn/xconn.dart";
 
 Future<void> main() async {
   final session = await connectAnonymous("ws://127.0.0.1:8080/ws", "realm1");

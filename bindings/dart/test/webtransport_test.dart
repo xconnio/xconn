@@ -1,7 +1,7 @@
 import "dart:typed_data";
 
 import "package:test/test.dart";
-import "package:xconn_core/webtransport.dart";
+import "package:xconn/webtransport.dart";
 
 import "transport_peer.dart";
 

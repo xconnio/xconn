@@ -3,9 +3,9 @@
 
 import "dart:async";
 
-import "package:xconn_core/src/call.dart";
-import "package:xconn_core/src/session.dart";
-import "package:xconn_core/src/types.dart";
+import "package:xconn/src/call.dart";
+import "package:xconn/src/session.dart";
+import "package:xconn/src/types.dart";
 
 /// A request is one operation, even when its Future has multiple listeners.
 abstract class _Request<T> implements Future<T> {

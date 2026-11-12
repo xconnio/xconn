@@ -38,7 +38,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: dart-package
-          path: target/dart-release/xconn_core-*.tar.gz
+          path: target/dart-release/xconn-*.tar.gz
           if-no-files-found: error
 
   publish:
@@ -60,7 +60,7 @@ jobs:
       - name: Publish the tested package
         run: |
           mkdir unpacked
-          tar -xzf package/xconn_core-*.tar.gz -C unpacked
+          tar -xzf package/xconn-*.tar.gz -C unpacked
           cd unpacked
           dart pub get
           dart pub publish --force

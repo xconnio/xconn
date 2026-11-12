@@ -3,7 +3,7 @@ library;
 
 import "dart:typed_data";
 
-import "package:xconn_core/src/protocol.dart";
+import "package:xconn/src/protocol.dart";
 
 ({Uint8List publicKey, Uint8List privateKey}) generateKeyPair() {
   final pair = callNative("crypto_key_pair")! as Map;

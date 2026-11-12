@@ -1,16 +1,16 @@
 import "dart:async";
 import "dart:convert";
 
-import "package:xconn_core/serializers.dart";
-import "package:xconn_core/src/call.dart";
-import "package:xconn_core/src/callbacks.dart";
-import "package:xconn_core/src/client.dart";
-import "package:xconn_core/src/discovery.dart";
-import "package:xconn_core/src/exception.dart";
-import "package:xconn_core/src/native.dart" as native;
-import "package:xconn_core/src/requests.dart";
-import "package:xconn_core/src/rpc_streams.dart";
-import "package:xconn_core/src/types.dart";
+import "package:xconn/serializers.dart";
+import "package:xconn/src/call.dart";
+import "package:xconn/src/callbacks.dart";
+import "package:xconn/src/client.dart";
+import "package:xconn/src/discovery.dart";
+import "package:xconn/src/exception.dart";
+import "package:xconn/src/native.dart" as native;
+import "package:xconn/src/requests.dart";
+import "package:xconn/src/rpc_streams.dart";
+import "package:xconn/src/types.dart";
 
 Result resultFromNative(Object? value, {Session? session}) {
   final response = fields(value);

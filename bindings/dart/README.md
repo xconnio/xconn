@@ -2,14 +2,14 @@
 
 The package provides Future-based WAMP clients over Rust networking.
 
-Install with `dart pub add xconn_core` or `flutter pub add xconn_core`.
+Install with `dart pub add xconn` or `flutter pub add xconn`.
 The first build downloads the native library automatically; see the supported
 platforms and requirements below.
 
 Connect to a WAMP router and call a registered `example.echo` procedure:
 
 ```dart
-import "package:xconn_core/xconn_core.dart";
+import "package:xconn/xconn.dart";
 
 Future<void> main() async {
   final session = await connectAnonymous("ws://127.0.0.1:8080/ws", "realm1");
@@ -26,8 +26,8 @@ external WAMP router. Client operations use fluent `call`/`register`/`subscribe`
 builders and `execute()`. Progressive calls/results and application callbacks are
 supported. Custom `BaseSession` implementations and the `Peer`-backed `PeerBaseSession`
 adapter remain available. Import custom authenticator interfaces from
-`package:xconn_core/auth.dart`, serializers from `package:xconn_core/serializers.dart`,
-and custom-codec message views from `package:xconn_core/messages.dart`. No Wampproto
+`package:xconn/auth.dart`, serializers from `package:xconn/serializers.dart`,
+and custom-codec message views from `package:xconn/messages.dart`. No Wampproto
 Dart package or separate protocol native library is needed.
 
 Rust owns handshakes, WebSocket/RawSocket networking, codecs and crypto. Operations
@@ -61,7 +61,7 @@ XCONN_REFERENCE_GO_BIN=/path/to/original-go-reference dart test
 
 Dart 3.10+ build hooks download native SDK **0.1.1** from GitHub Releases,
 verify the archive against checksums pinned in this package, and bundle the
-library automatically. Rust, Cargo, and a Core source checkout are not required.
+library automatically. Rust, Cargo, and a XConn source checkout are not required.
 
 Supported release targets:
 
@@ -81,7 +81,7 @@ downloads. It must match the build target and C ABI; no Rust tools are invoked:
 ```yaml
 hooks:
   user_defines:
-    xconn_core:
+    xconn:
       native_library: /absolute/path/to/libxconn_ffi.so
 ```
 
@@ -103,16 +103,16 @@ Forced isolate termination still does not guarantee finalizer cleanup.
 Fluent requests use `execute()`, for example:
 `await session.call('echo').arg('hello').execute()`.
 The former `do_()` alias has been removed. See the
-[shared execution contract](https://github.com/xconnio/xconn-core/blob/main/docs/fluent-api.md).
+[shared execution contract](https://github.com/xconnio/xconn/blob/main/docs/fluent-api.md).
 
-Invocation, Event and Result share [strict typed payload accessors](https://github.com/xconnio/xconn-core/blob/main/docs/payload.md)
+Invocation, Event and Result share [strict typed payload accessors](https://github.com/xconnio/xconn/blob/main/docs/payload.md)
 with explicit defaults and consistent numeric/binary conversion rules.
 
-[Result construction and received values](https://github.com/xconnio/xconn-core/blob/main/docs/results.md) use one payload
+[Result construction and received values](https://github.com/xconnio/xconn/blob/main/docs/results.md) use one payload
 type for handler replies, progressive results and completed calls.
 
 Progressive RPCs use the fluent `stream()` terminal (`Stream()`/`StreamContext()` in Go).
-See the [cross-language streaming API](https://github.com/xconnio/xconn-core/blob/main/docs/streaming.md) for examples and lifecycle rules.
+See the [cross-language streaming API](https://github.com/xconnio/xconn/blob/main/docs/streaming.md) for examples and lifecycle rules.
 
 ## Progressive results
 
@@ -134,7 +134,7 @@ and `finish(args, kwargs)`. Consume results concurrently for long producers.
 ## QUIC
 
 ```dart
-import 'package:xconn_core/quic.dart';
+import 'package:xconn/quic.dart';
 
 final connection = await QUICConnection.connect('host:443', serverName: 'host');
 try {
@@ -158,7 +158,7 @@ sessions and streams open. Connection timeouts cancel native attempts.
 
 ## WebTransport
 
-Import `package:xconn_core/webtransport.dart` and use
+Import `package:xconn/webtransport.dart` and use
 `WebTransportConnection.connect('https://host:443/wamp')`. The connection exposes
 `openSession`, `openStream`, `acceptStream`, and `close`, like QUIC. Rust verifies
 the server identity using system roots or an explicit DER `certificate`.
@@ -167,8 +167,8 @@ the server identity using system roots or an explicit DER `certificate`.
 
 ```dart
 import 'dart:typed_data';
-import 'package:xconn_core/webrtc.dart';
-import 'package:xconn_core/xconn_core.dart';
+import 'package:xconn/webrtc.dart';
+import 'package:xconn/xconn.dart';
 
 final signaling = await Client().connect('wss://router/ws', 'realm');
 try {
@@ -208,7 +208,7 @@ from the same revision for the current host, configure the root pubspec:
 ```yaml
 hooks:
   user_defines:
-    xconn_core:
+    xconn:
       native_library: ../../target/release/libxconn_ffi.so
 ```
 

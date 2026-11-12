@@ -1,8 +1,8 @@
 import "dart:typed_data";
 
 import "package:test/test.dart";
-import "package:xconn_core/webrtc.dart";
-import "package:xconn_core/xconn_core.dart";
+import "package:xconn/webrtc.dart";
+import "package:xconn/xconn.dart";
 
 import "rpc_streams.dart";
 import "transport_peer.dart";

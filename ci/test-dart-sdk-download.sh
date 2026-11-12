@@ -4,18 +4,18 @@ cd "$(dirname "$0")/.."
 temporary=$(mktemp -d)
 trap 'rm -rf "$temporary"' EXIT
 
-mkdir -p "$temporary/xconn_core" "$temporary/consumer/bin" "$temporary/tools"
-cp -R bindings/dart/lib bindings/dart/hook "$temporary/xconn_core/"
-cp bindings/dart/LICENSE "$temporary/xconn_core/"
+mkdir -p "$temporary/xconn" "$temporary/consumer/bin" "$temporary/tools"
+cp -R bindings/dart/lib bindings/dart/hook "$temporary/xconn/"
+cp bindings/dart/LICENSE "$temporary/xconn/"
 # CI appends a native_library override to this manifest; test the default instead.
-sed '/^hooks:/,$d' bindings/dart/pubspec.yaml > "$temporary/xconn_core/pubspec.yaml"
+sed '/^hooks:/,$d' bindings/dart/pubspec.yaml > "$temporary/xconn/pubspec.yaml"
 cat > "$temporary/consumer/pubspec.yaml" <<'YAML'
 name: xconn_download_consumer
 environment:
   sdk: '>=3.13.0 <4.0.0'
 dependencies:
-  xconn_core:
-    path: ../xconn_core
+  xconn:
+    path: ../xconn
 YAML
 cp bindings/dart/test/fixtures/native_asset_smoke.dart "$temporary/consumer/bin/main.dart"
 for tool in cargo rustc; do

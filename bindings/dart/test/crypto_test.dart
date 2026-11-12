@@ -3,7 +3,7 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:test/test.dart";
-import "package:xconn_core/crypto.dart" as crypto;
+import "package:xconn/crypto.dart" as crypto;
 
 void main() {
   test("packet cryptography matches the independent Go implementation", () {

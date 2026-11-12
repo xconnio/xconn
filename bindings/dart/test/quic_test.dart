@@ -2,7 +2,7 @@ import "dart:typed_data";
 
 import "package:crypto/crypto.dart";
 import "package:test/test.dart";
-import "package:xconn_core/quic.dart";
+import "package:xconn/quic.dart";
 
 import "rpc_streams.dart";
 import "transport_peer.dart";

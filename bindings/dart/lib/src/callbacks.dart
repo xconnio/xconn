@@ -1,6 +1,6 @@
 import "dart:async";
 
-import "package:xconn_core/src/native.dart" as native;
+import "package:xconn/src/native.dart" as native;
 
 Map<String, dynamic> fields(Object? value) => Map<String, Object?>.from(value! as Map);
 

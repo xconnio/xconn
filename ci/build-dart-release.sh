@@ -23,4 +23,4 @@ tar --exclude=.dart_tool --exclude=build --exclude=pubspec_overrides.yaml \
 ci/test-dart-sdk-download.sh
 mkdir -p "$output"
 tar --exclude=.dart_tool --exclude=build \
-  -czf "$output/xconn_core-$version.tar.gz" -C "$package" .
+  -czf "$output/xconn-$version.tar.gz" -C "$package" .

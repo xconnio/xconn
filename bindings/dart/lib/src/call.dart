@@ -1,8 +1,8 @@
 import "dart:async";
 
-import "package:xconn_core/src/native.dart" as native;
-import "package:xconn_core/src/session.dart" show Session, resultFromNative;
-import "package:xconn_core/src/types.dart";
+import "package:xconn/src/native.dart" as native;
+import "package:xconn/src/session.dart" show Session, resultFromNative;
+import "package:xconn/src/types.dart";
 
 /// An owned progressive RPC. Send inputs while consuming results independently.
 class Call {
