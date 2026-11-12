@@ -18,5 +18,5 @@ mkdir -p target/npm-release
 consumer="$(mktemp -d)"
 trap 'rm -rf -- "$consumer"' EXIT
 npm install --prefix "$consumer" --ignore-scripts --no-audit --no-fund \
-  "$PWD/target/npm-release/xconnio-core-$version.tgz"
-node bindings/js/tests/run.mjs "$consumer/node_modules/@xconnio/core/dist" full
+  "$PWD/target/npm-release/xconnio-xconn-$version.tgz"
+node bindings/js/tests/run.mjs "$consumer/node_modules/@xconnio/xconn/dist" full
