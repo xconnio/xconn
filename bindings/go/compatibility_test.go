@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xconnio/xconn-core/bindings/go"
-	"github.com/xconnio/xconn-core/bindings/go/auth"
+	"github.com/xconnio/xconn/bindings/go"
+	"github.com/xconnio/xconn/bindings/go/auth"
 )
 
 // Exercise fluent builders and handlers using the shared Result payload.

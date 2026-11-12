@@ -14,7 +14,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	xconn "github.com/xconnio/xconn-core/bindings/go"
+	xconn "github.com/xconnio/xconn/bindings/go"
 )
 
 //nolint:contextcheck // Router setup and in-memory joins have no context API.

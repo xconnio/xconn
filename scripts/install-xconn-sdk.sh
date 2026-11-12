@@ -61,7 +61,7 @@ trap 'exit 1' HUP INT TERM
 
 # Download the archive and its published checksum.
 name=xconn-native-$version-$target-static
-base=https://github.com/xconnio/xconn-core/releases/download/v$version
+base=https://github.com/xconnio/xconn/releases/download/v$version
 curl -fLsS -o "$temporary/sdk.tar.gz" "$base/$name.tar.gz"
 curl -fLsS -o "$temporary/checksum" "$base/$name.tar.gz.sha256"
 

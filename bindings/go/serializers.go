@@ -1,8 +1,8 @@
 package xconn
 
 import (
-	"github.com/xconnio/xconn-core/bindings/go/serializers"
-	"github.com/xconnio/xconn-core/bindings/go/transports"
+	"github.com/xconnio/xconn/bindings/go/serializers"
+	"github.com/xconnio/xconn/bindings/go/transports"
 )
 
 const (

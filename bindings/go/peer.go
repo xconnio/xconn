@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xconnio/xconn-core/bindings/go/auth"
+	"github.com/xconnio/xconn/bindings/go/auth"
 )
 
 // DirectConfig configures direct connections to the single edge serving the hub realm.

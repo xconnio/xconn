@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xconnio/xconn-core/bindings/go"
-	"github.com/xconnio/xconn-core/bindings/go/auth"
-	"github.com/xconnio/xconn-core/bindings/go/messages"
-	"github.com/xconnio/xconn-core/bindings/go/serializers"
+	"github.com/xconnio/xconn/bindings/go"
+	"github.com/xconnio/xconn/bindings/go/auth"
+	"github.com/xconnio/xconn/bindings/go/messages"
+	"github.com/xconnio/xconn/bindings/go/serializers"
 )
 
 type legacyPolicy struct{}

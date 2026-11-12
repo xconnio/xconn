@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/xconnio/xconn-core/bindings/go/messages"
-	"github.com/xconnio/xconn-core/bindings/go/protocol"
+	"github.com/xconnio/xconn/bindings/go/messages"
+	"github.com/xconnio/xconn/bindings/go/protocol"
 )
 
 type RegisterRequest struct {

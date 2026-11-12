@@ -7,7 +7,7 @@ import (
 	"net"
 	"sync"
 
-	"github.com/xconnio/xconn-core/bindings/go/messages"
+	"github.com/xconnio/xconn/bindings/go/messages"
 )
 
 type Router struct {

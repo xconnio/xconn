@@ -3,8 +3,8 @@ package messages_test
 import (
 	"testing"
 
-	"github.com/xconnio/xconn-core/bindings/go/internal/bridge"
-	"github.com/xconnio/xconn-core/bindings/go/messages"
+	"github.com/xconnio/xconn/bindings/go/internal/bridge"
+	"github.com/xconnio/xconn/bindings/go/messages"
 )
 
 func TestConstantsMatchRust(t *testing.T) {

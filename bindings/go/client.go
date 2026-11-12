@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xconnio/xconn-core/bindings/go/auth"
-	"github.com/xconnio/xconn-core/bindings/go/messages"
-	"github.com/xconnio/xconn-core/bindings/go/serializers"
+	"github.com/xconnio/xconn/bindings/go/auth"
+	"github.com/xconnio/xconn/bindings/go/messages"
+	"github.com/xconnio/xconn/bindings/go/serializers"
 )
 
 type Authenticator struct {

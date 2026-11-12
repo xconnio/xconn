@@ -1,7 +1,7 @@
 package protocol
 
 import (
-	"github.com/xconnio/xconn-core/bindings/go/internal/bridge"
+	"github.com/xconnio/xconn/bindings/go/internal/bridge"
 )
 
 type SessionDetails struct{ fields map[string]any }

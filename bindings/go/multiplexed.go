@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/xconnio/xconn-core/bindings/go/auth"
+	"github.com/xconnio/xconn/bindings/go/auth"
 )
 
 // MultiplexedSession opens raw streams alongside an established WAMP session.

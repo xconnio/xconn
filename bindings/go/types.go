@@ -1,7 +1,7 @@
 // Package xconn provides native Go APIs backed by the shared Rust networking runtime.
 package xconn
 
-import "github.com/xconnio/xconn-core/bindings/go/protocol"
+import "github.com/xconnio/xconn/bindings/go/protocol"
 
 type Options = map[string]any
 

@@ -1,4 +1,4 @@
-module github.com/xconnio/xconn-core/bindings/go
+module github.com/xconnio/xconn/bindings/go
 
 go 1.26.0
 

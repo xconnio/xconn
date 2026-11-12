@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/xconnio/xconn-core/bindings/go/protocol"
+	"github.com/xconnio/xconn/bindings/go/protocol"
 )
 
 type SendProgress func(args []any, kwargs map[string]any) error

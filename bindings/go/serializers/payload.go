@@ -1,6 +1,6 @@
 package serializers
 
-import "github.com/xconnio/xconn-core/bindings/go/internal/bridge"
+import "github.com/xconnio/xconn/bindings/go/internal/bridge"
 
 func SerializePayload(codec uint64, args []any, kwargs map[string]any) ([]byte, error) {
 	value, err := bridge.Call("payload_encode", codec, args, kwargs)

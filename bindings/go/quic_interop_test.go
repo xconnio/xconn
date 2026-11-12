@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	xconn "github.com/xconnio/xconn-core/bindings/go"
+	xconn "github.com/xconnio/xconn/bindings/go"
 )
 
 //nolint:contextcheck // Router creation, realm setup and in-memory connections have no context API.

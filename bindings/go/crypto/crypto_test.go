@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	crypto "github.com/xconnio/xconn-core/bindings/go/crypto"
+	crypto "github.com/xconnio/xconn/bindings/go/crypto"
 )
 
 func TestPacketsMatchTheIndependentGoImplementation(t *testing.T) {

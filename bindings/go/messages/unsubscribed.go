@@ -1,7 +1,7 @@
 // API field containers adapted from wampproto-go (MIT); protocol behavior delegates to Rust.
 package messages
 
-import "github.com/xconnio/xconn-core/bindings/go/internal/bridge"
+import "github.com/xconnio/xconn/bindings/go/internal/bridge"
 
 type UnsubscribedFields interface {
 	RequestID() uint64

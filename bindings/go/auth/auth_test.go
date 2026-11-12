@@ -9,8 +9,8 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/xconnio/xconn-core/bindings/go/auth"
-	"github.com/xconnio/xconn-core/bindings/go/messages"
+	"github.com/xconnio/xconn/bindings/go/auth"
+	"github.com/xconnio/xconn/bindings/go/messages"
 )
 
 func TestCRAAgainstGoCrypto(t *testing.T) {

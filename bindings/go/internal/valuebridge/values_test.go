@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/xconnio/xconn-core/bindings/go/internal/valuebridge"
+	"github.com/xconnio/xconn/bindings/go/internal/valuebridge"
 )
 
 func TestValuesAndMalformedTransfers(t *testing.T) {

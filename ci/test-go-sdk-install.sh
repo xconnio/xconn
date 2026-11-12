@@ -66,8 +66,8 @@ module sdk-consumer
 
 go 1.26.0
 
-require github.com/xconnio/xconn-core/bindings/go v0.0.0
-replace github.com/xconnio/xconn-core/bindings/go => ../go
+require github.com/xconnio/xconn/bindings/go v0.0.0
+replace github.com/xconnio/xconn/bindings/go => ../go
 MOD
 cat > "$temporary/consumer/main.go" <<'GO'
 package main
@@ -75,7 +75,7 @@ package main
 import (
     "context"
     "fmt"
-    xconn "github.com/xconnio/xconn-core/bindings/go"
+    xconn "github.com/xconnio/xconn/bindings/go"
 )
 
 func main() {

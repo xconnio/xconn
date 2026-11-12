@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/xconnio/xconn-core/bindings/go/internal/valuebridge"
+	"github.com/xconnio/xconn/bindings/go/internal/valuebridge"
 )
 
 const expectedABIVersion = 1

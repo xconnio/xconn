@@ -6,8 +6,8 @@ import (
 	"log"
 	"time"
 
-	xconn "github.com/xconnio/xconn-core/bindings/go"
-	rtc "github.com/xconnio/xconn-core/bindings/go/webrtc"
+	xconn "github.com/xconnio/xconn/bindings/go"
+	rtc "github.com/xconnio/xconn/bindings/go/webrtc"
 )
 
 func main() {
