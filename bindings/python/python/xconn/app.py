@@ -9,9 +9,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pydantic import BaseModel
 
-from xconn_core.async_client import AsyncSession
-from xconn_core.client import Session
-from xconn_core.types import RegisterOptions, SubscribeOptions
+from xconn.async_client import AsyncSession
+from xconn.client import Session
+from xconn.types import RegisterOptions, SubscribeOptions
 
 
 class ExecutionMode(Enum):

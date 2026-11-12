@@ -2,9 +2,9 @@ import asyncio
 
 import pytest
 from router_fixture import Router
-from xconn_core import AsyncClient, Client, serializers
-from xconn_core.exception import ApplicationError
-from xconn_core.types import Result
+from xconn import AsyncClient, Client, serializers
+from xconn.exception import ApplicationError
+from xconn.types import Result
 
 
 @pytest.mark.parametrize(
@@ -51,7 +51,7 @@ def test_async_lifecycle_accepts_sync_callbacks_and_returned_awaitables(return_a
 
 @pytest.mark.parametrize("closing", [False, True])
 def test_async_reader_reports_unexpected_native_errors(closing):
-    from xconn_core.async_client import AsyncSession
+    from xconn.async_client import AsyncSession
 
     async def scenario():
         session = AsyncSession.__new__(AsyncSession)

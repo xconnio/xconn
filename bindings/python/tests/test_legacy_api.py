@@ -3,10 +3,10 @@ import threading
 
 import pytest
 from router_fixture import Router
-from xconn_core import AsyncClient, AsyncSession, Client, JSONSerializer, Session, auth, serializers
-from xconn_core.client import connect
-from xconn_core.exception import ApplicationError
-from xconn_core.types import (
+from xconn import AsyncClient, AsyncSession, Client, JSONSerializer, Session, auth, serializers
+from xconn.client import connect
+from xconn.exception import ApplicationError
+from xconn.types import (
     CallOptions,
     EventDetails,
     InvokeOptions,
@@ -91,7 +91,7 @@ def test_existing_option_and_exception_helpers():
 
 @pytest.mark.parametrize("transport", ["websocket", "rawsocket"])
 def test_legacy_ping_and_nullable_payloads(transport):
-    from xconn_core.types import TransportConfig
+    from xconn.types import TransportConfig
 
     assert Result() == Result(None, None, None)
     config = TransportConfig(open_timeout=2, ping_interval=0.01, ping_timeout=1, close_timeout=2)
@@ -139,7 +139,7 @@ def test_custom_serializer_callbacks_are_retained():
 
 
 def test_original_application_composition_api():
-    from xconn_core import App, Component, register, subscribe
+    from xconn import App, Component, register, subscribe
 
     class Handlers(Component):
         @register("example.echo")
@@ -159,8 +159,8 @@ def test_original_application_composition_api():
 
 @pytest.mark.parametrize("asynchronous", [False, True])
 def test_original_base_session_transport_adapter(asynchronous):
-    from xconn_core import _bridge as bridge
-    from xconn_core.types import AsyncBaseSession, BaseSession, SessionDetails
+    from xconn import _bridge as bridge
+    from xconn.types import AsyncBaseSession, BaseSession, SessionDetails
 
     class Transport:
         def __init__(self, handle):

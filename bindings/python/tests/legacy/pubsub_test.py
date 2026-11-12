@@ -4,9 +4,9 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from xconn_core import Client, serializers
-from xconn_core.client import connect_anonymous
-from xconn_core.types import Event
+from xconn import Client, serializers
+from xconn.client import connect_anonymous
+from xconn.types import Event
 
 
 def test_pubsub():

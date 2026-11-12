@@ -1,8 +1,8 @@
 import asyncio
 
 import pytest
-from xconn_core import AsyncClient, Client
-from xconn_core.webrtc import WebRTCOptions, connect, connect_async
+from xconn import AsyncClient, Client
+from xconn.webrtc import WebRTCOptions, connect, connect_async
 
 OPTIONS = WebRTCOptions("offer", "to-client", "to-provider")
 

@@ -3,7 +3,7 @@ import math
 from pathlib import Path
 
 import pytest
-from xconn_core import Event, Invocation, PayloadError, Result
+from xconn import Event, Invocation, PayloadError, Result
 
 CASES = json.loads((Path(__file__).resolve().parents[3] / "tests/payload/cases.json").read_text())
 TYPES = {

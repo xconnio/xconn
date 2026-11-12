@@ -18,17 +18,17 @@ import yaml
 from dotenv import load_dotenv
 from pydantic import BaseModel, ValidationError, create_model
 
-from xconn_core._client.types import ClientConfig, CommandArgs
-from xconn_core.app import App, ExecutionMode
-from xconn_core.auth import (
+from xconn._client.types import ClientConfig, CommandArgs
+from xconn.app import App, ExecutionMode
+from xconn.auth import (
     AnonymousAuthenticator,
     CryptoSignAuthenticator,
     IClientAuthenticator,
     TicketAuthenticator,
     WAMPCRAAuthenticator,
 )
-from xconn_core.exception import ApplicationError
-from xconn_core.types import (
+from xconn.exception import ApplicationError
+from xconn.types import (
     CallDetails,
     Depends,
     Event,
@@ -571,12 +571,12 @@ def connect(app: str, config: ClientConfig, directory: str = "."):
     imported_app = import_app(app, directory)
 
     if imported_app.execution_mode == ExecutionMode.ASYNC:
-        from xconn_core._client.async_ import _connect_async
-        from xconn_core.utils import run
+        from xconn._client.async_ import _connect_async
+        from xconn.utils import run
 
         run(_connect_async(imported_app, config, directory=directory))
     elif imported_app.execution_mode == ExecutionMode.SYNC:
-        from xconn_core._client.sync import _connect_sync
+        from xconn._client.sync import _connect_sync
 
         _connect_sync(imported_app, config, directory=directory)
     else:

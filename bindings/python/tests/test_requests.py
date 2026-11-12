@@ -5,8 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from router_fixture import AsyncRouter, Router
-from xconn_core import Result
-from xconn_core.types import Progress
+from xconn import Result
+from xconn.types import Progress
 
 
 def test_blocking_fluent_requests_route_and_await_does_not_execute_them():

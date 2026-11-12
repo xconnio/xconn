@@ -82,7 +82,7 @@ class AuthCallbacks:
         }
 
     def _run(self):
-        from xconn_core.messages import Challenge, ChallengeFields
+        from xconn.messages import Challenge, ChallengeFields
 
         while True:
             try:
@@ -101,7 +101,7 @@ class AuthCallbacks:
                         )
                         response["value"] = {"signature": result.signature, "extra": result.extra}
                     elif event["method"] == "serialize":
-                        from xconn_core.messages import to_message
+                        from xconn.messages import to_message
 
                         response["value"] = self.serializer.serialize(to_message(event["value"]))
                     elif event["method"] == "deserialize":
@@ -127,7 +127,7 @@ class AuthCallbacks:
 
 
 def serializer_name(serializer):
-    from xconn_core.serializers import CBORSerializer, JSONSerializer, MsgPackSerializer
+    from xconn.serializers import CBORSerializer, JSONSerializer, MsgPackSerializer
 
     if isinstance(serializer, str):
         return serializer
@@ -140,7 +140,7 @@ def serializer_name(serializer):
 
 
 def custom_serializer(serializer):
-    from xconn_core.serializers import CBORSerializer, JSONSerializer, MsgPackSerializer
+    from xconn.serializers import CBORSerializer, JSONSerializer, MsgPackSerializer
 
     return not isinstance(serializer, str) and type(serializer) not in (
         JSONSerializer,
@@ -214,7 +214,7 @@ class PeerCallbacks:
                 if self.claim_close():
                     self._invoke(self.base.close)
             elif method == "serialize":
-                from xconn_core.messages import to_message
+                from xconn.messages import to_message
 
                 response["value"] = self.base.serializer.serialize(to_message(event["value"]))
             elif method == "deserialize":

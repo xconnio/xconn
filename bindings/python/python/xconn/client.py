@@ -5,7 +5,7 @@ import logging
 import threading
 from concurrent.futures import Future, ThreadPoolExecutor
 
-from xconn_core import serializers
+from xconn import serializers
 
 from . import _bridge as bridge
 from .discovery import Discovery

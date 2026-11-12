@@ -4,8 +4,8 @@ import inspect
 import random
 from collections.abc import AsyncGenerator
 
-from xconn_core import App, AsyncClient
-from xconn_core._client.helpers import (
+from xconn import App, AsyncClient
+from xconn._client.helpers import (
     INITIAL_WAIT,
     MAX_WAIT,
     ProcedureMetadata,
@@ -23,10 +23,10 @@ from xconn_core._client.helpers import (
     validate_event_parameters,
     validate_invocation_parameters,
 )
-from xconn_core._client.types import ClientConfig
-from xconn_core.async_client import AsyncSession, Registration, Subscription
-from xconn_core.types import Event, Invocation, InvokeOptions, RegisterOptions, Result
-from xconn_core.utils import run
+from xconn._client.types import ClientConfig
+from xconn.async_client import AsyncSession, Registration, Subscription
+from xconn.types import Event, Invocation, InvokeOptions, RegisterOptions, Result
+from xconn.utils import run
 
 
 async def _setup(app: App, session: AsyncSession):

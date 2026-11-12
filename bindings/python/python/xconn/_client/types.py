@@ -2,7 +2,7 @@ import enum
 
 from pydantic import BaseModel, Field
 
-from xconn_core.types import WebsocketConfig
+from xconn.types import WebsocketConfig
 
 
 class ConfigSource(str, enum.Enum):

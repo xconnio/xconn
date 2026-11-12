@@ -5,8 +5,8 @@ import os
 import subprocess
 
 import pytest
-from xconn_core import Client, Endpoint
-from xconn_core.async_client import AsyncClient
+from xconn import Client, Endpoint
+from xconn.async_client import AsyncClient
 
 
 @pytest.fixture(scope="module")

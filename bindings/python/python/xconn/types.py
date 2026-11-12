@@ -7,8 +7,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from xconn_core import messages, serializers
-from xconn_core.payload import Payload
+from xconn import messages, serializers
+from xconn.payload import Payload
 
 
 @dataclass

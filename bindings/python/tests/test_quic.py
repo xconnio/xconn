@@ -1,7 +1,7 @@
 import asyncio
 
 import pytest
-from xconn_core.quic import AsyncQUICConnection, QUICConnection
+from xconn.quic import AsyncQUICConnection, QUICConnection
 
 
 def test_quic_sessions_streams_and_certificate_validation(transport_peer):

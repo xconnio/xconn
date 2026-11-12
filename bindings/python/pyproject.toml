@@ -2,7 +2,7 @@
 requires = ["maturin>=1.12,<2"]
 build-backend = "maturin"
 [project]
-name = "xconn-core"
+name = "xconn"
 version = "0.1.6"
 description = "Blocking and asyncio Python client APIs backed by the shared Rust XConn runtime"
 readme = "README.md"
@@ -28,7 +28,7 @@ Changelog = "https://github.com/xconnio/xconn/blob/main/bindings/python/CHANGELO
 
 [tool.maturin]
 python-source = "python"
-module-name = "xconn_core._native"
+module-name = "xconn._native"
 features = ["pyo3/extension-module"]
 
 [tool.ruff]
