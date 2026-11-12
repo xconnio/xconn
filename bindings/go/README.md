@@ -1,6 +1,6 @@
 # Go binding
 
-The module is `github.com/xconnio/xconn-core/bindings/go` and its package name is
+The module is `github.com/xconnio/xconn/bindings/go` and its package name is
 `xconn`. It uses cgo and the Rust client/router runtime.
 
 ## Install
@@ -8,9 +8,9 @@ The module is `github.com/xconnio/xconn-core/bindings/go` and its package name i
 Install Go, a C compiler and `pkg-config`, then run the native SDK installer once:
 
 ```sh
-curl -fL https://raw.githubusercontent.com/xconnio/xconn-core/main/scripts/install-xconn-sdk.sh -o install-xconn-sdk.sh
+curl -fL https://raw.githubusercontent.com/xconnio/xconn/main/scripts/install-xconn-sdk.sh -o install-xconn-sdk.sh
 sh install-xconn-sdk.sh
-go get github.com/xconnio/xconn-core/bindings/go
+go get github.com/xconnio/xconn/bindings/go
 go build ./...
 ```
 

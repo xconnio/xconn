@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/xconnio/xconn-core/bindings/go/serializers"
+	"github.com/xconnio/xconn/bindings/go/serializers"
 )
 
 func TestPayloads(t *testing.T) {

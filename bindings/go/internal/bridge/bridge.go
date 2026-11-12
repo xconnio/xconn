@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/xconnio/xconn-core/bindings/go/internal/native"
+	"github.com/xconnio/xconn/bindings/go/internal/native"
 )
 
 func Call(method string, args ...any) (any, error) {

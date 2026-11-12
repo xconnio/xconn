@@ -10,8 +10,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	api "github.com/xconnio/xconn-core/bindings/go"
-	"github.com/xconnio/xconn-core/bindings/go/auth"
+	api "github.com/xconnio/xconn/bindings/go"
+	"github.com/xconnio/xconn/bindings/go/auth"
 )
 
 func peerRouter(t *testing.T) (*api.Router, *api.Session) {

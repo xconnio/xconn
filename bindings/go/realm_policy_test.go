@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/xconnio/xconn-core/bindings/go"
-	"github.com/xconnio/xconn-core/bindings/go/messages"
+	"github.com/xconnio/xconn/bindings/go"
+	"github.com/xconnio/xconn/bindings/go/messages"
 )
 
 type policyFunc func(xconn.BaseSession, messages.Message) (bool, error)

@@ -15,7 +15,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	api "github.com/xconnio/xconn-core/bindings/go"
+	api "github.com/xconnio/xconn/bindings/go"
 )
 
 const (

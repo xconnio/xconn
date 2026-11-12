@@ -16,7 +16,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	xconn "github.com/xconnio/xconn-core/bindings/go"
+	xconn "github.com/xconnio/xconn/bindings/go"
 )
 
 func TestWebTransportSessionsStreamsAndTLS(t *testing.T) {

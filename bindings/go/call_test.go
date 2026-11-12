@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/xconnio/xconn-core/bindings/go"
+	"github.com/xconnio/xconn/bindings/go"
 )
 
 func TestStreamDuplexAndCompletion(t *testing.T) {

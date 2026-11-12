@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/xconnio/xconn-core/bindings/go"
+	"github.com/xconnio/xconn/bindings/go"
 )
 
 // TestStreamingInteropPeer is launched in a separate process by the Python tests.

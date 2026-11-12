@@ -4,7 +4,7 @@ package webrtc
 import (
 	"context"
 
-	xconn "github.com/xconnio/xconn-core/bindings/go"
+	xconn "github.com/xconnio/xconn/bindings/go"
 )
 
 type (

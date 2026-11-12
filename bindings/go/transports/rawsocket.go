@@ -1,7 +1,7 @@
 // Package transports provides sans-I/O RawSocket framing through Rust.
 package transports
 
-import "github.com/xconnio/xconn-core/bindings/go/internal/bridge"
+import "github.com/xconnio/xconn/bindings/go/internal/bridge"
 
 const (
 	Magic              byte       = 0x7f

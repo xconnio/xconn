@@ -6,8 +6,8 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/xconnio/xconn-core/bindings/go/protocol"
-	"github.com/xconnio/xconn-core/bindings/go/util"
+	"github.com/xconnio/xconn/bindings/go/protocol"
+	"github.com/xconnio/xconn/bindings/go/util"
 )
 
 // PayloadError classifies a missing, null, incorrectly typed or out-of-range value.

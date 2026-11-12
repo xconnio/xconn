@@ -60,7 +60,7 @@ assert not any(
     p.startswith(
         (
             "github.com/xconnio/wampproto/",
-            "github.com/xconnio/xconn-core/bindings/",
+            "github.com/xconnio/xconn/bindings/",
             "github.com/xconnio/xconn/bindings/",
         )
     )

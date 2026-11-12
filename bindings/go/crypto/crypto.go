@@ -2,7 +2,7 @@
 // authenticate peer keys; X25519 alone does not establish the peer's identity.
 package crypto
 
-import "github.com/xconnio/xconn-core/bindings/go/internal/bridge"
+import "github.com/xconnio/xconn/bindings/go/internal/bridge"
 
 func GenerateKeyPair() (public, private []byte, err error) {
 	value, err := bridge.Call("crypto_key_pair")

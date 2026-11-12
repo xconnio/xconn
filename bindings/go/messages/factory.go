@@ -3,7 +3,7 @@ package messages
 import (
 	"fmt"
 
-	"github.com/xconnio/xconn-core/bindings/go/internal/bridge"
+	"github.com/xconnio/xconn/bindings/go/internal/bridge"
 )
 
 type nativeMessage interface {

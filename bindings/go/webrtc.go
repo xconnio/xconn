@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xconnio/xconn-core/bindings/go/auth"
+	"github.com/xconnio/xconn/bindings/go/auth"
 )
 
 type WebRTCCredentialType string

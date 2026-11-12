@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/xconnio/xconn-core/bindings/go"
+	"github.com/xconnio/xconn/bindings/go"
 )
 
 func run() error {

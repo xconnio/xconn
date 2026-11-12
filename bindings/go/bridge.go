@@ -6,7 +6,7 @@ import (
 	"math"
 	"sync"
 
-	"github.com/xconnio/xconn-core/bindings/go/internal/native"
+	"github.com/xconnio/xconn/bindings/go/internal/native"
 )
 
 func nativeUint64(value any) uint64 {

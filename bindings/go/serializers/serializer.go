@@ -2,8 +2,8 @@
 package serializers
 
 import (
-	"github.com/xconnio/xconn-core/bindings/go/internal/bridge"
-	"github.com/xconnio/xconn-core/bindings/go/messages"
+	"github.com/xconnio/xconn/bindings/go/internal/bridge"
+	"github.com/xconnio/xconn/bindings/go/messages"
 )
 
 const (
