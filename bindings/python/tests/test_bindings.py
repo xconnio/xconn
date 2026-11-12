@@ -5,7 +5,7 @@ import subprocess
 
 import pytest
 from router_fixture import AsyncRouter, Router
-from xconn_core import ApplicationError, AsyncClient, Client, Result
+from xconn import ApplicationError, AsyncClient, Client, Result
 
 
 @pytest.mark.parametrize("serializer", ["json", "cbor", "msgpack"])
@@ -169,7 +169,7 @@ def original_router(original_reference):
 @pytest.mark.parametrize("serializer", ["json", "cbor", "msgpack"])
 @pytest.mark.parametrize("transport", ["ws", "rs"])
 def test_python_authentication_against_original_go(original_router, serializer, transport):
-    from xconn_core import auth
+    from xconn import auth
 
     profiles = [
         auth.AnonymousAuthenticator(""),

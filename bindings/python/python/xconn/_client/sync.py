@@ -5,8 +5,8 @@ import time
 from collections.abc import Generator
 from typing import Any
 
-from xconn_core import App
-from xconn_core._client.helpers import (
+from xconn import App
+from xconn._client.helpers import (
     INITIAL_WAIT,
     MAX_WAIT,
     ProcedureMetadata,
@@ -24,9 +24,9 @@ from xconn_core._client.helpers import (
     validate_event_parameters,
     validate_invocation_parameters,
 )
-from xconn_core._client.types import ClientConfig
-from xconn_core.client import Client, Session
-from xconn_core.types import Event, Invocation, InvokeOptions, RegisterOptions, Result
+from xconn._client.types import ClientConfig
+from xconn.client import Client, Session
+from xconn.types import Event, Invocation, InvokeOptions, RegisterOptions, Result
 
 
 def _setup(app: App, session: Session):

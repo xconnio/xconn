@@ -1,5 +1,5 @@
 import pytest
-from xconn_core.webtransport import AsyncWebTransportConnection, WebTransportConnection
+from xconn.webtransport import AsyncWebTransportConnection, WebTransportConnection
 
 
 def test_webtransport_verifies_certificates_and_transports_rpc_and_bytes(transport_peer):

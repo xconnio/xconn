@@ -80,7 +80,7 @@ class Router:
         raise TimeoutError("Rust test router did not start")
 
     def connect(self, serializer="json"):
-        from xconn_core import Client
+        from xconn import Client
 
         self.listen()
         return Client(serializer=serializer).connect(f"ws://{self.address}", self.realm)
@@ -101,7 +101,7 @@ class Router:
 
 class AsyncRouter(Router):
     async def connect(self, serializer="json"):
-        from xconn_core import AsyncClient
+        from xconn import AsyncClient
 
         Router.listen(self)
         return await AsyncClient(serializer=serializer).connect(f"ws://{self.address}", self.realm)

@@ -4,7 +4,7 @@ Python provides blocking and asyncio clients. Routing and server listeners are
 provided by Rust/Go or an external WAMP router.
 
 ```python
-from xconn_core import Client
+from xconn import Client
 
 with Client().connect("ws://127.0.0.1:8080/ws", "realm1") as session:
     result = session.call("example.echo").arg("hello").execute()
@@ -12,7 +12,7 @@ with Client().connect("ws://127.0.0.1:8080/ws", "realm1") as session:
 ```
 
 ```python
-from xconn_core import AsyncClient
+from xconn import AsyncClient
 
 
 async def main():
@@ -21,7 +21,7 @@ async def main():
         print(result.args)
 ```
 
-The package includes its own `xconn_core.auth`, `xconn_core.serializers` and custom-peer
+The package includes its own `xconn.auth`, `xconn.serializers` and custom-peer
 message views. Built-in JSON/CBOR/MessagePack codecs and anonymous/ticket/CRA/
 cryptosign authentication execute in Rust. One native PyO3 extension handles all
 operations; no standalone Wampproto Python package is required. Client/session
@@ -35,22 +35,22 @@ server, `start_router` and in-memory router conveniences have been removed.
 ## Installation
 
 ```sh
-uv add xconn-core
+uv add xconn
 # Or install into an existing environment:
-uv pip install xconn-core
+uv pip install xconn
 ```
 
-The package imports as `xconn_core`. A matching prebuilt ABI3 wheel contains the
+The package imports as `xconn`. A matching prebuilt ABI3 wheel contains the
 native extension; users need no Rust toolchain or separate SDK. Wheels support
 CPython 3.10 and newer. Source builds require Rust and the platform build tools.
 Linux wheels must be built in manylinux containers and repaired to bundle
 external TLS libraries before publication. See
-[binding packaging](https://github.com/xconnio/xconn-core/blob/main/docs/releases.md).
+[binding packaging](https://github.com/xconnio/xconn/blob/main/docs/releases.md).
 
 Application configuration helpers have optional dependencies:
 
 ```sh
-uv add 'xconn-core[framework]'
+uv add 'xconn[framework]'
 ```
 
 The optional Cap'n Proto serializer is distributed separately from GitHub.
@@ -68,9 +68,9 @@ that archive, then install the wheel in an isolated environment:
 ```sh
 uv build bindings/python --out-dir target/python-dist
 uv venv target/python-release-venv
-uv pip install --python target/python-release-venv/bin/python target/python-dist/xconn_core-*.whl
+uv pip install --python target/python-release-venv/bin/python target/python-dist/xconn-*.whl
 uv pip install --python target/python-release-venv/bin/python pytest pytest-asyncio ruff==0.17.1
-cargo build -p xconn-core --features router --bin xconn-router
+cargo build -p xconn --features router --bin xconn-router
 target/python-release-venv/bin/python -m pytest bindings/python/tests
 ```
 
@@ -92,16 +92,16 @@ Fluent requests use `execute()` exclusively: for example,
 `session.call("echo").arg("hello").execute()`, or
 `await session.call("echo").arg("hello").execute()` with AsyncSession.
 The former `do()` spelling has been removed. See the
-[shared execution contract](https://github.com/xconnio/xconn-core/blob/main/docs/fluent-api.md).
+[shared execution contract](https://github.com/xconnio/xconn/blob/main/docs/fluent-api.md).
 
-Invocation, Event and Result share [strict typed payload accessors](https://github.com/xconnio/xconn-core/blob/main/docs/payload.md)
+Invocation, Event and Result share [strict typed payload accessors](https://github.com/xconnio/xconn/blob/main/docs/payload.md)
 with explicit defaults and consistent numeric/binary conversion rules.
 
-[Result construction and received values](https://github.com/xconnio/xconn-core/blob/main/docs/results.md) use one payload
+[Result construction and received values](https://github.com/xconnio/xconn/blob/main/docs/results.md) use one payload
 type for handler replies, progressive results and completed calls.
 
 Progressive RPCs use the fluent `stream()` terminal (`Stream()`/`StreamContext()` in Go).
-See the [cross-language streaming API](https://github.com/xconnio/xconn-core/blob/main/docs/streaming.md) for examples and lifecycle rules.
+See the [cross-language streaming API](https://github.com/xconnio/xconn/blob/main/docs/streaming.md) for examples and lifecycle rules.
 
 ## Progressive results
 
@@ -117,7 +117,7 @@ chunks with `stream(progressive_input=True)`, then `send(...)` and `finish(...)`
 ## QUIC connections
 
 ```python
-from xconn_core.quic import QUICConnection
+from xconn.quic import QUICConnection
 
 with QUICConnection.connect("host:443", server_name="host") as connection:
     session = connection.open_session("realm")
@@ -135,12 +135,12 @@ sessions and byte streams. Closing a session leaves the connection usable.
 
 ## WebTransport
 
-`xconn_core.webtransport.WebTransportConnection` and
+`xconn.webtransport.WebTransportConnection` and
 `AsyncWebTransportConnection` provide the same session and byte-stream operations
 as QUIC. Connect using an HTTPS URL:
 
 ```python
-from xconn_core.webtransport import AsyncWebTransportConnection
+from xconn.webtransport import AsyncWebTransportConnection
 
 async with await AsyncWebTransportConnection.connect("https://host:443/wamp") as connection:
     session = await connection.open_session("realm")
@@ -156,8 +156,8 @@ an explicitly supplied DER `certificate`. Certificate verification is mandatory.
 ## WebRTC
 
 ```python
-from xconn_core import AsyncClient
-from xconn_core.webrtc import WebRTCOptions, connect_async
+from xconn import AsyncClient
+from xconn.webrtc import WebRTCOptions, connect_async
 
 signaling = await AsyncClient().connect("wss://router/ws", "realm")
 try:

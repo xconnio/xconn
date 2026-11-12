@@ -2,7 +2,7 @@ import json
 from pathlib import Path
 
 import pytest
-from xconn_core import crypto
+from xconn import crypto
 
 
 def test_packets_match_the_independent_go_implementation():

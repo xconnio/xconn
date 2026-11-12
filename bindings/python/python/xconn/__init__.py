@@ -1,7 +1,7 @@
 """Python XConn client APIs backed by the shared Rust runtime."""
 
-from xconn_core.auth import AnonymousAuthenticator, CryptoSignAuthenticator, TicketAuthenticator, WAMPCRAAuthenticator
-from xconn_core.serializers import CBORSerializer, JSONSerializer, MsgPackSerializer
+from xconn.auth import AnonymousAuthenticator, CryptoSignAuthenticator, TicketAuthenticator, WAMPCRAAuthenticator
+from xconn.serializers import CBORSerializer, JSONSerializer, MsgPackSerializer
 
 from .app import App, Component, register, subscribe
 from .async_client import AsyncClient, AsyncSession

@@ -4,10 +4,10 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 
 import pytest
-from xconn_core import Client, serializers
-from xconn_core.client import connect_anonymous
-from xconn_core.exception import ApplicationError
-from xconn_core.types import Invocation
+from xconn import Client, serializers
+from xconn.client import connect_anonymous
+from xconn.exception import ApplicationError
+from xconn.types import Invocation
 
 
 def test_rpc():

@@ -3,9 +3,9 @@ import hashlib
 import os
 
 import pytest
-from xconn_core import AsyncClient, serializers
-from xconn_core.async_client import connect_anonymous
-from xconn_core.types import Event
+from xconn import AsyncClient, serializers
+from xconn.async_client import connect_anonymous
+from xconn.types import Event
 
 
 async def test_pubsub():

@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from router_fixture import AsyncRouter, Router
-from xconn_core import ApplicationError, Result
+from xconn import ApplicationError, Result
 
 
 @pytest.mark.parametrize("serializer", ["json", "cbor", "msgpack"])

@@ -3,10 +3,10 @@ import hashlib
 import os
 
 import pytest
-from xconn_core import AsyncClient, serializers
-from xconn_core.async_client import connect_anonymous
-from xconn_core.exception import ApplicationError
-from xconn_core.types import Invocation
+from xconn import AsyncClient, serializers
+from xconn.async_client import connect_anonymous
+from xconn.exception import ApplicationError
+from xconn.types import Invocation
 
 
 async def test_rpc():

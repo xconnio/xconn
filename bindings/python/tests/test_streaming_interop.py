@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
-from xconn_core import ApplicationError, AsyncClient, Client, Result
+from xconn import ApplicationError, AsyncClient, Client, Result
 
 
 @pytest.fixture
