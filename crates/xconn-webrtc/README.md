@@ -8,7 +8,7 @@ Reusable native Rust WebRTC data transport with optional WAMP integration.
   independent WAMP sessions on one connection, signaling provider/client using
   the existing xconn-webrtc-go offer/candidate wire format.
 
-The transport layer does not depend on WAMP or xconn-core when built using
+The transport layer does not depend on WAMP or xconn when built using
 `cargo check -p xconn-webrtc --no-default-features`. Language bindings can share this implementation. Binding adapters will be
 introduced in later milestones.
 
@@ -18,7 +18,7 @@ cargo clippy -p xconn-webrtc --all-features --all-targets -- -D warnings
 cargo check -p xconn-webrtc --no-default-features
 ```
 
-Run these commands from the xconn-core workspace root. The WAMP engine is included under `crates/wampproto`. Normal xconn-core package builds do not depend
+Run these commands from the xconn workspace root. The WAMP engine is included under `crates/wampproto`. Normal xconn package builds do not depend
 on this crate or the WebRTC stack. Consumers can depend on xconn-webrtc separately
 and disable its default `wamp` feature for raw transport use. Tests establish real
 local WebRTC connections, exchange multi-chunk payloads and raw packets, open two

@@ -1,5 +1,5 @@
 use std::time::Duration;
-use xconn_core::Result as RpcResult;
+use xconn::Result as RpcResult;
 use xconn_webrtc::{Connection, MTU};
 
 async fn pair() -> (
@@ -56,7 +56,7 @@ async fn real_data_channels_and_multiple_streams() {
 #[tokio::test]
 async fn multiple_wamp_sessions_share_connection() {
     tokio::time::timeout(Duration::from_secs(30), async {
-        use xconn_core::{
+        use xconn::{
             async_::{
                 router::{RealmConfig, Router},
                 types::RegisterRequest,
@@ -113,7 +113,7 @@ async fn multiple_wamp_sessions_share_connection() {
 #[tokio::test]
 async fn wamp_signaling_provider_and_client() {
     tokio::time::timeout(Duration::from_secs(30), async {
-        use xconn_core::{
+        use xconn::{
             async_::{
                 router::{RealmConfig, Router},
                 types::RegisterRequest,

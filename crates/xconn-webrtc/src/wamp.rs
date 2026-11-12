@@ -7,7 +7,7 @@ use crate::{Connection, DataChannel};
 use async_trait::async_trait;
 use bytes::Bytes;
 use std::{sync::Arc, time::Duration};
-use xconn_core::{
+use xconn::{
     Error, SerializerSpec,
     async_::{
         joiner::join,
@@ -24,7 +24,7 @@ use xconn_core::{
 // The manager owns the complete direct connection, not only its WAMP channel.
 #[cfg(feature = "services")]
 #[async_trait]
-impl xconn_core::async_::services::peer::DirectConnection for WebRTCSession {
+impl xconn::async_::services::peer::DirectConnection for WebRTCSession {
     fn session(&self) -> &Session {
         &self.session
     }
@@ -303,7 +303,7 @@ async fn accept_handshaken(
     router: Router,
     channel: Arc<DataChannel>,
     request: Bytes,
-    authenticated: Option<tokio::sync::watch::Sender<Option<xconn_core::wampproto::types::SessionDetails>>>,
+    authenticated: Option<tokio::sync::watch::Sender<Option<xconn::wampproto::types::SessionDetails>>>,
 ) -> std::result::Result<(), Error> {
     let hs = rs::receive_handshake(&request)?;
     channel
@@ -484,7 +484,7 @@ async fn serve_connection_configured(
 }
 
 async fn wait_raw_authentication(
-    authenticated: &tokio::sync::watch::Sender<Option<xconn_core::wampproto::types::SessionDetails>>,
+    authenticated: &tokio::sync::watch::Sender<Option<xconn::wampproto::types::SessionDetails>>,
     failed: &tokio::sync::watch::Sender<bool>,
     timeout: Duration,
 ) -> std::result::Result<(), Error> {

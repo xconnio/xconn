@@ -6,12 +6,12 @@ use crate::{
     values::{dictionary, handle_field, object_value, string_field},
 };
 use std::{collections::HashMap, sync::Arc};
-use xconn_core::async_::{
+use xconn::async_::{
     router::{RealmConfig, Router},
     server::Server,
 };
 
-fn permissions(value: &Value) -> Result<Vec<xconn_core::async_::router::Permission>> {
+fn permissions(value: &Value) -> Result<Vec<xconn::async_::router::Permission>> {
     let Value::List(values) = value else {
         return Err("permissions must be an array".into());
     };
@@ -23,9 +23,9 @@ fn permissions(value: &Value) -> Result<Vec<xconn_core::async_::router::Permissi
                 Some(Value::Str(policy)) if !policy.is_empty() => policy.as_str(),
                 _ => "exact",
             };
-            Ok(xconn_core::async_::router::Permission {
+            Ok(xconn::async_::router::Permission {
                 uri: string_field(&fields, "uri")?,
-                matching: xconn_core::wampproto::routing::MatchPolicy::parse(policy).map_err(|e| e.message)?,
+                matching: xconn::wampproto::routing::MatchPolicy::parse(policy).map_err(|e| e.message)?,
                 call: fields.get("call") == Some(&Value::Bool(true)),
                 register: fields.get("register") == Some(&Value::Bool(true)),
                 publish: fields.get("publish") == Some(&Value::Bool(true)),
@@ -35,7 +35,7 @@ fn permissions(value: &Value) -> Result<Vec<xconn_core::async_::router::Permissi
         .collect()
 }
 
-fn foreign_authorizer(fields: &HashMap<String, Value>) -> Result<xconn_core::async_::router::Authorizer> {
+fn foreign_authorizer(fields: &HashMap<String, Value>) -> Result<xconn::async_::router::Authorizer> {
     let callbacks = get_callbacks(handle_field(fields, "callback")?)?;
     Ok(Arc::new(move |details, message| {
         let response = callbacks.call(
@@ -66,7 +66,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
             }
 
             let management = if f.get("management") == Some(&Value::Bool(true)) {
-                use xconn_core::async_::router::Permission;
+                use xconn::async_::router::Permission;
                 let config = RealmConfig {
                     roles: HashMap::from([
                         ("trusted".into(), vec![Permission::all()]),
@@ -74,7 +74,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                             "anonymous".into(),
                             vec![Permission {
                                 uri: "io.xconn.mgmt.".into(),
-                                matching: xconn_core::wampproto::routing::MatchPolicy::Prefix,
+                                matching: xconn::wampproto::routing::MatchPolicy::Prefix,
                                 call: true,
                                 subscribe: true,
                                 publish: false,
@@ -85,7 +85,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                     ..RealmConfig::default()
                 };
                 Some(
-                    xconn_core::async_::management::Management::start(r.clone(), Some(config))
+                    xconn::async_::management::Management::start(r.clone(), Some(config))
                         .await
                         .map_err(|error| error.to_string())?,
                 )
@@ -101,8 +101,8 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
             ))
         }
         "permission_match" => {
-            let policy = xconn_core::wampproto::routing::MatchPolicy::parse(&string_field(&f, "policy")?)
-                .map_err(|e| e.message)?;
+            let policy =
+                xconn::wampproto::routing::MatchPolicy::parse(&string_field(&f, "policy")?).map_err(|e| e.message)?;
             plain(Value::Bool(
                 policy.matches(&string_field(&f, "pattern")?, &string_field(&f, "uri")?),
             ))
@@ -218,7 +218,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
             plain(Value::Null)
         }
         "websocket_protocols" => plain(Value::List(
-            xconn_core::async_::server::websocket_protocols()
+            xconn::async_::server::websocket_protocols()
                 .into_iter()
                 .map(Value::Str)
                 .collect(),
@@ -232,7 +232,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                 _ => return Err("expected supported protocols".into()),
             };
             plain(
-                xconn_core::async_::server::select_websocket_protocol(&string_field(&f, "offered")?, &supported)
+                xconn::async_::server::select_websocket_protocol(&string_field(&f, "offered")?, &supported)
                     .map(|s| Value::Str(s.into()))
                     .unwrap_or(Value::Null),
             )
@@ -247,7 +247,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                     let transport = string_field(&f, "transport")?;
                     #[cfg(feature = "yamux")]
                     if transport == "yamux" {
-                        let listener = xconn_core::async_::server::UnixServer::yamux(r, &path)
+                        let listener = xconn::async_::server::UnixServer::yamux(r, &path)
                             .await
                             .map_err(|error| error.to_string())?;
                         return Ok(Output::resource(
@@ -258,7 +258,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                     if transport != "websocket" && transport != "rawsocket" {
                         return Err("unsupported Unix listener transport".into());
                     }
-                    let listener = xconn_core::async_::server::UnixServer::listen(r, &path, transport == "websocket")
+                    let listener = xconn::async_::server::UnixServer::listen(r, &path, transport == "websocket")
                         .await
                         .map_err(|error| error.to_string())?;
                     return Ok(Output::resource(
@@ -284,16 +284,16 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                         let protocols = Arc::new(move || {
                             let value = callbacks
                                 .call("websocket_protocols", Value::Null)
-                                .map_err(xconn_core::Error::new)?;
+                                .map_err(xconn::Error::new)?;
                             match value {
                                 Value::List(values) => values
                                     .into_iter()
                                     .map(|v| match v {
                                         Value::Str(s) => Ok(s),
-                                        _ => Err(xconn_core::Error::new("expected protocol string")),
+                                        _ => Err(xconn::Error::new("expected protocol string")),
                                     })
                                     .collect(),
-                                _ => Err(xconn_core::Error::new("expected protocols")),
+                                _ => Err(xconn::Error::new("expected protocols")),
                             }
                         });
                         Server::websocket_with_protocols(r, address, protocols).await

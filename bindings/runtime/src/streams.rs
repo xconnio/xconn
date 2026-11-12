@@ -9,7 +9,7 @@ use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::Mutex,
 };
-use xconn_core::async_::rawsocket::BoxStream;
+use xconn::async_::rawsocket::BoxStream;
 
 pub(super) struct Stream {
     read: Mutex<tokio::io::ReadHalf<BoxStream>>,

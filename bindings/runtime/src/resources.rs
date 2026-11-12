@@ -12,7 +12,7 @@ use std::{
     sync::{Arc, Mutex, OnceLock, atomic::Ordering},
 };
 use tokio::sync::{mpsc, oneshot};
-use xconn_core::{
+use xconn::{
     Result as RpcResult,
     async_::{
         router::Router,
@@ -27,9 +27,9 @@ fn resources() -> &'static Mutex<HashMap<u64, Arc<Resource>>> {
 }
 
 pub(super) struct ForeignBase {
-    pub(super) peer: Arc<dyn xconn_core::async_::peer::Peer>,
-    pub(super) details: xconn_core::SessionDetails,
-    pub(super) serializer: Box<dyn xconn_core::wampproto::serializers::serializer::Serializer>,
+    pub(super) peer: Arc<dyn xconn::async_::peer::Peer>,
+    pub(super) details: xconn::SessionDetails,
+    pub(super) serializer: Box<dyn xconn::wampproto::serializers::serializer::Serializer>,
     pub(super) transferred: std::sync::atomic::AtomicBool,
 }
 
@@ -41,8 +41,8 @@ pub(super) fn get_base(handle: u64) -> Result<Arc<ForeignBase>> {
 }
 
 pub(super) enum Resource {
-    Discovery(Arc<xconn_core::async_::services::discovery::DiscoveryService>),
-    Bridge(Arc<xconn_core::async_::services::bridge::Bridge>),
+    Discovery(Arc<xconn::async_::services::discovery::DiscoveryService>),
+    Bridge(Arc<xconn::async_::services::bridge::Bridge>),
     #[cfg(feature = "quic")]
     Quic(crate::quic::Resource),
     #[cfg(feature = "quic")]
@@ -53,17 +53,17 @@ pub(super) enum Resource {
     WebRTC(webrtc::Resource),
     Router {
         router: Router,
-        _management: Option<Box<xconn_core::async_::management::Management>>,
+        _management: Option<Box<xconn::async_::management::Management>>,
     },
     Session(Arc<ForeignSession>),
     #[cfg(feature = "webrtc")]
     SessionView(Arc<ForeignSession>),
     Listener(Server),
     #[cfg(unix)]
-    UnixListener(xconn_core::async_::server::UnixServer),
+    UnixListener(xconn::async_::server::UnixServer),
     Callbacks(Arc<ForeignCallbacks>),
     Call(Arc<ForeignCall>),
-    Stream(xconn_core::async_::call::Call),
+    Stream(xconn::async_::call::Call),
     Base(Arc<ForeignBase>),
 }
 
@@ -164,7 +164,7 @@ pub(super) struct ForeignSession {
     pub(super) events: mpsc::Sender<Value>,
     pub(super) receiver: tokio::sync::Mutex<mpsc::Receiver<Value>>,
     pub(super) invocations: Mutex<HashMap<u64, oneshot::Sender<RpcResult>>>,
-    pub(super) invocation_contexts: Mutex<HashMap<u64, xconn_core::async_::session::InvocationContext>>,
+    pub(super) invocation_contexts: Mutex<HashMap<u64, xconn::async_::session::InvocationContext>>,
     pub(super) subscriptions: Mutex<HashMap<u64, Arc<Subscription>>>,
 }
 
@@ -329,7 +329,7 @@ pub(super) struct CallInput {
 
 pub(super) struct ForeignCall {
     pub(super) input: mpsc::Sender<CallInput>,
-    pub(super) output: tokio::sync::Mutex<mpsc::Receiver<std::result::Result<RpcResult, xconn_core::Error>>>,
+    pub(super) output: tokio::sync::Mutex<mpsc::Receiver<std::result::Result<RpcResult, xconn::Error>>>,
     pub(super) task: tokio::task::AbortHandle,
 }
 

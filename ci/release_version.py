@@ -16,7 +16,7 @@ def release_version(tag):
 
 def check_versions(tag, root=ROOT):
     version = release_version(tag)
-    crates = ["wampproto", "xconn-framing", "xconn-crypto", "xconn-core"]
+    crates = ["wampproto", "xconn-framing", "xconn-crypto", "xconn"]
     manifests = [
         (f"crates/{crate}/Cargo.toml", r'^version = "([^"]+)"$') for crate in crates
     ]

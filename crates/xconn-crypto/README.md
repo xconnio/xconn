@@ -12,8 +12,8 @@ X25519 does not authenticate a peer. Applications establish trust in public keys
 through an authenticated session or another trusted mechanism. This crate does
 not define key exchange RPCs, key persistence, replay policy, or authorization.
 
-The optional `crypto` feature of `xconn-core` re-exports this crate as
-`xconn_core::crypto`. It can also be used directly as `xconn_crypto`.
+The optional `crypto` feature of `xconn` re-exports this crate as
+`xconn::crypto`. It can also be used directly as `xconn_crypto`.
 
 ```sh
 cargo test --locked -p xconn-crypto

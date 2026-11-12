@@ -1,7 +1,7 @@
 //! Local transport integration peer shared by the language-binding tests.
 use std::sync::Arc;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
-use xconn_core::{
+use xconn::{
     CBORSerializerSpec, Result as RpcResult,
     async_::{
         quic,
@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
     local
         .register("large_result", |_inv| async move {
-            RpcResult::new(vec![xconn_core::Value::Str("rtc".repeat(700_000))], Default::default())
+            RpcResult::new(vec![xconn::Value::Str("rtc".repeat(700_000))], Default::default())
         })
         .execute()
         .await?;
@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     match backend.offer_stream().await {
                         Ok((reference, stream)) => {
                             tokio::spawn(echo_stream(stream));
-                            RpcResult::args(vec![xconn_core::Value::Null, reference])
+                            RpcResult::args(vec![xconn::Value::Null, reference])
                         }
                         Err(_) => RpcResult::error("wamp.error.runtime_error"),
                     }

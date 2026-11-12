@@ -17,7 +17,7 @@ use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, DuplexStream, ReadBuf},
     sync::{OwnedSemaphorePermit, Semaphore, watch},
 };
-use xconn_core::async_::{peer::StreamOpener, rawsocket::BoxStream};
+use xconn::async_::{peer::StreamOpener, rawsocket::BoxStream};
 
 pub(crate) const PROTOCOL: &str = "xconn.rpc.stream.v1";
 const DATA: u8 = 0;
@@ -36,7 +36,7 @@ pub(crate) fn opener(connection: Connection, session: Arc<DataChannel>, timeout:
         Box::pin(async move {
             let permit = capacity
                 .try_acquire_owned()
-                .map_err(|_| xconn_core::Error::new("too many RPC streams"))?;
+                .map_err(|_| xconn::Error::new("too many RPC streams"))?;
             let options = crate::webrtc::data_channel::data_channel_init::RTCDataChannelInit {
                 ordered: Some(true),
                 protocol: Some(PROTOCOL.into()),
@@ -44,15 +44,15 @@ pub(crate) fn opener(connection: Connection, session: Arc<DataChannel>, timeout:
             };
             let channel = tokio::select! {
                 biased;
-                _ = session.closed() => return Err(xconn_core::Error::new("WAMP session closed")),
-                result = connection.open_channel_with_options(PROTOCOL, options) => result.map_err(|e| xconn_core::Error::new(e.to_string()))?,
+                _ = session.closed() => return Err(xconn::Error::new("WAMP session closed")),
+                result = connection.open_channel_with_options(PROTOCOL, options) => result.map_err(|e| xconn::Error::new(e.to_string()))?,
             };
             let mut guard = super::wamp::ChannelGuard(Some(channel.clone()));
             channel
                 .wait_open(timeout)
                 .await
-                .map_err(|e| xconn_core::Error::new(e.to_string()))?;
-            let stream = ChannelStream::new(channel, permit).map_err(|e| xconn_core::Error::new(e.to_string()))?;
+                .map_err(|e| xconn::Error::new(e.to_string()))?;
+            let stream = ChannelStream::new(channel, permit).map_err(|e| xconn::Error::new(e.to_string()))?;
             guard.0 = None;
             Ok(Box::new(stream) as BoxStream)
         })

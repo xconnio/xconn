@@ -7,7 +7,7 @@ use crate::{
     values::{handle_field, session_fields, string_field},
 };
 use std::{collections::HashMap, sync::Arc};
-use xconn_core::async_::webtransport::{Connection, Listener, backend};
+use xconn::async_::webtransport::{Connection, Listener, backend};
 
 pub(super) enum Resource {
     Connection(Arc<Connection>),
@@ -156,7 +156,7 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
                 return Err("expected WebTransport listener".into());
             };
             let stream = listener.accept_raw().await.ok_or("WebTransport listener closed")?;
-            let fields = session_fields(&xconn_core::SessionDetails::from_protocol(&stream.session));
+            let fields = session_fields(&xconn::SessionDetails::from_protocol(&stream.session));
             Ok(stream_output(stream.stream, fields))
         }
         "webtransport_wait" => {

@@ -37,7 +37,7 @@ class ReleaseVersionTests(unittest.TestCase):
                     {"version": "0.1.5", "packages": {"": {"version": "0.1.5"}}}
                 ),
             }
-            for crate in ["wampproto", "xconn-framing", "xconn-crypto", "xconn-core"]:
+            for crate in ["wampproto", "xconn-framing", "xconn-crypto", "xconn"]:
                 files[f"crates/{crate}/Cargo.toml"] = 'version = "0.1.5"\n'
             for filename, text in files.items():
                 path = root / filename
@@ -97,7 +97,7 @@ class ReleasePreparationTests(unittest.TestCase):
         for language in ("js", "python", "dart"):
             self.assertIn(f"## {self.version}\n", (self.root / f"bindings/{language}/CHANGELOG.md").read_text())
         for relative in (
-            "crates/xconn-core/Cargo.toml",
+            "crates/xconn/Cargo.toml",
             "crates/xconn-webrtc/Cargo.toml",
             "bindings/runtime/Cargo.toml",
             "bindings/js/wasm/Cargo.toml",
@@ -256,7 +256,7 @@ class CratePublicationTests(unittest.TestCase):
                 [
                     "publish --locked -p xconn-framing",
                     "publish --locked -p xconn-crypto",
-                    "publish --locked -p xconn-core",
+                    "publish --locked -p xconn",
                 ],
             )
             log.unlink()

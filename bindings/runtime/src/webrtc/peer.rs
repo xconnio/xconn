@@ -22,14 +22,14 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
             let _ = codec(&f)?;
             let _ = authenticator(&f)?;
             let policy = options.retry;
-            let connect: xconn_core::async_::services::peer::Connector<ManagedDirect> = Arc::new(move || {
+            let connect: xconn::async_::services::peer::Connector<ManagedDirect> = Arc::new(move || {
                 let (hub, options, fields) = (hub.clone(), options.clone(), f.clone());
                 Box::pin(async move {
                     let session = xconn_webrtc::peer::connect_once(
                         &hub.session,
                         &options,
-                        codec(&fields).map_err(xconn_core::Error::new)?,
-                        authenticator(&fields).map_err(xconn_core::Error::new)?,
+                        codec(&fields).map_err(xconn::Error::new)?,
+                        authenticator(&fields).map_err(xconn::Error::new)?,
                     )
                     .await?;
                     let view = OwnedResource::new(BridgeResource::SessionView(Arc::new(ForeignSession::new(
@@ -43,7 +43,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                 })
             });
             let hub = get_session(hub_handle)?;
-            let manager = xconn_core::async_::services::peer::Peer::start(hub.session.clone(), connect, policy)
+            let manager = xconn::async_::services::peer::Peer::start(hub.session.clone(), connect, policy)
                 .map_err(|error| error.to_string())?;
             Ok(Output::resource(
                 BridgeResource::WebRTC(Resource::Peer(Arc::new(ManagedPeer { manager, hub_handle }))),
@@ -76,7 +76,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                     plain(Value::Dict(fields))
                 }
                 "webrtc_peer_status" => {
-                    use xconn_core::async_::services::peer::ConnectionPath;
+                    use xconn::async_::services::peer::ConnectionPath;
                     let status = peer.manager.status();
                     let path = match status.path {
                         ConnectionPath::Routed => "routed",
@@ -137,7 +137,7 @@ fn peer_config(fields: &HashMap<String, Value>) -> Result<xconn_webrtc::peer::Co
 }
 
 pub(crate) struct ManagedPeer {
-    pub(super) manager: xconn_core::async_::services::peer::Peer<ManagedDirect>,
+    pub(super) manager: xconn::async_::services::peer::Peer<ManagedDirect>,
     hub_handle: u64,
 }
 
@@ -149,8 +149,8 @@ pub(super) struct ManagedDirect {
 }
 
 #[async_trait::async_trait]
-impl xconn_core::async_::services::peer::DirectConnection for ManagedDirect {
-    fn session(&self) -> &xconn_core::async_::session::Session {
+impl xconn::async_::services::peer::DirectConnection for ManagedDirect {
+    fn session(&self) -> &xconn::async_::session::Session {
         &self.session.session
     }
 

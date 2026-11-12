@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 version=$(python3 ci/release_version.py "${RELEASE_TAG:?release tag required}")
-for crate in wampproto xconn-framing xconn-crypto xconn-core; do
+for crate in wampproto xconn-framing xconn-crypto xconn; do
   status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
     --user-agent 'XConn release (https://github.com/xconnio/xconn)' \
     "https://crates.io/api/v1/crates/$crate/$version")

@@ -4,7 +4,7 @@ use super::{
     serve_connection_configured,
 };
 use std::sync::Arc;
-use xconn_core::{SerializerSpec, wampproto::authenticators::authenticator::ClientAuthenticator};
+use xconn::{SerializerSpec, wampproto::authenticators::authenticator::ClientAuthenticator};
 
 struct TaskGuard(Option<tokio::task::JoinHandle<()>>);
 
@@ -44,7 +44,7 @@ async fn publish_candidates(connection: Connection, signaling: Session, topic: S
         };
 
         if signaling
-            .execute_publish(xconn_core::PublishRequest::new(topic.clone()).arg(id.clone()).arg(json))
+            .execute_publish(xconn::PublishRequest::new(topic.clone()).arg(id.clone()).arg(json))
             .await
             .is_err()
         {
@@ -105,12 +105,12 @@ impl Provider {
         ));
         let candidates = connections.clone();
         let sub = signaling
-            .execute_subscribe(xconn_core::async_::types::SubscribeRequest::new(
+            .execute_subscribe(xconn::async_::types::SubscribeRequest::new(
                 config.remote_candidates_topic.clone(),
                 move |event| {
                     let connections = candidates.clone();
                     async move {
-                        if let [xconn_core::Value::Str(id), xconn_core::Value::Str(json), ..] = event.args.as_slice() {
+                        if let [xconn::Value::Str(id), xconn::Value::Str(json), ..] = event.args.as_slice() {
                             let connection = connections.lock().unwrap().get(id).cloned();
 
                             if let (Some(connection), Ok(candidate)) = (connection, serde_json::from_str(json)) {
@@ -151,11 +151,11 @@ impl Provider {
                     let ice_servers = servers.read().unwrap().clone();
                     async move {
                         let offer = match context.invocation.args.first() {
-                            Some(xconn_core::Value::Str(json)) => serde_json::from_str::<crate::Description>(json),
-                            _ => return xconn_core::Result::error("wamp.error.invalid_argument"),
+                            Some(xconn::Value::Str(json)) => serde_json::from_str::<crate::Description>(json),
+                            _ => return xconn::Result::error("wamp.error.invalid_argument"),
                         };
                         let Ok(offer) = offer else {
-                            return xconn_core::Result::error("wamp.error.invalid_argument");
+                            return xconn::Result::error("wamp.error.invalid_argument");
                         };
                         let operation = async {
                             let connection = Connection::new(ice_servers)
@@ -206,8 +206,8 @@ impl Provider {
                         };
 
                         match operation.await {
-                            Ok(response) => xconn_core::Result::arg(response),
-                            Err(_) => xconn_core::Result::error("wamp.error.runtime_error"),
+                            Ok(response) => xconn::Result::arg(response),
+                            Err(_) => xconn::Result::error("wamp.error.runtime_error"),
                         }
                     }
                 },
@@ -432,13 +432,13 @@ async fn connect_inner(
     let queued_candidates = candidates.clone();
     let remote = connection.clone();
     let sub = signaling
-        .execute_subscribe(xconn_core::async_::types::SubscribeRequest::new(
+        .execute_subscribe(xconn::async_::types::SubscribeRequest::new(
             config.remote_candidates_topic.clone(),
             move |event| {
                 let candidates = queued_candidates.clone();
                 let remote = remote.clone();
                 async move {
-                    if let [xconn_core::Value::Str(id), xconn_core::Value::Str(json), ..] = event.args.as_slice() {
+                    if let [xconn::Value::Str(id), xconn::Value::Str(json), ..] = event.args.as_slice() {
                         let Ok(candidate) = serde_json::from_str::<
                             crate::webrtc::ice_transport::ice_candidate::RTCIceCandidateInit,
                         >(json) else {
@@ -472,14 +472,14 @@ async fn connect_inner(
             .map_err(|e| Error::new(e.to_string()))?;
         let json = serde_json::to_string(&offer).map_err(|e| Error::new(e.to_string()))?;
         let response = signaling
-            .execute_call(xconn_core::CallRequest::new(config.offer_procedure.clone()).arg(json))
+            .execute_call(xconn::CallRequest::new(config.offer_procedure.clone()).arg(json))
             .await?;
         if let Some(error) = response.error {
             return Err(Error::new(error.uri));
         }
 
         let args = response.args.unwrap_or_default();
-        let Some(xconn_core::Value::Str(json)) = args.first() else {
+        let Some(xconn::Value::Str(json)) = args.first() else {
             return Err(Error::new("invalid offer response"));
         };
         let response: OfferResponse = serde_json::from_str(json).map_err(|e| Error::new(e.to_string()))?;

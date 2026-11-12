@@ -1,4 +1,4 @@
-use xconn_core::wampproto;
+use xconn::wampproto;
 // Resource ownership and Go API adaptation around existing Rust primitives.
 use base64::Engine as _;
 use std::collections::HashMap;

@@ -6,7 +6,7 @@ import sys
 
 from release_version import ROOT, check_versions, release_version
 
-CRATES = ("wampproto", "xconn-framing", "xconn-crypto", "xconn-core")
+CRATES = ("wampproto", "xconn-framing", "xconn-crypto", "xconn")
 
 
 def prepare_release(version, root=ROOT):

@@ -6,7 +6,7 @@ use wampproto::{
     serializers::payload::OpaquePayload,
     types::SessionDetails,
 };
-use xconn_core::wampproto;
+use xconn::wampproto;
 
 fn boolean(v: &Value) -> Result<bool> {
     if let Value::Bool(v) = v {

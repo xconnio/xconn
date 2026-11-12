@@ -9,7 +9,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 use tokio::sync::mpsc;
-use xconn_core::{
+use xconn::{
     CBORSerializerSpec, JSONSerializerSpec, MsgPackSerializerSpec, SerializerSpec,
     wampproto::authenticators::{
         anonymous::AnonymousAuthenticator, authenticator::ClientAuthenticator, cryptosign::CryptoSignAuthenticator,
@@ -119,12 +119,12 @@ impl ClientAuthenticator for ForeignAuthenticator {
 
     fn authenticate(
         &self,
-        challenge: &xconn_core::wampproto::messages::challenge::Challenge,
+        challenge: &xconn::wampproto::messages::challenge::Challenge,
     ) -> std::result::Result<
-        xconn_core::wampproto::messages::authenticate::Authenticate,
-        xconn_core::wampproto::messages::types::Error,
+        xconn::wampproto::messages::authenticate::Authenticate,
+        xconn::wampproto::messages::types::Error,
     > {
-        let error = |message: String| xconn_core::wampproto::messages::types::Error::new(message);
+        let error = |message: String| xconn::wampproto::messages::types::Error::new(message);
         let response = self
             .callbacks
             .call(
@@ -136,7 +136,7 @@ impl ClientAuthenticator for ForeignAuthenticator {
             )
             .map_err(error)?;
         let response = dictionary(&response).map_err(error)?;
-        Ok(xconn_core::wampproto::messages::authenticate::Authenticate {
+        Ok(xconn::wampproto::messages::authenticate::Authenticate {
             signature: string_field(&response, "signature").map_err(error)?,
             extra: dictionary(response.get("extra").unwrap_or(&Value::Null)).map_err(error)?,
         })
@@ -149,21 +149,21 @@ struct ForeignServerAuthenticator {
     callbacks: Arc<ForeignCallbacks>,
 }
 
-impl xconn_core::wampproto::authenticators::server::ServerAuthenticator for ForeignServerAuthenticator {
+impl xconn::wampproto::authenticators::server::ServerAuthenticator for ForeignServerAuthenticator {
     fn methods(&self) -> Vec<String> {
         self.methods.clone()
     }
 
     fn authenticate(
         &self,
-        request: &xconn_core::wampproto::authenticators::server::AuthRequest,
+        request: &xconn::wampproto::authenticators::server::AuthRequest,
     ) -> std::result::Result<
-        xconn_core::wampproto::authenticators::server::AuthResponse,
-        xconn_core::wampproto::messages::types::Error,
+        xconn::wampproto::authenticators::server::AuthResponse,
+        xconn::wampproto::messages::types::Error,
     > {
-        use xconn_core::wampproto::authenticators::server::{AuthResponse, CRAKey, Salt};
-        use xconn_core::wampproto::authenticators::wampcra::validate_cra_parameters;
-        let error = |message: String| xconn_core::wampproto::messages::types::Error::new(message);
+        use xconn::wampproto::authenticators::server::{AuthResponse, CRAKey, Salt};
+        use xconn::wampproto::authenticators::wampcra::validate_cra_parameters;
+        let error = |message: String| xconn::wampproto::messages::types::Error::new(message);
         let response = self
             .callbacks
             .call(
@@ -219,7 +219,7 @@ impl xconn_core::wampproto::authenticators::server::ServerAuthenticator for Fore
 
 pub(super) fn server_authentication(
     fields: &HashMap<String, Value>,
-) -> Result<Option<xconn_core::async_::router::AuthenticationFactory>> {
+) -> Result<Option<xconn::async_::router::AuthenticationFactory>> {
     let Some(Value::Dict(auth)) = fields.get("server_auth") else {
         return Ok(None);
     };
@@ -248,67 +248,67 @@ pub(super) struct ForeignPeer {
 }
 
 impl ForeignPeer {
-    async fn call(&self, method: &str, value: Value) -> std::result::Result<Value, xconn_core::Error> {
+    async fn call(&self, method: &str, value: Value) -> std::result::Result<Value, xconn::Error> {
         let callbacks = self.callbacks.clone();
         let method = method.to_string();
         tokio::task::spawn_blocking(move || callbacks.call(&method, value))
             .await
-            .map_err(|error| xconn_core::Error::new(error.to_string()))?
-            .map_err(xconn_core::Error::new)
+            .map_err(|error| xconn::Error::new(error.to_string()))?
+            .map_err(xconn::Error::new)
     }
 }
 
 #[async_trait::async_trait]
-impl xconn_core::async_::peer::Peer for ForeignPeer {
-    fn kind(&self) -> xconn_core::TransportType {
+impl xconn::async_::peer::Peer for ForeignPeer {
+    fn kind(&self) -> xconn::TransportType {
         0
     }
 
-    async fn read(&self) -> std::result::Result<Vec<u8>, xconn_core::Error> {
+    async fn read(&self) -> std::result::Result<Vec<u8>, xconn::Error> {
         match self.call("peer_read", Value::Null).await? {
             Value::Bytes(bytes) => Ok(bytes.0),
-            _ => Err(xconn_core::Error::new("peer Read must return bytes")),
+            _ => Err(xconn::Error::new("peer Read must return bytes")),
         }
     }
 
-    async fn write(&self, bytes: Vec<u8>) -> std::result::Result<(), xconn_core::Error> {
+    async fn write(&self, bytes: Vec<u8>) -> std::result::Result<(), xconn::Error> {
         self.call("peer_write", Value::Bytes(ByteArray(bytes))).await?;
         Ok(())
     }
 
-    async fn close(&self) -> std::result::Result<(), xconn_core::Error> {
+    async fn close(&self) -> std::result::Result<(), xconn::Error> {
         self.call("peer_close", Value::Null).await?;
         Ok(())
     }
 }
 
 #[derive(Debug)]
-pub(super) struct SharedPeer(pub(super) Arc<dyn xconn_core::async_::peer::Peer>);
+pub(super) struct SharedPeer(pub(super) Arc<dyn xconn::async_::peer::Peer>);
 
 #[async_trait::async_trait]
-impl xconn_core::async_::peer::Peer for SharedPeer {
-    fn kind(&self) -> xconn_core::TransportType {
+impl xconn::async_::peer::Peer for SharedPeer {
+    fn kind(&self) -> xconn::TransportType {
         self.0.kind()
     }
 
     #[cfg(feature = "rpc-streams")]
-    fn stream_opener(&self) -> Option<xconn_core::async_::peer::StreamOpener> {
+    fn stream_opener(&self) -> Option<xconn::async_::peer::StreamOpener> {
         self.0.stream_opener()
     }
 
-    fn try_write(&self, data: Vec<u8>) -> std::result::Result<bool, xconn_core::Error> {
+    fn try_write(&self, data: Vec<u8>) -> std::result::Result<bool, xconn::Error> {
         self.0.try_write(data)
     }
 
-    async fn read(&self) -> std::result::Result<Vec<u8>, xconn_core::Error> {
+    async fn read(&self) -> std::result::Result<Vec<u8>, xconn::Error> {
         self.0.read().await
     }
 
-    async fn write(&self, bytes: Vec<u8>) -> std::result::Result<(), xconn_core::Error> {
+    async fn write(&self, bytes: Vec<u8>) -> std::result::Result<(), xconn::Error> {
         self.0.write(bytes).await
     }
 
-    async fn close(&self) -> std::result::Result<(), xconn_core::Error> {
+    async fn close(&self) -> std::result::Result<(), xconn::Error> {
         self.0.close().await
     }
 }
@@ -320,12 +320,12 @@ struct ForeignSerializer {
     is_static: bool,
 }
 
-impl xconn_core::wampproto::serializers::serializer::Serializer for ForeignSerializer {
+impl xconn::wampproto::serializers::serializer::Serializer for ForeignSerializer {
     fn serialize(
         &self,
-        message: &dyn xconn_core::wampproto::messages::message::Message,
-    ) -> std::result::Result<Vec<u8>, xconn_core::wampproto::messages::types::Error> {
-        let error = |message: String| xconn_core::wampproto::messages::types::Error::new(message);
+        message: &dyn xconn::wampproto::messages::message::Message,
+    ) -> std::result::Result<Vec<u8>, xconn::wampproto::messages::types::Error> {
+        let error = |message: String| xconn::wampproto::messages::types::Error::new(message);
 
         match self
             .callbacks
@@ -342,17 +342,17 @@ impl xconn_core::wampproto::serializers::serializer::Serializer for ForeignSeria
         &self,
         payload: Vec<u8>,
     ) -> std::result::Result<
-        Box<dyn xconn_core::wampproto::messages::message::Message>,
-        xconn_core::wampproto::messages::types::Error,
+        Box<dyn xconn::wampproto::messages::message::Message>,
+        xconn::wampproto::messages::types::Error,
     > {
-        let error = |message: String| xconn_core::wampproto::messages::types::Error::new(message);
+        let error = |message: String| xconn::wampproto::messages::types::Error::new(message);
 
         match self
             .callbacks
             .call("deserialize", Value::Bytes(ByteArray(payload)))
             .map_err(error)?
         {
-            Value::List(fields) => xconn_core::wampproto::serializers::helpers::to_typed_message(fields),
+            Value::List(fields) => xconn::wampproto::serializers::helpers::to_typed_message(fields),
             _ => Err(error("deserializer must return a WAMP message".into())),
         }
     }
@@ -362,13 +362,13 @@ impl xconn_core::wampproto::serializers::serializer::Serializer for ForeignSeria
     }
 }
 
-impl xconn_core::_SerializerSpec for ForeignSerializer {
+impl xconn::_SerializerSpec for ForeignSerializer {
     fn subprotocol(&self) -> String {
         format!("wamp.2.{}", self.name)
     }
 
-    fn serializer_id(&self) -> xconn_core::wampproto::transports::rawsocket::SerializerID {
-        use xconn_core::wampproto::transports::rawsocket::SerializerID;
+    fn serializer_id(&self) -> xconn::wampproto::transports::rawsocket::SerializerID {
+        use xconn::wampproto::transports::rawsocket::SerializerID;
 
         match self.name.as_str() {
             "json" => SerializerID::JSON,
@@ -377,7 +377,7 @@ impl xconn_core::_SerializerSpec for ForeignSerializer {
         }
     }
 
-    fn serializer(&self) -> Box<dyn xconn_core::wampproto::serializers::serializer::Serializer> {
+    fn serializer(&self) -> Box<dyn xconn::wampproto::serializers::serializer::Serializer> {
         Box::new(self.clone())
     }
 
@@ -489,7 +489,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
 }
 
 /// Apply listener-specific authentication and heartbeat policy to a router clone.
-pub(super) fn server_router(fields: &HashMap<String, Value>) -> Result<xconn_core::async_::router::Router> {
+pub(super) fn server_router(fields: &HashMap<String, Value>) -> Result<xconn::async_::router::Router> {
     let mut router = crate::resources::get_router(crate::values::handle_field(fields, "handle")?)?;
     if let Some(authentication) = server_authentication(fields)? {
         router = router.with_authentication(authentication);

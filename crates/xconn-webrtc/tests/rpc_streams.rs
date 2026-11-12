@@ -2,7 +2,7 @@
 
 use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use xconn_core::{
+use xconn::{
     CBORSerializerSpec, Result as RpcResult,
     async_::router::{RealmConfig, Router},
     wampproto::authenticators::anonymous::AnonymousAuthenticator,

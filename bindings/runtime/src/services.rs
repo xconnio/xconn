@@ -6,19 +6,19 @@ use crate::{
     values::{dictionary, handle_field, object_value, string_field},
 };
 use std::{collections::HashMap, sync::Arc};
-use xconn_core::async_::services::bridge::{Bridge, BridgeRoute, SessionFactory};
+use xconn::async_::services::bridge::{Bridge, BridgeRoute, SessionFactory};
 
 pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Result<Output> {
     match method {
         "service_discovery_start" => {
-            use xconn_core::async_::services::discovery::{DiscoveryAction, DiscoveryService};
+            use xconn::async_::services::discovery::{DiscoveryAction, DiscoveryService};
             let session = get_session(handle_field(&fields, "session")?)?;
             let prefix = string_field(&fields, "prefix")?;
             let callbacks = get_callbacks(handle_field(&fields, "callback")?)?;
             let policy = Arc::new(
-                move |caller: &xconn_core::async_::services::bridge::Caller,
+                move |caller: &xconn::async_::services::bridge::Caller,
                       action,
-                      endpoint: &xconn_core::async_::services::discovery::Endpoint| {
+                      endpoint: &xconn::async_::services::discovery::Endpoint| {
                     let action = match action {
                         DiscoveryAction::Advertise => "advertise",
                         DiscoveryAction::Discover => "discover",
@@ -53,7 +53,7 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
             Ok(Output::plain(Value::Null))
         }
         "service_discovery_request" => {
-            use xconn_core::async_::services::discovery::DiscoveryClient;
+            use xconn::async_::services::discovery::DiscoveryClient;
             let session = get_session(handle_field(&fields, "session")?)?;
             let prefix = string_field(&fields, "prefix")?;
             let action = string_field(&fields, "action")?;
@@ -75,7 +75,7 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
             Ok(Output::plain(value))
         }
         "service_attachment_run" => {
-            use xconn_core::async_::services::attachment::{AttachmentOutcome, RetryPolicy, supervise};
+            use xconn::async_::services::attachment::{AttachmentOutcome, RetryPolicy, supervise};
             let callbacks = get_callbacks(handle_field(&fields, "callback")?)?;
             let report = callbacks.clone();
             let policy = RetryPolicy {
@@ -94,9 +94,9 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
                             .and_then(|value| dictionary(&value));
                         let response = match response {
                             Ok(response) => response,
-                            Err(error) => return AttachmentOutcome::Retry(xconn_core::Error::new(error)),
+                            Err(error) => return AttachmentOutcome::Retry(xconn::Error::new(error)),
                         };
-                        let error = xconn_core::Error::new(
+                        let error = xconn::Error::new(
                             string_field(&response, "error").unwrap_or_else(|_| "attachment disconnected".into()),
                         );
                         match string_field(&response, "state").as_deref() {
@@ -147,14 +147,14 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
                                         ("authrole", Value::Str(caller.authrole)),
                                     ]),
                                 )
-                                .map_err(xconn_core::Error::new)?;
-                            let fields = dictionary(&value).map_err(xconn_core::Error::new)?;
-                            let session = get_session(handle_field(&fields, "handle").map_err(xconn_core::Error::new)?)
-                                .map_err(xconn_core::Error::new)?;
-                            Ok::<_, xconn_core::Error>(PendingFactorySession(Some(session.session.clone())))
+                                .map_err(xconn::Error::new)?;
+                            let fields = dictionary(&value).map_err(xconn::Error::new)?;
+                            let session = get_session(handle_field(&fields, "handle").map_err(xconn::Error::new)?)
+                                .map_err(xconn::Error::new)?;
+                            Ok::<_, xconn::Error>(PendingFactorySession(Some(session.session.clone())))
                         })
                         .await
-                        .map_err(|error| xconn_core::Error::new(error.to_string()))??;
+                        .map_err(|error| xconn::Error::new(error.to_string()))??;
                         Ok(created.into_session())
                     })
                 }))
@@ -179,10 +179,10 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
 }
 
 // A canceled factory future must still close a session returned by the host.
-struct PendingFactorySession(Option<xconn_core::async_::session::Session>);
+struct PendingFactorySession(Option<xconn::async_::session::Session>);
 
 impl PendingFactorySession {
-    fn into_session(mut self) -> xconn_core::async_::session::Session {
+    fn into_session(mut self) -> xconn::async_::session::Session {
         self.0.take().expect("factory session is present")
     }
 }
