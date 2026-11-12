@@ -8,7 +8,7 @@ use wampproto::messages::{
 };
 use wampproto::serializers::codec::Codec;
 use wampproto::transports::rawsocket::SerializerID;
-use xconn_core::wampproto;
+use xconn::wampproto;
 
 pub const ENCODE: u32 = 1;
 pub const DECODE: u32 = 2;

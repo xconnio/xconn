@@ -98,7 +98,7 @@ async fn receive_overflow_closes_the_channel_without_closing_its_connection() {
 mod wamp {
     use super::*;
     use std::sync::Arc;
-    use xconn_core::{
+    use xconn::{
         JSONSerializerSpec,
         async_::router::{RealmConfig, Router},
         wampproto::authenticators::{anonymous::AnonymousAuthenticator, authenticator::ClientAuthenticator},
@@ -235,7 +235,7 @@ mod wamp {
 
     #[tokio::test]
     async fn stalled_signaling_can_time_out_or_be_cancelled_and_then_retry() {
-        use xconn_core::{CallRequest, Result as RpcResult, async_::types::RegisterRequest};
+        use xconn::{CallRequest, Result as RpcResult, async_::types::RegisterRequest};
         use xconn_webrtc::wamp::{Provider, SignalingConfig, connect_with_timeouts};
 
         fn config(procedure: &str, provider: bool) -> SignalingConfig {
@@ -337,7 +337,7 @@ mod wamp {
                 .await
                 .unwrap();
             assert!(response.error.is_none());
-            assert_eq!(response.args.unwrap(), vec![xconn_core::Value::Str("retry".into())]);
+            assert_eq!(response.args.unwrap(), vec![xconn::Value::Str("retry".into())]);
             session.close().await.unwrap();
             session.connection.close().await.unwrap();
             provider.close().await;

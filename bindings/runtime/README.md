@@ -1,7 +1,7 @@
 # Shared native binding runtime
 
 This crate handles host values, callbacks, scheduling and ownership for Python,
-Go and Dart. WAMP state and networking remain in `xconn-core`/`wampproto`; WebRTC
+Go and Dart. WAMP state and networking remain in `xconn`/`wampproto`; WebRTC
 signaling and transport remain in `xconn-webrtc`.
 
 | Module | Responsibility |

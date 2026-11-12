@@ -1,6 +1,6 @@
 //! Run with: cargo run -p xconn-webrtc --example wamp
 use std::time::Duration;
-use xconn_core::{
+use xconn::{
     CBORSerializerSpec, JSONSerializerSpec, Result as RpcResult,
     async_::router::{RealmConfig, Router},
     wampproto::authenticators::{anonymous::AnonymousAuthenticator, authenticator::ClientAuthenticator},

@@ -27,7 +27,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
 };
 use values::{handle_field, string_field};
-pub use xconn_core::{Value, wampproto::messages::types::ByteArray};
+pub use xconn::{Value, wampproto::messages::types::ByteArray};
 
 pub type Result<T> = std::result::Result<T, String>;
 

@@ -118,7 +118,7 @@ fn ice_servers(f: &HashMap<String, Value>) -> Result<Vec<RTCIceServer>> {
             .entry("credential".into())
             .or_insert_with(|| Value::Str(String::new()));
     }
-    let codec = xconn_core::wampproto::serializers::codec::Codec::Json;
+    let codec = xconn::wampproto::serializers::codec::Codec::Json;
     codec
         .decode(&codec.encode(&Value::List(servers)).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())

@@ -35,7 +35,7 @@ jobs:
         if: github.event_name == 'workflow_dispatch'
         run: >-
           cargo publish --locked --dry-run
-          -p wampproto -p xconn-framing -p xconn-crypto -p xconn-core
+          -p wampproto -p xconn-framing -p xconn-crypto -p xconn
       - uses: rust-lang/crates-io-auth-action@v1
         if: github.event_name == 'push'
         id: auth

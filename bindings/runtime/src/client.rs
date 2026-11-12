@@ -17,7 +17,7 @@ use std::{
     sync::{Arc, atomic::Ordering},
 };
 use tokio::sync::{mpsc, oneshot};
-use xconn_core::{
+use xconn::{
     Result as RpcResult, WampError,
     async_::{client::Client, session::Session},
 };
@@ -36,7 +36,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
             let authid = string_field(&f, "authid")?;
             let authrole = string_field(&f, "authrole")?;
             let (peer, details) = if f.contains_key("session_id") {
-                let details = xconn_core::wampproto::types::SessionDetails::new(
+                let details = xconn::wampproto::types::SessionDetails::new(
                     i64::try_from(handle_field(&f, "session_id")?).map_err(|_| "session ID exceeds i64")?,
                     realm,
                     authid,
@@ -64,7 +64,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
             ))
         }
         "session_from_peer" => {
-            let details = xconn_core::wampproto::types::SessionDetails::new(
+            let details = xconn::wampproto::types::SessionDetails::new(
                 i64::try_from(handle_field(&f, "session_id")?).map_err(|_| "session ID exceeds i64")?,
                 string_field(&f, "realm")?,
                 string_field(&f, "authid")?,
@@ -77,7 +77,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                 dictionary(f.get("authextra").unwrap_or(&Value::Null))?,
                 String::new(),
             );
-            let details = xconn_core::SessionDetails::from_protocol(&details);
+            let details = xconn::SessionDetails::from_protocol(&details);
             let fields = session_fields(&details);
             let peer = ForeignPeer {
                 callbacks: get_callbacks(handle_field(&f, "callback")?)?,
@@ -300,7 +300,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                     ))
                 }
                 "stream_open" => {
-                    let options = xconn_core::StreamOptions {
+                    let options = xconn::StreamOptions {
                         progressive_input: f.get("progressive_input") == Some(&Value::Bool(true)),
                         progressive_results: match f.get("progressive_results") {
                             None => true,
@@ -315,7 +315,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                         },
                         timeout: duration_field(&f, "timeout", None)?,
                     };
-                    let call = xconn_core::async_::call::Call::open(&s.session, request(&f)?, options)
+                    let call = xconn::async_::call::Call::open(&s.session, request(&f)?, options)
                         .await
                         .map_err(|error| error.to_string())?;
                     Ok(Output::resource(Resource::Stream(call), HashMap::new()))
@@ -517,7 +517,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
 mod compensation_tests {
     use super::*;
     use crate::{cancel, ready, runtime, submit};
-    use xconn_core::{
+    use xconn::{
         CallRequest, JSONSerializerSpec,
         async_::router::{RealmConfig, Router},
         wampproto::authenticators::anonymous::AnonymousAuthenticator,

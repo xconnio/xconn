@@ -1,9 +1,9 @@
 //! Conversion between host request fields and Rust values.
 use crate::{Result, Value};
 use std::collections::HashMap;
-use xconn_core::{CallRequest, Result as RpcResult, WampError};
+use xconn::{CallRequest, Result as RpcResult, WampError};
 
-pub(super) fn session_fields(details: &xconn_core::SessionDetails) -> HashMap<String, Value> {
+pub(super) fn session_fields(details: &xconn::SessionDetails) -> HashMap<String, Value> {
     HashMap::from([
         ("session_id".into(), Value::Int(details.id())),
         ("realm".into(), Value::Str(details.realm())),

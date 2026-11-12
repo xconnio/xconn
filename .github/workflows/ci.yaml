@@ -72,20 +72,20 @@ jobs:
       - run: cargo test --locked --workspace --all-features
       - run: cargo check --locked -p xconn-webrtc --no-default-features
       - if: runner.os == 'Linux'
-        run: cargo check --locked -p xconn-core --no-default-features
+        run: cargo check --locked -p xconn --no-default-features
       - if: runner.os == 'Linux'
-        run: cargo check --locked -p xconn-core --no-default-features --features services
+        run: cargo check --locked -p xconn --no-default-features --features services
       - if: runner.os == 'Linux'
-        run: cargo check --locked -p xconn-core --no-default-features --features yamux
+        run: cargo check --locked -p xconn --no-default-features --features yamux
       - if: runner.os == 'Linux'
-        run: cargo check --locked -p xconn-core --no-default-features --features rpc-streams
+        run: cargo check --locked -p xconn --no-default-features --features rpc-streams
       - if: runner.os == 'Linux'
-        run: cargo check --locked -p xconn-core --no-default-features --features yamux,rpc-streams
+        run: cargo check --locked -p xconn --no-default-features --features yamux,rpc-streams
       - if: runner.os == 'Linux'
-        run: cargo check --locked -p xconn-core --no-default-features --features crypto
-      - run: cargo check --locked -p xconn-core --no-default-features --features async
-      - run: cargo check --locked -p xconn-core --no-default-features --features sync
-      - run: cargo check --locked -p xconn-core --no-default-features --features router --bin xconn-router
+        run: cargo check --locked -p xconn --no-default-features --features crypto
+      - run: cargo check --locked -p xconn --no-default-features --features async
+      - run: cargo check --locked -p xconn --no-default-features --features sync
+      - run: cargo check --locked -p xconn --no-default-features --features router --bin xconn-router
       - if: runner.os == 'Linux'
         run: cargo package --locked -p wampproto
       - if: runner.os == 'Linux'
@@ -167,7 +167,7 @@ jobs:
         with:
           shared-key: linux-test-helpers
       - run: >-
-          cargo build --locked -p xconn-core --features router,services
+          cargo build --locked -p xconn --features router,services
           --bin xconn-router --example discovery --example streaming_peer
       - run: cargo build --locked -p xconn-binding-runtime --all-features --example transport_peer
       - run: >-

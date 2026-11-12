@@ -6,7 +6,7 @@ members = [
     "bindings/ffi",
     "bindings/runtime",
     "crates/wampproto",
-    "crates/xconn-core",
+    "crates/xconn",
     "crates/xconn-crypto",
     "crates/xconn-webrtc",
 ]

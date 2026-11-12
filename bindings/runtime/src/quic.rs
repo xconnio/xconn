@@ -6,7 +6,7 @@ use crate::{
     values::{handle_field, session_fields, string_field},
 };
 use std::{collections::HashMap, sync::Arc};
-use xconn_core::async_::quic::{Connection, Listener};
+use xconn::async_::quic::{Connection, Listener};
 
 // Used only when the host explicitly owns certificate verification. TLS
 // handshake signatures are still checked by Rust before exporting the chain.
@@ -158,7 +158,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                 tls.dangerous()
                     .set_certificate_verifier(Arc::new(HostVerification::new()));
             }
-            tls.alpn_protocols = vec![xconn_core::async_::quic::ALPN.to_vec()];
+            tls.alpn_protocols = vec![xconn::async_::quic::ALPN.to_vec()];
             let mut config = quinn::ClientConfig::new(Arc::new(
                 quinn::crypto::rustls::QuicClientConfig::try_from(tls).map_err(|e| e.to_string())?,
             ));
@@ -240,7 +240,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                 return Err("expected QUIC listener".into());
             };
             let accepted = listener.accept_connection().await.ok_or("QUIC listener closed")?;
-            let fields = session_fields(&xconn_core::SessionDetails::from_protocol(&accepted.session));
+            let fields = session_fields(&xconn::SessionDetails::from_protocol(&accepted.session));
             Ok(Output::resource(
                 BridgeResource::Quic(Resource::Connection(accepted.connection)),
                 fields,
@@ -270,7 +270,7 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
                 return Err("expected QUIC listener".into());
             };
             let stream = listener.accept_raw().await.ok_or("QUIC listener closed")?;
-            let fields = session_fields(&xconn_core::SessionDetails::from_protocol(&stream.session));
+            let fields = session_fields(&xconn::SessionDetails::from_protocol(&stream.session));
             Ok(stream_output(stream.stream, fields))
         }
         _ => Err(format!("unknown QUIC operation {method}")),

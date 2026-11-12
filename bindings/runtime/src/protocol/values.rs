@@ -1,4 +1,4 @@
-use xconn_core::wampproto;
+use xconn::wampproto;
 // A tagged value transfer format for foreign memory, not a WAMP wire serializer.
 use wampproto::messages::types::{ByteArray, Value};
 

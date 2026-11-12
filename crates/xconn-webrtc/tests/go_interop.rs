@@ -1,8 +1,8 @@
 #![cfg(feature = "wamp")]
 use std::{collections::HashMap, time::Duration};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use xconn_core::Result as RpcResult;
-use xconn_core::{async_::client::Client, *};
+use xconn::Result as RpcResult;
+use xconn::{async_::client::Client, *};
 use xconn_webrtc::wamp::{SignalingConfig, connect};
 
 fn auth() -> Box<dyn wampproto::authenticators::authenticator::ClientAuthenticator + Send + Sync> {
@@ -74,7 +74,7 @@ async fn rust_client_to_go_webrtc_provider() {
 #[ignore = "requires XCONN_GO_INTEROP_BIN from the Go interoperability test harness"]
 async fn go_client_to_rust_webrtc_provider() {
     tokio::time::timeout(Duration::from_secs(45), async {
-        use xconn_core::async_::{
+        use xconn::async_::{
             router::{RealmConfig, Router},
             server::Server,
             types::RegisterRequest,

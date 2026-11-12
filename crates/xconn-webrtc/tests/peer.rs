@@ -1,7 +1,7 @@
 #![cfg(feature = "services")]
 
 use std::time::Duration;
-use xconn_core::{
+use xconn::{
     CBORSerializerSpec, Result as RpcResult,
     async_::{
         router::{RealmConfig, Router},
@@ -163,7 +163,7 @@ async fn discovery_preserves_application_error_payloads() {
     endpoint
         .register(peer::RESOLVE, |_| async {
             RpcResult {
-                error: Some(xconn_core::WampError {
+                error: Some(xconn::WampError {
                     uri: "app.discovery_denied".into(),
                     args: Some(vec!["reason".into()]),
                     kwargs: Some(std::collections::HashMap::from([("retry".into(), false.into())])),

@@ -5,8 +5,8 @@ use crate::{
 };
 use std::sync::Arc;
 use tokio::sync::watch;
-use xconn_core::wampproto::messages::schema::WireValue;
-use xconn_core::{
+use xconn::wampproto::messages::schema::WireValue;
+use xconn::{
     Error, Result as RpcResult, SerializerSpec, Value,
     async_::{
         router::Router,
