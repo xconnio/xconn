@@ -12,7 +12,7 @@ and C FFI are not shipped to browsers.
 ## Use
 
 ```js
-import { connectAnonymous, Result } from "@xconnio/core";
+import { connectAnonymous, Result } from "@xconnio/xconn";
 
 const session = await connectAnonymous("ws://localhost:8080/ws", "realm1");
 try {
@@ -49,7 +49,7 @@ builders also offer `.arg(value)`, `.args(...values)`, `.kwarg(key, value)` and
 `.invoke(value)`, and publication adds `.acknowledge()` / `.excludeMe(value)`.
 
 ```js
-import { Client, JSONSerializer, TicketAuthenticator } from "@xconnio/core";
+import { Client, JSONSerializer, TicketAuthenticator } from "@xconnio/xconn";
 const client = new Client({
     serializer: new JSONSerializer(),
     authenticator: new TicketAuthenticator("alice", "secret", {}),
@@ -104,16 +104,16 @@ idempotent. Custom base sessions extend `BaseSession` and use the raw send/recei
 interface; custom serializers/authenticators retain structural interfaces. The
 WebSocket-specific `WebSocketBaseSession` does not preserve the old peer-based constructor.
 
-Invocation, Event and Result expose the same [strict payload accessors](https://github.com/xconnio/xconn-core/blob/main/docs/payload.md).
+Invocation, Event and Result expose the same [strict payload accessors](https://github.com/xconnio/xconn/blob/main/docs/payload.md).
 JS `argInt64` / `kwargInt64` return BigInt; typed defaults use names such as
-`argStringOr(0, "fallback")`. See the [cross-language API contract](https://github.com/xconnio/xconn-core/blob/main/docs/fluent-api.md).
+`argStringOr(0, "fallback")`. See the [cross-language API contract](https://github.com/xconnio/xconn/blob/main/docs/fluent-api.md).
 
 ## Build and package
 
 Install the browser client from npm:
 
 ```sh
-npm install @xconnio/core
+npm install @xconnio/xconn
 ```
 
 The package includes JavaScript, TypeScript declarations and the compiled WASM
@@ -161,14 +161,14 @@ without Chromium browser tests are skipped. CI requires both and also installs
 and tests the packed package outside the checkout. Chromium tests use an isolated
 profile and --no-sandbox for the local test process.
 
-[Size measurements](https://github.com/xconnio/xconn-core/blob/main/benchmarks/browser-wasm/README.md) include WASM,
+[Size measurements](https://github.com/xconnio/xconn/blob/main/benchmarks/browser-wasm/README.md) include WASM,
 generated glue and all high-level client modules.
 
-[Result construction and received values](https://github.com/xconnio/xconn-core/blob/main/docs/results.md) use one payload
+[Result construction and received values](https://github.com/xconnio/xconn/blob/main/docs/results.md) use one payload
 type for handler replies, progressive results and completed calls.
 
 Progressive RPCs use the fluent `stream()` terminal (`Stream()`/`StreamContext()` in Go).
-See the [cross-language streaming API](https://github.com/xconnio/xconn-core/blob/main/docs/streaming.md) for examples and lifecycle rules.
+See the [cross-language streaming API](https://github.com/xconnio/xconn/blob/main/docs/streaming.md) for examples and lifecycle rules.
 
 ### Native adapter ownership
 
@@ -181,7 +181,7 @@ remain caller-owned, so free them when all connections using them have finished.
 ## Browser QUIC connectivity through WebTransport
 
 ```typescript
-import { WebTransportConnection } from "@xconnio/core";
+import { WebTransportConnection } from "@xconnio/xconn";
 
 const connection = await WebTransportConnection.connect("https://router:443/wamp");
 try {
@@ -208,7 +208,7 @@ and `acceptStream()` expose `read`, `write`, `writeEof`, and `close`; EOF is
 ## Browser WebRTC
 
 ```typescript
-import { Client, WebRTCConnection } from "@xconnio/core";
+import { Client, WebRTCConnection } from "@xconnio/xconn";
 
 const signaling = await new Client().connect("wss://router/ws", "realm");
 try {
@@ -258,7 +258,7 @@ concurrently and handle explicit queue-limit errors. Close resources explicitly.
 ## Publishing
 
 The `npm release` GitHub Actions workflow builds and tests the packed package,
-including browser WebRTC and WebTransport, before publishing `@xconnio/core`.
+including browser WebRTC and WebTransport, before publishing `@xconnio/xconn`.
 Manual runs produce a tested package artifact without publishing.
 To retry publication, rerun the failed jobs from the original tag-push run.
 One-time setup:
@@ -272,8 +272,8 @@ For a release, align the SDK and package versions, then merge the changes and
 push the shared root tag:
 
 ```sh
-git tag -a v0.1.6 -m 'XConn 0.1.6'
-git push origin v0.1.6
+git tag -a v0.6.0 -m 'XConn 0.6.0'
+git push origin v0.6.0
 ```
 
 Approve the `npm` environment deployment after the build succeeds. The publish

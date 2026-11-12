@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 : "${CHROMIUM_BIN:?path to Chromium is required for browser CI}"
 export XCONN_REFERENCE_GO_BIN="$(realpath "$1")"
 if [[ "${XCONN_PREBUILT_HELPERS:-0}" != 1 ]]; then
-  cargo build --locked -p xconn-core --features services --example discovery --example streaming_peer
+  cargo build --locked -p xconn --features services --example discovery --example streaming_peer
   cargo build --locked -p xconn-binding-runtime --all-features --example transport_peer
 fi
 export XCONN_DISCOVERY_BIN="$PWD/target/debug/examples/discovery"
@@ -30,7 +30,7 @@ consumer="$(mktemp -d)"
 trap 'rm -rf -- "$consumer"' EXIT
 npm install --prefix "$consumer" --ignore-scripts --no-audit --no-fund "$PWD/target/browser-package/$package_archive"
 printf '{"type":"module"}\n' > "$consumer/package.json"
-sed 's|"../src/index.js"|"@xconnio/core"|' bindings/js/tests/compatibility.ts > "$consumer/compatibility.ts"
+sed 's|"../src/index.js"|"@xconnio/xconn"|' bindings/js/tests/compatibility.ts > "$consumer/compatibility.ts"
 bindings/js/node_modules/.bin/tsc --noEmit --strict --target ES2022 --module NodeNext \
   --moduleResolution NodeNext --lib ES2022,DOM "$consumer/compatibility.ts"
-node bindings/js/tests/run.mjs "$consumer/node_modules/@xconnio/core/dist" full
+node bindings/js/tests/run.mjs "$consumer/node_modules/@xconnio/xconn/dist" full
