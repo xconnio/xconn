@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from dataclasses import dataclass
 from typing import (
+    Annotated,
     Any,
     Union,
     get_args,
@@ -81,13 +82,42 @@ class EventMetadata(BaseMetadata):
     func: callable
 
 
+def find_dependencies(func: callable) -> dict[str, Depends]:
+    """Returns the function's dependencies by parameter name.
+
+    A dependency is declared in the parameter's type: `DB = Annotated[Session, Depends(get_db)]`, then `db: DB`.
+    """
+
+    hints = get_type_hints(func, include_extras=True)
+    found = {}
+
+    for name, param in inspect.signature(func).parameters.items():
+        if isinstance(param.default, Depends):
+            raise RuntimeError(
+                f"Parameter '{name}' of '{func.__name__}' declares Depends as its default value. "
+                f"Declare it in the type instead: {name}: Annotated[<type>, Depends(...)]"
+            )
+
+        hint = hints.get(name)
+        if get_origin(hint) is not Annotated:
+            continue
+
+        annotated = [m for m in hint.__metadata__ if isinstance(m, Depends)]
+        if annotated:
+            # Like FastAPI, the last Depends in the metadata wins.
+            found[name] = annotated[-1]
+
+    return found
+
+
 def create_model_from_func(func):
     signature = inspect.signature(func)
     type_hints = get_type_hints(func)
+    dependencies = find_dependencies(func)
     fields = {}
 
     for param_name, param in signature.parameters.items():
-        if isinstance(param.default, Depends):
+        if param_name in dependencies:
             continue
 
         annotated_type = type_hints.get(param_name)
@@ -154,23 +184,18 @@ def _assemble_base_metadata(
     async_dependencies = {}
     async_ctx_dependencies = {}
 
-    for name, param in sig.parameters.items():
-        if isinstance(param.default, Depends):
-            sig = inspect.signature(param.default.dependency)
+    for name, dep in find_dependencies(func).items():
+        if len(inspect.signature(dep.dependency).parameters) != 0:
+            raise RuntimeError("Dependency functions support no parameters")
 
-            if len(sig.parameters) != 0:
-                raise RuntimeError("Dependency functions support no parameters")
-
-            dep: Depends = param.default
-
-            if dep.is_async:
-                async_dependencies[name] = param.default.dependency
-            elif dep.is_async_gen:
-                async_ctx_dependencies[name] = param.default.dependency
-            elif inspect.isgeneratorfunction(param.default.dependency):
-                ctx_dependencies[name] = contextlib.contextmanager(param.default.dependency)
-            elif inspect.isfunction(param.default.dependency) or inspect.ismethod(param.default.dependency):
-                dependencies[name] = param.default.dependency
+        if dep.is_async:
+            async_dependencies[name] = dep.dependency
+        elif dep.is_async_gen:
+            async_ctx_dependencies[name] = dep.dependency
+        elif inspect.isgeneratorfunction(dep.dependency):
+            ctx_dependencies[name] = contextlib.contextmanager(dep.dependency)
+        elif inspect.isfunction(dep.dependency) or inspect.ismethod(dep.dependency):
+            dependencies[name] = dep.dependency
 
     for key in dependencies.keys():
         del hints[key]
