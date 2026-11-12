@@ -15,7 +15,7 @@ already supports that distinction.
 Python:
 
 ```python
-from xconn_core import Result
+from xconn import Result
 
 return Result(args=["hello"], kwargs={"count": 1})
 # Variadic convenience constructor:
@@ -49,7 +49,7 @@ return xconn.NewResult("hello")
 Rust:
 
 ```rust
-use xconn_core::Result as RpcResult;
+use xconn::Result as RpcResult;
 RpcResult::arg("hello")
 // Positional and keyword arguments:
 RpcResult::new(vec!["hello".into()], std::collections::HashMap::from([("count".into(), 1.into())]))
@@ -57,7 +57,7 @@ RpcResult::new(vec!["hello".into()], std::collections::HashMap::from([("count".i
 
 Rust also offers Result::args, Result::kwarg, Result::kwargs and Default.
 The local RpcResult alias avoids confusing this payload with std::result::Result;
-the public payload type is xconn_core::Result.
+the public payload type is xconn::Result.
 
 ## Received values and errors
 
@@ -69,7 +69,7 @@ The naming cleanup preserves the existing error channels:
 | JS / TS | Promise<Result> | Rejected Promise with ApplicationError |
 | Dart | Future<Result> | ApplicationError exception |
 | Go | *Result | Result.Err is an error; WAMP errors retain *xconn.Error |
-| Rust | std::result::Result<xconn_core::Result, xconn_core::Error> | Payload.error holds WampError; transport/runtime errors use Err |
+| Rust | std::result::Result<xconn::Result, xconn::Error> | Payload.error holds WampError; transport/runtime errors use Err |
 
 In Go, NewResultError(uri, args...) constructs an error reply with a native
 *xconn.Error stored in Result.Err. Rust Result::error(uri) constructs a WAMP error

@@ -14,7 +14,7 @@ webtransport = ["quic", "xconn/webtransport"]
 webrtc = ["dep:xconn-webrtc", "xconn-webrtc/services"]
 
 [dependencies]
-xconn = { version = "0.1.6", path = "../../crates/xconn", default-features = false, features = ["async", "services", "crypto"] }
+xconn = { version = "0.6.0", path = "../../crates/xconn", default-features = false, features = ["async", "services", "crypto"] }
 tokio = { version = "1", features = ["full"] }
 futures-util = "0.3"
 async-trait = "0.1.88"

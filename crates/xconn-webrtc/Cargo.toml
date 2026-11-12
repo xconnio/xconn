@@ -14,8 +14,8 @@ rpc-streams = ["wamp", "xconn/rpc-streams"]
 services = ["wamp", "xconn/services"]
 
 [dependencies]
-xconn-framing = { version = "0.1.6", path = "../xconn-framing" }
-xconn = { version = "0.1.6", path = "../xconn", default-features = false, features = ["async"], optional = true }
+xconn-framing = { version = "0.6.0", path = "../xconn-framing" }
+xconn = { version = "0.6.0", path = "../xconn", default-features = false, features = ["async"], optional = true }
 webrtc = "0.14"
 tokio = { version = "1", features = ["full"] }
 bytes = "1"

@@ -1,17 +1,17 @@
 # Reusable services and application ownership
 
-Enable `xconn-core`'s optional `services` feature to use RPC bridging,
+Enable `xconn`'s optional `services` feature to use RPC bridging,
 attachment supervision, and endpoint discovery. The separate `crypto` feature
 re-exports portable packet encryption. Ordinary WAMP clients and routers do not
 need either feature.
 
 | Responsibility | Owner |
 | --- | --- |
-| WAMP protocol, clients, routers, transport connections and TLS | XConn Core |
-| RPC forwarding, cancellation and owned caller-session cleanup | XConn Core |
-| Attachment retry/backoff and detachment supervision | XConn Core |
-| Endpoint directory, validation, ownership and presence cleanup | XConn Core |
-| Packet encryption and key-agreement primitives | XConn Core |
+| WAMP protocol, clients, routers, transport connections and TLS | XConn |
+| RPC forwarding, cancellation and owned caller-session cleanup | XConn |
+| Attachment retry/backoff and detachment supervision | XConn |
+| Endpoint directory, validation, ownership and presence cleanup | XConn |
+| Packet encryption and key-agreement primitives | XConn |
 | Enrollment protocol and credential issuance/revocation | Application or service provider |
 | Credential storage, machine identifiers, roles and permissions | Application |
 | Shell, files, VPN, UI and operating-system integration | Application |
@@ -87,7 +87,7 @@ queries, not pushed availability subscriptions or persistent storage.
 Run the example host:
 
 ```sh
-cargo run -p xconn-core --features services --example discovery
+cargo run -p xconn --features services --example discovery
 ```
 
 It prints a WebSocket URI and serves realm `example` with prefix `example.peers`.
@@ -96,7 +96,7 @@ their own authorization policy.
 
 ## Packet encryption
 
-The optional `crypto` feature exposes `xconn_core::crypto`. The independent
+The optional `crypto` feature exposes `xconn::crypto`. The independent
 [`xconn-crypto`](../crates/xconn-crypto) crate provides X25519, HKDF-SHA256, and
 ChaCha20-Poly1305 packets for native and browser WASM consumers.
 
