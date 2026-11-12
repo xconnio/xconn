@@ -1,5 +1,5 @@
-import "package:xconn_core/messages.dart";
-import "package:xconn_core/src/protocol.dart";
+import "package:xconn/messages.dart";
+import "package:xconn/src/protocol.dart";
 
 abstract class IClientAuthenticator {
   IClientAuthenticator(this.authMethod, this.authID, [Map<String, dynamic>? extra]) : authExtra = extra ?? {};

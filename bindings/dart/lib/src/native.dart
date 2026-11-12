@@ -6,8 +6,8 @@ import "dart:isolate";
 import "dart:typed_data";
 
 import "package:ffi/ffi.dart";
-import "package:xconn_core/src/exception.dart";
-import "package:xconn_core/src/values.dart";
+import "package:xconn/src/exception.dart";
+import "package:xconn/src/values.dart";
 
 final class _NativeResult extends Struct {
   @Uint32()

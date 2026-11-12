@@ -4,10 +4,10 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:test/test.dart";
-import "package:xconn_core/auth.dart";
-import "package:xconn_core/messages.dart" show Authenticate, Challenge, Message;
-import "package:xconn_core/src/native.dart" as native;
-import "package:xconn_core/xconn_core.dart";
+import "package:xconn/auth.dart";
+import "package:xconn/messages.dart" show Authenticate, Challenge, Message;
+import "package:xconn/src/native.dart" as native;
+import "package:xconn/xconn.dart";
 
 class TrackingSerializer extends CBORSerializer {
   int encoded = 0;

@@ -1,6 +1,6 @@
 import "dart:typed_data";
 
-import "package:xconn_core/src/native_transport.dart";
+import "package:xconn/src/native_transport.dart";
 
 /// Independent bidirectional stream. Closing its write half still permits reads.
 class RPCStream extends NativeTransportResource {

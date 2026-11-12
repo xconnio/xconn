@@ -1,11 +1,11 @@
 import "dart:async";
 
-import "package:xconn_core/auth.dart";
-import "package:xconn_core/messages.dart";
-import "package:xconn_core/serializers.dart";
-import "package:xconn_core/src/payload.dart";
-import "package:xconn_core/src/rpc_streams.dart";
-import "package:xconn_core/src/session.dart";
+import "package:xconn/auth.dart";
+import "package:xconn/messages.dart";
+import "package:xconn/serializers.dart";
+import "package:xconn/src/payload.dart";
+import "package:xconn/src/rpc_streams.dart";
+import "package:xconn/src/session.dart";
 
 abstract class BaseSession {
   int get id;

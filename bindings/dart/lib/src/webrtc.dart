@@ -1,10 +1,10 @@
 import "dart:convert";
 import "dart:typed_data";
 
-import "package:xconn_core/src/callbacks.dart" show fields;
-import "package:xconn_core/src/client.dart";
-import "package:xconn_core/src/native_transport.dart";
-import "package:xconn_core/src/session.dart";
+import "package:xconn/src/callbacks.dart" show fields;
+import "package:xconn/src/client.dart";
+import "package:xconn/src/native_transport.dart";
+import "package:xconn/src/session.dart";
 
 class WebRTCOptions {
   const WebRTCOptions({

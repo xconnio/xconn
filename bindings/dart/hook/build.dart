@@ -2,7 +2,7 @@ import "dart:io";
 
 import "package:code_assets/code_assets.dart";
 import "package:hooks/hooks.dart";
-import "package:xconn_core/src/native_sdk.dart";
+import "package:xconn/src/native_sdk.dart";
 
 /// Bundle a verified SDK release without requiring Rust or a source checkout.
 Future<void> main(List<String> args) async {
@@ -30,7 +30,7 @@ Future<void> main(List<String> args) async {
     };
     final prebuiltValue = input.userDefines["native_library"];
     if (prebuiltValue != null && prebuiltValue is! String) {
-      throw const FormatException("hooks.user_defines.xconn_core.native_library must be a path");
+      throw const FormatException("hooks.user_defines.xconn.native_library must be a path");
     }
     final prebuilt = input.userDefines.path("native_library");
     late final File library;

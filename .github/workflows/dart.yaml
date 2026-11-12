@@ -30,7 +30,7 @@ jobs:
           cat >> bindings/dart/pubspec.yaml <<'YAML'
           hooks:
             user_defines:
-              xconn_core:
+              xconn:
                 native_library: ../../target/release/libxconn_ffi.so
           YAML
       - run: dart test

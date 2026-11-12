@@ -2,14 +2,14 @@ import "dart:async";
 import "dart:convert";
 import "dart:typed_data";
 
-import "package:xconn_core/auth.dart";
-import "package:xconn_core/messages.dart";
-import "package:xconn_core/serializers.dart";
-import "package:xconn_core/src/callbacks.dart";
-import "package:xconn_core/src/native.dart" as native;
-import "package:xconn_core/src/native_transport.dart";
-import "package:xconn_core/src/session.dart";
-import "package:xconn_core/src/types.dart";
+import "package:xconn/auth.dart";
+import "package:xconn/messages.dart";
+import "package:xconn/serializers.dart";
+import "package:xconn/src/callbacks.dart";
+import "package:xconn/src/native.dart" as native;
+import "package:xconn/src/native_transport.dart";
+import "package:xconn/src/session.dart";
+import "package:xconn/src/types.dart";
 
 String serializerName(Serializer serializer) => switch (serializer) {
   JSONSerializer() => "json",

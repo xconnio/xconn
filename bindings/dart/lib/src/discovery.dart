@@ -1,5 +1,5 @@
-import "package:xconn_core/src/callbacks.dart" show fields;
-import "package:xconn_core/src/native.dart" as native;
+import "package:xconn/src/callbacks.dart" show fields;
+import "package:xconn/src/native.dart" as native;
 
 /// Connection hints and capabilities, without secret credentials.
 class Endpoint {

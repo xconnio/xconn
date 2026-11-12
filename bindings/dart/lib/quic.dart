@@ -1,1 +1,1 @@
-export "package:xconn_core/src/quic.dart" show ByteStream, QUICConnection;
+export "package:xconn/src/quic.dart" show ByteStream, QUICConnection;

@@ -3,8 +3,8 @@ import "dart:io";
 import "dart:typed_data";
 
 import "package:test/test.dart";
-import "package:xconn_core/src/payload.dart";
-import "package:xconn_core/xconn_core.dart";
+import "package:xconn/src/payload.dart";
+import "package:xconn/xconn.dart";
 
 Object? decode(Map<String, dynamic> entry) {
   final value = entry["value"];

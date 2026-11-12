@@ -1,8 +1,8 @@
 import "dart:convert";
 import "dart:typed_data";
-import "package:xconn_core/messages.dart";
-import "package:xconn_core/src/native.dart" as native;
-import "package:xconn_core/src/values.dart";
+import "package:xconn/messages.dart";
+import "package:xconn/src/native.dart" as native;
+import "package:xconn/src/values.dart";
 
 abstract class Serializer {
   Object serialize(Message message);

@@ -5,8 +5,8 @@ import "dart:isolate";
 import "dart:typed_data";
 
 import "package:test/test.dart";
-import "package:xconn_core/auth.dart";
-import "package:xconn_core/xconn_core.dart";
+import "package:xconn/auth.dart";
+import "package:xconn/xconn.dart";
 
 void main() {
   final binary = Platform.environment["XCONN_REFERENCE_GO_BIN"];

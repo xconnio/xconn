@@ -1,8 +1,8 @@
 import "dart:async";
 
-import "package:xconn_core/src/callbacks.dart";
-import "package:xconn_core/src/native.dart" as native;
-import "package:xconn_core/src/session.dart";
+import "package:xconn/src/callbacks.dart";
+import "package:xconn/src/native.dart" as native;
+import "package:xconn/src/session.dart";
 
 final _finalizer = Finalizer<int>((handle) {
   native.execute("close", {"handle": handle});
