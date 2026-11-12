@@ -1,17 +1,17 @@
 # Releases
 
 Use one version and one root Git tag for the native SDK, public Rust crates and
-language bindings. For example, `v0.1.6` releases version `0.1.6` everywhere.
-The only additional tag is `bindings/go/v0.1.6`, required by Go for the module in
+language bindings. For example, `v0.6.0` releases version `0.1.6` everywhere.
+The only additional tag is `bindings/go/v0.6.0`, required by Go for the module in
 `bindings/go`; CI creates it automatically after the SDK is published.
 
 | Distribution | Workflow | Starts after |
 | --- | --- | --- |
 | Native SDK archives on GitHub | `native-release.yaml` | Root tag push |
-| `wampproto`, `xconn-framing`, `xconn-crypto`, `xconn-core` on crates.io | `crates-release.yaml` | Root tag push |
-| `@xconnio/core` on npm | `npm-release.yaml` | Root tag push |
-| `xconn-core` ABI3 wheels/source on PyPI | `python-release.yaml` | Root tag push |
-| `xconn_core` on pub.dev | `dart-release.yaml`, called by the SDK workflow | SDK publication |
+| `wampproto`, `xconn-framing`, `xconn-crypto`, `xconn` on crates.io | `crates-release.yaml` | Root tag push |
+| `@xconnio/xconn` on npm | `npm-release.yaml` | Root tag push |
+| `xconn` ABI3 wheels/source on PyPI | `python-release.yaml` | Root tag push |
+| `xconn` on pub.dev | `dart-release.yaml`, called by the SDK workflow | SDK publication |
 | Go submodule tag | SDK workflow | SDK publication |
 
 `xconn-webrtc` is not added to crates.io by this flow. Its native builds include
@@ -21,7 +21,7 @@ the workspace's pinned SCTP patch; see [SCTP provenance](sctp-patch.md).
 
 1. Open **Actions → Prepare release → Run workflow**, select `main`, and enter
    the new version without `v` (for example `0.1.6`). It opens a
-   `release/v0.1.6` branch and PR with package versions, local Rust dependency
+   `release/v0.6.0` branch and PR with package versions, local Rust dependency
    requirements, lockfiles, the installer default and changelog headings updated.
    It rejects versions that are not newer and never overwrites an existing branch.
 2. Review the PR and fill in the new changelog sections. SDK checksums remain
@@ -37,8 +37,8 @@ the workspace's pinned SCTP patch; see [SCTP provenance](sctp-patch.md).
    Alternatively, tag the reviewed main commit locally and push it:
 
    ```sh
-   git tag -a v0.1.6 -m 'XConn 0.1.6'
-   git push origin v0.1.6
+   git tag -a v0.6.0 -m 'XConn 0.1.6'
+   git push origin v0.6.0
    ```
 
 Approve publishing environments if they require review. Builds and registry
@@ -55,14 +55,14 @@ Create GitHub environments named `npm`, `pypi`, `pub.dev` and `crates.io`. They 
 require reviewer approval. Registry authentication uses short-lived OIDC tokens;
 no registry token is stored in this repository.
 
-- npm: retain the trusted publisher for owner `xconnio`, repository `xconn`,
+- npm: configure the `@xconnio/xconn` trusted publisher for owner `xconnio`, repository `xconn`,
   workflow `npm-release.yaml`, environment `npm`.
-- PyPI: configure the existing `xconn-core` project's GitHub trusted publisher
+- PyPI: configure the `xconn` project's GitHub trusted publisher
   for owner `xconnio`, repository `xconn`, workflow `python-release.yaml`,
   environment `pypi`.
-- pub.dev: enable GitHub Actions publishing for `xconn_core` from `xconnio/xconn`,
+- pub.dev: enable GitHub Actions publishing for `xconn` from `xconnio/xconn`,
   with tag pattern `v{{version}}` and required environment `pub.dev`.
-- crates.io: configure each of the four existing public crates for repository
+- crates.io: configure all four crates, including the renamed `xconn`, for repository
   `xconnio/xconn`, workflow `crates-release.yaml`, environment `crates.io`.
   The authentication action obtains and revokes a temporary publishing token.
 
@@ -90,6 +90,28 @@ See the official [PyPI trusted publishing guide](https://docs.pypi.org/trusted-p
 [crates.io authentication action](https://github.com/rust-lang/crates-io-auth-action)
 for registry setup.
 
+## Package names in 0.6.0
+
+This release uses `xconn` for the Rust crate, Python distribution and import,
+and Dart package and import. The npm package is `@xconnio/xconn`; Go imports
+`github.com/xconnio/xconn/bindings/go`. Supporting crates and the native SDK
+archive names are unchanged.
+
+Python and Dart reuse the names of the older XConn implementations. Python's
+previous `xconn` release was 0.5.1; 0.6.0 makes the consolidated implementation
+the newer release. Existing `xconn-core`, `xconn_core`, and `@xconnio/core`
+packages remain published under their original names and are not aliases.
+
+Before tagging, configure the trusted publishers on the new package names.
+PyPI and pub.dev settings for the old core packages do not carry over. The
+first crates.io publication may need maintainer authentication before its
+trusted publisher can be configured. Configure npm's publisher for
+`@xconnio/xconn`; its initial publication may require maintainer authentication.
+
+Land and publish XConn before merging consumer dependency updates. Regenerate
+consumer lockfiles from the published 0.6.0 packages; local development
+overrides are only for testing before publication.
+
 ## What is verified
 
 SDK builds retain the Linux x86-64/ARM64, macOS ARM64, Windows amd64 GNU and
@@ -97,7 +119,7 @@ Android ARM64 matrix. Shared/static archives include headers, pkg-config files,
 checksums and build provenance. C and Go consumers verify host linking; Android
 checks verify ELF/API compatibility. See [native installation](native-install.md).
 
-The Rust job verifies each crate as it publishes dependencies before `xconn-core`.
+The Rust job verifies each crate as it publishes dependencies before `xconn`.
 Manual runs verify all four crates without uploading. On retry, already-published
 versions are skipped without replacement.
 Cargo waits for newly uploaded dependencies to appear in the registry index.

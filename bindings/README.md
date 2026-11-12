@@ -1,14 +1,14 @@
-# XConn Core language bindings
+# XConn language bindings
 
 Bindings share the Rust protocol engine. Native adapters delegate networking,
 routing, cryptography, and lifecycle management to the shared binding runtime.
 
 | Binding | Package | Supported APIs |
 | --- | --- | --- |
-| [Browser JS / TypeScript](js) | `@xconnio/core` | WebSocket, WebTransport and WebRTC clients through WASM |
-| [Dart](dart) | `xconn_core` | Future-based clients, QUIC, WebTransport and WebRTC |
-| [Python](python) | `xconn-core` / `xconn_core` | Blocking/asyncio clients, QUIC, WebTransport and WebRTC |
-| [Go](go) | `github.com/xconnio/xconn-core/bindings/go` | Client, router/server, QUIC, WebTransport and WebRTC |
+| [Browser JS / TypeScript](js) | `@xconnio/xconn` | WebSocket, WebTransport and WebRTC clients through WASM |
+| [Dart](dart) | `xconn` | Future-based clients, QUIC, WebTransport and WebRTC |
+| [Python](python) | `xconn` | Blocking/asyncio clients, QUIC, WebTransport and WebRTC |
+| [Go](go) | `github.com/xconnio/xconn/bindings/go` | Client, router/server, QUIC, WebTransport and WebRTC |
 
 `runtime` implements shared handle, job, and callback ownership. `ffi` exposes
 owned buffers through a C ABI. Build the [native SDK](../docs/native-install.md)

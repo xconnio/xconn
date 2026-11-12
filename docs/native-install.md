@@ -7,9 +7,9 @@ Unix utilities. The installer uses `sha256sum` on Linux or `shasum` on macOS.
 It installs the SDK only; it does not install prerequisite packages.
 
 ```sh
-curl -fL https://raw.githubusercontent.com/xconnio/xconn-core/main/scripts/install-xconn-sdk.sh -o install-xconn-sdk.sh
+curl -fL https://raw.githubusercontent.com/xconnio/xconn/main/scripts/install-xconn-sdk.sh -o install-xconn-sdk.sh
 sh install-xconn-sdk.sh
-go get github.com/xconnio/xconn-core/bindings/go
+go get github.com/xconnio/xconn/bindings/go
 go build ./...
 ```
 
@@ -67,7 +67,7 @@ automatically download or install native code during a build.
 
 ## GitHub Releases
 
-Download SDK archives from the [Core releases](https://github.com/xconnio/xconn-core/releases).
+Download SDK archives from the [XConn releases](https://github.com/xconnio/xconn/releases).
 Assets inherit repository visibility: public downloads require a public
 repository; private releases require authenticated repository access.
 The release workflow builds these targets:

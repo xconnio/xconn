@@ -1,6 +1,6 @@
-# From many implementations to XConn Core
+# From many implementations to XConn
 
-XConn Core brings together years of work on WAMP and connectivity across the
+XConn brings together years of work on WAMP and connectivity across the
 XConnIO projects. Its foundations come from the people who designed, built,
 tested, and maintained the Wampproto and XConn implementations in Rust, Go,
 Python, JavaScript, and Dart, along with the WebRTC and application work that
@@ -15,7 +15,7 @@ architecture and extending its capabilities.
 
 Maintaining independent protocol and networking implementations across
 languages meant repeating fixes, implementing features several times, and
-working to keep behavior consistent. XConn Core moves that shared work into
+working to keep behavior consistent. XConn moves that shared work into
 Rust and exposes it through language bindings.
 
 The sans-I/O WAMP engine remains independent of network I/O. The Rust runtime
@@ -41,6 +41,6 @@ project. Both contributions belong in its history: relevant commits credit
 original contributors alongside the agents involved, and source references
 identify earlier implementations that were imported or adapted.
 
-XConn Core is the continuation of that collective work: a common foundation
+XConn is the continuation of that collective work: a common foundation
 that contributors can improve together and application developers can build
 on across languages and platforms.

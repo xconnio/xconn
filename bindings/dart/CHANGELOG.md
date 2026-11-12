@@ -1,3 +1,7 @@
+## 0.6.0
+
+- Rename the package to `xconn`.
+
 ## 0.1.6
 
 ## 0.1.5
@@ -10,7 +14,7 @@
 
 ## 0.1.0
 
-- Initial Dart and Flutter client binding for XConn Core.
+- Initial Dart and Flutter client binding for XConn.
 - WAMP RPC and publish/subscribe with authentication and progressive calls/results.
 - Direct WebRTC, QUIC, and WebTransport connections.
 - Automatically download and verify native SDK 0.1.1 for Android ARM64,

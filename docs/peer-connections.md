@@ -129,7 +129,7 @@ connection establishment are implemented by `xconn_webrtc::peer` (feature
 `services`). These APIs need no binding callbacks:
 
 ```rust
-use xconn_core::{CBORSerializerSpec, wampproto::authenticators::anonymous::AnonymousAuthenticator};
+use xconn::{CBORSerializerSpec, wampproto::authenticators::anonymous::AnonymousAuthenticator};
 use xconn_webrtc::peer::{self, Config, Endpoint};
 
 // Edge: local_router carries its authentication and realm policy.
@@ -153,7 +153,7 @@ supply their own authenticator factory and local router authentication policy.
 `Config.ice_servers` defaults to Google STUN and can be replaced or cleared.
 
 The transport-neutral ownership/retry building block remains
-`xconn_core::async_::services::peer::Peer<C>` (feature `services`). A cancel-safe
+`xconn::async_::services::peer::Peer<C>` (feature `services`). A cancel-safe
 `Connector<C>` supplies `C: DirectConnection`. `session_for` keeps meta/signaling
 operations on the hub and selects one path for other operations. Additional
 transport connectors can implement this trait without changing RPC or stream APIs.

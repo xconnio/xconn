@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Rename the package to `xconn`.
+
 ## 0.1.6
 
 ## 0.1.5

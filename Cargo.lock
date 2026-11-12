@@ -127,7 +127,7 @@ version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7f43a50ac4fdca5df8e885c21b835997f0a1cdee65494a6847694a98652d9d8"
 dependencies = [
- "asn1-rs-derive 0.1.6",
+ "asn1-rs-derive 0.6.0",
  "asn1-rs-impl",
  "displaydoc",
  "nom",
@@ -151,7 +151,7 @@ dependencies = [
 
 [[package]]
 name = "asn1-rs-derive"
-version = "0.1.6"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3109e49b1e4909e9db6515a30c633684d68cdeaa252f215214cb4fa1a5bfee2c"
 dependencies = [
@@ -1855,7 +1855,7 @@ dependencies = [
  "rustls-pki-types",
  "time",
  "x509-parser 0.18.1",
- "yasna 0.1.6",
+ "yasna 0.6.0",
 ]
 
 [[package]]
@@ -2794,7 +2794,7 @@ dependencies = [
 
 [[package]]
 name = "wampproto"
-version = "0.1.6"
+version = "0.6.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -3051,7 +3051,7 @@ dependencies = [
 
 [[package]]
 name = "webtrans-proto"
-version = "0.1.6"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e0016c8239e8530e0fce5fac82d067506100954101ca794b75e15c3ee6c03bf"
 dependencies = [
@@ -3064,7 +3064,7 @@ dependencies = [
 
 [[package]]
 name = "webtrans-quion"
-version = "0.1.6"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "29399e26104774bb65bb9ac02192a2d2b2cef2b366bb6a0c6c04d9877306e1ab"
 dependencies = [
@@ -3085,7 +3085,7 @@ dependencies = [
 
 [[package]]
 name = "webtrans-trait"
-version = "0.1.6"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8a94859c220d5dc75ca39e14d059f4ef29fc27eb8b5e8ca00d96f74f7e727b3e"
 dependencies = [
@@ -3296,7 +3296,7 @@ dependencies = [
 
 [[package]]
 name = "xconn"
-version = "0.1.6"
+version = "0.6.0"
 dependencies = [
  "async-trait",
  "clap",
@@ -3325,7 +3325,7 @@ dependencies = [
 
 [[package]]
 name = "xconn-crypto"
-version = "0.1.6"
+version = "0.6.0"
 dependencies = [
  "chacha20poly1305",
  "getrandom 0.2.17",
@@ -3340,14 +3340,14 @@ dependencies = [
 
 [[package]]
 name = "xconn-ffi"
-version = "0.1.6"
+version = "0.6.0"
 dependencies = [
  "xconn-binding-runtime",
 ]
 
 [[package]]
 name = "xconn-framing"
-version = "0.1.6"
+version = "0.6.0"
 dependencies = [
  "bytes",
 ]
@@ -3402,7 +3402,7 @@ dependencies = [
 
 [[package]]
 name = "yasna"
-version = "0.1.6"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5f6765e852b9b4dc8e2a76843e4d64d1cea8e79bcde0b6901aea8e7c7f08282"
 dependencies = [

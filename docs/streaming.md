@@ -4,9 +4,9 @@
 owned `Call`. Do not append `execute()` to `stream()`.
 
 ```rust,no_run
-use xconn_core::StreamOptions;
+use xconn::StreamOptions;
 
-# async fn example(session: &xconn_core::async_::session::Session) -> Result<(), xconn_core::Error> {
+# async fn example(session: &xconn::async_::session::Session) -> Result<(), xconn::Error> {
 let call = session.call("process").arg("first").stream_with(StreamOptions {
     progressive_input: true,
     progressive_results: true,
@@ -21,7 +21,7 @@ while let Some(result) = call.receive().await? {
 ```
 
 The blocking API uses the same methods without `.await`. Runnable examples live
-in `crates/xconn-core/examples`.
+in `crates/xconn/examples`.
 
 ## Independent directions
 

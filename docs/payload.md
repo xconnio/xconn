@@ -38,7 +38,7 @@ count := event.KwargInt64Or("count", 0)
 ```
 
 ```rust
-use xconn_core::Payload;
+use xconn::Payload;
 let name = invocation.arg_str(0)?;
 let count = event.kwarg_int_or("count", 0);
 ```
