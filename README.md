@@ -1,36 +1,74 @@
 # XConn
 
-Reusable connectivity technology implemented in Rust, with language bindings.
+XConn connects applications with remote procedure calls, publish/subscribe
+messaging, and byte streams. Built in Rust on the [WAMP protocol](https://wamp-proto.org/),
+it provides one shared implementation with native APIs for Rust, Go, Python,
+Dart/Flutter, and browser JavaScript/TypeScript.
 
-The workspace contains the sans-I/O WAMP engine and its Rust networking runtime.
-Optional services provide RPC bridging, endpoint discovery, and attachment
-supervision. Language bindings live under [`bindings`](bindings).
+Use it to build distributed services, device management, remote tools, or
+applications that need both structured messages and continuous data transfer.
 
-[From many implementations to XConn](CONSOLIDATION.md) describes the
-project’s origins and the work behind this consolidation.
+## Capabilities
 
-## Workspace
+- **RPC and pub/sub:** call procedures across services, publish events, and
+  stream progressive call inputs and results.
+- **Streams tied to RPCs:** an XConn extension for passing byte streams as
+  arguments or results, supporting uploads, downloads, and interactive sessions.
+- **Routed and direct connections:** bridge services through routers or connect
+  directly over WebRTC, with WAMP-based signaling and trickle ICE.
+- **Multiple transports:** WebSocket, RawSocket, QUIC, WebTransport, and yamux,
+  with TCP and Unix socket options where applicable.
+- **Authentication and codecs:** anonymous, ticket, WAMP-CRA, and cryptosign
+  authentication; JSON, CBOR, and MessagePack serialization.
 
-- [`docs/services.md`](docs/services.md): service contracts, resource ownership,
-  and the boundary between reusable technology and application policy.
+## How it works
 
-- [`crates/xconn-webrtc`](crates/xconn-webrtc): reusable WebRTC data channels,
-  trickle ICE, timeouts, and optional WAMP signaling and sessions.
+A deployment can route traffic through a relay router and an edge router, or use
+a direct WebRTC connection to the edge. Backend services stay on their local
+connection.
 
-- [`crates/xconn-framing`](crates/xconn-framing): bounded data-channel message
-  framing shared by native WebRTC and browser WASM.
+```mermaid
+flowchart LR
+    C["Clients"]
+    R["Relay router"]
+    E["Edge router"]
+    B["Backend services"]
 
-- [`crates/xconn-crypto`](crates/xconn-crypto): portable packet encryption and
-  key agreement for native and browser WASM consumers.
+    C <-->|"QUIC / WebTransport"| R
+    R <-->|"QUIC"| E
+    E <-->|"yamux over Unix / TCP"| B
+    C <-->|"Optional direct WebRTC"| E
+```
 
-- [`crates/xconn`](crates/xconn): async and blocking clients, routers,
-  transport connections, and the optional router executable.
+RPCs identify the operation; byte streams travel as its arguments or results.
+The same model supports uploads, downloads, and interactive sessions through
+compatible routers and bridges. Ordinary WAMP calls and events also work over
+WebSocket and RawSocket; byte streams require a stream-capable transport.
 
-- [`crates/wampproto`](crates/wampproto): protocol messages, codecs,
-  authentication, client joining, router acceptance, broker, and dealer.
+## Languages
 
-The protocol crate has no socket or async runtime dependency. Applications own
-network I/O and drive its state machines with incoming protocol messages.
+| Language | Package | APIs |
+| --- | --- | --- |
+| [Rust](crates/xconn) | `xconn` | Async and blocking clients and routers |
+| [Go](bindings/go) | `github.com/xconnio/xconn/bindings/go` | Context-aware clients and routers |
+| [Python](bindings/python) | `xconn` | Blocking and asyncio clients |
+| [Dart / Flutter](bindings/dart) | `xconn` | Future-based native clients |
+| [JavaScript / TypeScript](bindings/js) | `@xconnio/xconn` | Promise-based browser clients |
+
+Python wheels include the native runtime. Dart downloads it automatically during
+builds. Go uses a one-time [native SDK installation](docs/native-install.md).
+Browser clients use WASM for the protocol engine and browser APIs for networking.
+See the [transport support matrix](bindings/README.md#transport-support) for details.
+
+Follow the language guides above for installation and examples, or run the
+[Rust router](crates/xconn/README.md#router-executable).
+
+## Architecture
+
+[`wampproto`](crates/wampproto) is the sans-I/O protocol engine: it handles WAMP
+messages and state without sockets or an async runtime. [`xconn`](crates/xconn)
+adds networking, sessions, routing, and service bridges. Native bindings share
+that Rust runtime; browser bindings pair the protocol engine with browser I/O.
 
 ## Development
 
@@ -40,31 +78,6 @@ cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
 cargo test --locked --workspace --all-features
 ```
 
-CI runs these checks on Linux, macOS, and Windows, plus async-only, blocking,
-and protocol-only builds. Go is not required for the normal Rust tests.
-CI runs on pull requests and pushes to `main`. The path filters in
-[`.github/filters.yaml`](.github/filters.yaml) select affected checks; shared
-changes run the full suite. Go changes also run Python interoperability tests.
-Linux binding jobs share the native SDK, test helpers, and independent Go
-reference through same-run artifacts. Python still builds its own extension,
-and browser tests build WASM. Lint runs independently of native compilation.
-
-[Progressive RPC APIs](docs/streaming.md) and the
-[WebTransport Retry limitation](docs/webtransport-retry.md) describe runtime behavior.
-
-## License
-
-MIT. Copyright XConnIO Ltd.
-
-## Language bindings
-
-- [Browser JS / TypeScript](bindings/js): WebSocket, WebTransport and WebRTC;
-  `import { Client } from "@xconnio/xconn"`.
-- [Dart](bindings/dart): Future-based clients with QUIC, WebTransport and WebRTC;
-  `package:xconn/xconn.dart`.
-- [Python](bindings/python): blocking and asyncio clients with QUIC, WebTransport
-  and WebRTC; `from xconn import Client`.
-- [Go](bindings/go): context-aware clients, routers, transports, and WebRTC.
-
-Go imports `github.com/xconnio/xconn/bindings/go` using package name `xconn`.
-Build the native SDK first; see [native installation](docs/native-install.md).
+Read more about [RPC byte streams](docs/rpc-streams.md),
+[progressive calls](docs/streaming.md), [service bridges](docs/services.md),
+and the [project's origins](CONSOLIDATION.md).
