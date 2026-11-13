@@ -1,9 +1,11 @@
 # XConn
 
-XConn connects applications with remote procedure calls, publish/subscribe
-messaging, and byte streams. Built in Rust on the [WAMP protocol](https://wamp-proto.org/),
-it provides one shared implementation with native APIs for Rust, Go, Python,
-Dart/Flutter, and browser JavaScript/TypeScript.
+XConn builds on [WAMP](https://wamp-proto.org/)’s remote procedure calls and
+publish/subscribe messaging, adding byte streams tied to RPCs, service bridging,
+and direct WebRTC connectivity.
+
+Built in Rust, it provides one shared implementation with native APIs for Rust,
+Go, Python, Dart/Flutter, and browser JavaScript/TypeScript.
 
 Use it to build distributed services, device management, remote tools, or
 applications that need both structured messages and continuous data transfer.
@@ -49,11 +51,11 @@ WebSocket and RawSocket; byte streams require a stream-capable transport.
 
 | Language | Package | APIs |
 | --- | --- | --- |
-| [Rust](crates/xconn) | `xconn` | Async and blocking clients and routers |
-| [Go](bindings/go) | `github.com/xconnio/xconn/bindings/go` | Context-aware clients and routers |
-| [Python](bindings/python) | `xconn` | Blocking and asyncio clients |
-| [Dart / Flutter](bindings/dart) | `xconn` | Future-based native clients |
-| [JavaScript / TypeScript](bindings/js) | `@xconnio/xconn` | Promise-based browser clients |
+| [Rust](crates/xconn) | [`xconn`](https://crates.io/crates/xconn) | Async and blocking clients and routers |
+| [Go](bindings/go) | [`bindings/go`](https://pkg.go.dev/github.com/xconnio/xconn/bindings/go) | Context-aware clients and routers |
+| [Python](bindings/python) | [`xconn`](https://pypi.org/project/xconn/) | Blocking and asyncio clients |
+| [Dart / Flutter](bindings/dart) | [`xconn`](https://pub.dev/packages/xconn) | Future-based native clients |
+| [JavaScript / TypeScript](bindings/js) | [`@xconnio/xconn`](https://www.npmjs.com/package/@xconnio/xconn) | Promise-based browser clients |
 
 Python wheels include the native runtime. Dart downloads it automatically during
 builds. Go uses a one-time [native SDK installation](docs/native-install.md).
