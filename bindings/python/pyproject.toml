@@ -17,7 +17,7 @@ classifiers = [
     "Topic :: System :: Networking",
 ]
 license = "MIT"
-authors = [{ name = "Code Mistri", email = "mistri@xconn.io" }]
+authors = [{ name = "XConn Developers" }]
 license-files = ["LICENSE"]
 dependencies = []
 
