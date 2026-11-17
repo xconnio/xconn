@@ -1,12 +1,12 @@
 # Pinned SCTP receive-drain patch
 
-Dependency: `webrtc-sctp` 0.13.0, pinned through the workspace Cargo patch to
+Dependency: `webrtc-sctp` 0.13.0. The receive-drain fix was introduced in
 [`xconnio/webrtc` commit `b4b91964`](https://github.com/xconnio/webrtc/commit/b4b91964e91973778c3080e0f403561f6765522b).
 The patch is based on upstream revision `a1f8f1919235d8452835852e018efd654f2f8366`,
 the revision recorded in the published crates.io package.
 Upstream: [webrtc-rs/webrtc](https://github.com/webrtc-rs/webrtc).
 
-The workspace also pins `webrtc-util` to this revision because SCTP references
+The workspace pins `webrtc-sctp` and `webrtc-util` to the same fork revision because SCTP references
 it through a local path in the upstream monorepo. This keeps shared types
 consistent across the registry WebRTC crates and the forked SCTP crate.
 
@@ -23,10 +23,16 @@ requests, even when the rest of the download connection remained healthy.
 It also registers its notification waiter before checking queue/closure state,
 so a concurrent reset cannot strand the reader between the check and the wait.
 The added stream regression test queues replies, simulates remote reset, and
-verifies both replies and then EOF. Other upstream code remains unchanged.
+verifies both replies and then EOF.
+
+The current pin is [commit `e2aee163`](https://github.com/xconnio/webrtc/commit/e2aee163c9d4858003a36f974d1b8cedc3ae11d2).
+It also updates `webrtc-util` to `nix` 0.31.4 with its networking feature and adapts
+one IPv4 conversion. The older dependency referenced macOS-only socket types on
+iOS and failed to compile with current `libc`. The SCTP fix remains unchanged.
 
 Remove this fork override when the selected upstream SCTP release contains
-an equivalent fix, rerunning the regression and WebRTC interoperability tests.
+an equivalent fix and its interface discovery dependency supports iOS. Rerun the
+regression, WebRTC interoperability and iOS build checks before removing it.
 CI checks out the pinned fork revision in a separate job and runs:
 
 ```sh

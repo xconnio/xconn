@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage or archive the host's native SDK. Does not install or publish it."""
+"""Stage or archive a native SDK. Does not install or publish it."""
 
 import argparse
 import hashlib
@@ -46,7 +46,12 @@ def stage(destination, static=False, profile="release", target=None, android_api
     build_target = target
     target = target or host
     android = target == "aarch64-linux-android"
+    ios = target in ("aarch64-apple-ios", "aarch64-apple-ios-sim")
     system = platform.system()
+    if ios and system != "Darwin":
+        raise SystemExit("iOS SDK packaging requires macOS and Xcode")
+    if ios and static:
+        raise SystemExit("iOS SDKs are shared libraries for Flutter native assets")
     if system not in ("Linux", "Darwin", "Windows"):
         raise SystemExit("native SDK packaging supports Linux, macOS and Windows")
     windows = system == "Windows"
@@ -207,12 +212,16 @@ def main():
     )
     parser.add_argument("--static", action="store_true", help="stage the host static archive and linker dependencies")
     parser.add_argument("--profile", choices=("release", "native"), default="release", help="Cargo build profile")
-    parser.add_argument("--target", choices=("aarch64-linux-android",), help="cross-compile the Android ARM64 SDK")
+    parser.add_argument(
+        "--target",
+        choices=("aarch64-linux-android", "aarch64-apple-ios", "aarch64-apple-ios-sim"),
+        help="cross-compile an Android or iOS ARM64 SDK",
+    )
     parser.add_argument("--android-api-level", type=int, default=24, help="minimum Android API level (default: 24)")
     parser.add_argument("destination", type=Path)
     args = parser.parse_args()
     if args.target and args.static:
-        parser.error("Android SDKs are shared libraries; --static is only supported for native Linux/macOS/Windows")
+        parser.error("Cross-compiled SDKs are shared libraries; omit --static")
     destination = args.destination.resolve()
     if args.stage_only:
         stage(

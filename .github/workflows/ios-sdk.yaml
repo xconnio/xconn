@@ -1,0 +1,51 @@
+name: iOS SDK
+
+on:
+  workflow_call:
+    inputs:
+      ref:
+        type: string
+        default: ''
+      release_tag:
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  ios:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.sha }}
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: native-ios
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Check release version
+        if: inputs.release_tag != ''
+        run: python3 ci/release_version.py "$RELEASE_TAG"
+        env:
+          RELEASE_TAG: ${{ inputs.release_tag }}
+      - name: Build iPhone and simulator SDKs
+        run: ci/build-ios-sdk.sh target/native-dist
+      - name: Test Flutter bundling and simulator execution
+        run: ci/test-ios-sdk.sh target/native-dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native-sdk-ios
+          path: target/native-dist/*
+          if-no-files-found: error
+          compression-level: 0

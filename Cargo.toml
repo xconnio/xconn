@@ -33,8 +33,8 @@ codegen-units = 1
 panic = "abort"
 strip = "symbols"
 
-# Preserve queued replies when a remote WebRTC peer resets its SCTP stream.
+# Preserve queued SCTP replies after remote reset and support iOS interface discovery.
 # See docs/sctp-patch.md for provenance and the removal condition.
 [patch.crates-io]
-webrtc-sctp = { git = "https://github.com/xconnio/webrtc", rev = "b4b91964e91973778c3080e0f403561f6765522b" }
-webrtc-util = { git = "https://github.com/xconnio/webrtc", rev = "b4b91964e91973778c3080e0f403561f6765522b" }
+webrtc-sctp = { git = "https://github.com/xconnio/webrtc", rev = "e2aee163c9d4858003a36f974d1b8cedc3ae11d2" }
+webrtc-util = { git = "https://github.com/xconnio/webrtc", rev = "e2aee163c9d4858003a36f974d1b8cedc3ae11d2" }

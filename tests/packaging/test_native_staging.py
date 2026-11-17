@@ -302,6 +302,52 @@ class NativeStagingTests(unittest.TestCase):
                 ):
                     PACKAGE.stage(Path("unused"))
 
+    def test_ios_sdk_selects_device_and_simulator_libraries(self):
+        for target in ("aarch64-apple-ios", "aarch64-apple-ios-sim"):
+            with self.subTest(target=target), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                library = root / "target" / target / "native/libxconn_ffi.dylib"
+                library.parent.mkdir(parents=True)
+                library.write_bytes(target.encode())
+                metadata = {
+                    "target_directory": str(root / "target"),
+                    "packages": [{"name": "xconn-ffi", "version": "0.6.0", "features": {"default": []}}],
+                }
+
+                def output(*command, metadata=metadata):
+                    if command[0] == "cargo":
+                        return json.dumps(metadata)
+                    if command == ("rustc", "-vV"):
+                        return "host: aarch64-apple-darwin"
+                    if command[:2] == ("git", "status"):
+                        return ""
+                    return "fixture"
+
+                destination = root / "sdk"
+                with (
+                    patch.object(PACKAGE, "output", side_effect=output),
+                    patch.object(PACKAGE.platform, "system", return_value="Darwin"),
+                    patch.object(PACKAGE.subprocess, "run") as run,
+                ):
+                    name = PACKAGE.stage(destination, profile="native", target=target)
+                    self.assertEqual(name, f"xconn-native-0.6.0-{target}")
+                    self.assertEqual((destination / "lib/libxconn_ffi.dylib").read_bytes(), target.encode())
+                    self.assertEqual(
+                        run.call_args_list[0].args[0][:3], ["install_name_tool", "-id", "@rpath/libxconn_ffi.dylib"]
+                    )
+                    self.assertEqual(run.call_args_list[1].args[0][:4], ["codesign", "--force", "--sign", "-"])
+                    manifest = json.loads((destination / "manifest.json").read_text())
+                    self.assertEqual(manifest["target"], target)
+                    self.assertEqual(manifest["build_host"], "aarch64-apple-darwin")
+                    with self.assertRaisesRegex(SystemExit, "shared libraries"):
+                        PACKAGE.stage(destination, static=True, target=target)
+                with (
+                    patch.object(PACKAGE, "output", side_effect=output),
+                    patch.object(PACKAGE.platform, "system", return_value="Linux"),
+                    self.assertRaisesRegex(SystemExit, "requires macOS"),
+                ):
+                    PACKAGE.stage(destination, target=target)
+
     def test_signing_failure_preserves_installed_library(self):
         with tempfile.TemporaryDirectory() as directory:
             source, installed = (
