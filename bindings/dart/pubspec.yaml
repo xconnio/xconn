@@ -6,6 +6,7 @@ version: 0.6.0
 
 platforms:
   android:
+  ios:
   linux:
   macos:
 

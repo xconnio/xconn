@@ -68,12 +68,15 @@ Supported release targets:
 - Android ARM64, API 24 or newer.
 - Linux x86-64 and ARM64, using the Ubuntu 22.04 SDK builds.
 - macOS ARM64.
+- iOS ARM64 devices and Apple Silicon simulators, iOS 13 or newer (next SDK release).
 
 The first build needs network access to GitHub. Verified archives and libraries
 are cached in the hook's shared output directory and can be reused offline.
 Cached archives and libraries are checked again whenever the hook runs;
 corrupt cache entries fail the build rather than loading unverified code.
-Windows, Intel macOS, and iOS do not yet have downloadable SDKs.
+Windows and Intel macOS do not yet have downloadable SDKs.
+The existing 0.6.0 release does not include iOS; use a locally built library until
+the next SDK and Dart package release.
 
 For development or CI, an explicitly supplied library takes precedence over
 downloads. It must match the build target and C ABI; no Rust tools are invoked:
@@ -96,7 +99,7 @@ not invoke the native-assets hook. `XCONN_LIBRARY` remains an explicit loader
 override for development and tests.
 
 Native-assets loading and packaged CLI execution are verified on Linux x86_64.
-Flutter Android builds use the downloaded ARM64 library. Apple and Android
+Flutter Android and iOS builds use the matching downloaded ARM64 library. Apple and Android
 device runtime validation remains separate from archive/bundling checks. Browser clients use the JavaScript binding.
 Forced isolate termination still does not guarantee finalizer cleanup.
 
@@ -216,3 +219,14 @@ The path is relative to that pubspec. The hook tracks the library as a build
 dependency and bundles it as usual. Cross-compilation continues to use the
 source build path. CI uses this option to share one native build across Go,
 Python interoperability tests, and Dart.
+
+For an iOS source build, run these commands on an Apple Silicon Mac with Xcode:
+
+```sh
+rustup target add aarch64-apple-ios aarch64-apple-ios-sim
+ci/build-ios-sdk.sh target/native-dist
+ci/test-ios-sdk.sh target/native-dist
+```
+
+Flutter bundles and signs the iOS native library with the app. Publishing the app
+still requires your Apple signing configuration; building the SDK does not.
