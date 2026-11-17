@@ -3,6 +3,12 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 archives=$(cd "${1:-target/native-dist}" && pwd)
 root=$PWD
+mode=${2:-all}
+case "$mode" in
+  all) targets=(aarch64-apple-ios aarch64-apple-ios-sim) ;;
+  aarch64-apple-ios|aarch64-apple-ios-sim) targets=("$mode") ;;
+  *) echo "Unsupported iOS SDK target: $mode" >&2; exit 1 ;;
+esac
 temporary=$(mktemp -d)
 device=
 cleanup() {
@@ -14,7 +20,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-for target in aarch64-apple-ios aarch64-apple-ios-sim; do
+for target in "${targets[@]}"; do
   archive=("$archives"/xconn-native-*-"$target".tar.gz)
   tar -xzf "${archive[0]}" -C "$temporary"
   library=("$temporary"/xconn-native-*-"$target"/lib/libxconn_ffi.dylib)
@@ -82,17 +88,26 @@ hooks:
 YAML
 }
 
-library=("$temporary"/xconn-native-*-aarch64-apple-ios-sim/lib/libxconn_ffi.dylib)
-write_pubspec "${library[0]}"
-# Use a dedicated simulator so this script never resets another developer's device.
-device=$(xcrun simctl create 'XConn SDK smoke' 'iPhone 16')
-xcrun simctl bootstatus "$device" -b
-xcrun simctl keychain "$device" add-root-cert "$temporary/ca.pem"
-cd "$temporary/app"
-flutter pub get
-flutter test --device-id "$device" integration_test/native_test.dart
+if [[ "$mode" != aarch64-apple-ios ]]; then
+  library=("$temporary"/xconn-native-*-aarch64-apple-ios-sim/lib/libxconn_ffi.dylib)
+  write_pubspec "${library[0]}"
+  # Use a dedicated simulator so this script never resets another developer's device.
+  device=$(xcrun simctl create 'XConn SDK smoke' 'iPhone 16')
+  xcrun simctl bootstatus "$device" -b
+  xcrun simctl keychain "$device" add-root-cert "$temporary/ca.pem"
+  (
+    cd "$temporary/app"
+    flutter pub get
+    flutter test --device-id "$device" integration_test/native_test.dart
+  )
+fi
 
-library=("$temporary"/xconn-native-*-aarch64-apple-ios/lib/libxconn_ffi.dylib)
-write_pubspec "${library[0]}"
-# Check the device build without requiring Apple signing credentials.
-flutter build ios --release --no-codesign
+if [[ "$mode" != aarch64-apple-ios-sim ]]; then
+  library=("$temporary"/xconn-native-*-aarch64-apple-ios/lib/libxconn_ffi.dylib)
+  write_pubspec "${library[0]}"
+  # Check the device build without requiring Apple signing credentials.
+  (
+    cd "$temporary/app"
+    flutter build ios --release --no-codesign
+  )
+fi
