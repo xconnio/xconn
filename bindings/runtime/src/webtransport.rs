@@ -4,6 +4,7 @@ use crate::{
     callbacks::{authenticator, codec, server_router},
     quic::{HostVerification, stream_output},
     resources::{ForeignSession, Output, Resource as BridgeResource, get_resource},
+    tls::{self, Trust},
     values::{handle_field, session_fields, string_field},
 };
 use std::{collections::HashMap, sync::Arc};
@@ -87,27 +88,17 @@ pub(super) async fn dispatch(method: &str, fields: HashMap<String, Value>) -> Re
             ))
         }
         "webtransport_dial" => {
-            let builder =
-                rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-                    .with_safe_default_protocol_versions()
-                    .map_err(|e| e.to_string())?;
-            let tls = if fields.get("verify_server") == Some(&Value::Bool(true)) {
-                let mut roots = rustls::RootCertStore::empty();
+            let trust = if fields.get("verify_server") == Some(&Value::Bool(true)) {
                 if let Some(Value::Bytes(certificate)) = fields.get("certificate") {
-                    roots
-                        .add(rustls::pki_types::CertificateDer::from(certificate.0.clone()))
-                        .map_err(|e| e.to_string())?;
+                    Trust::Certificates(vec![rustls::pki_types::CertificateDer::from(certificate.0.clone())])
                 } else {
-                    roots.add_parsable_certificates(crate::tls::trusted_certificates());
+                    Trust::System
                 }
-                builder.with_root_certificates(roots).with_no_client_auth()
             } else {
                 // The existing Go adapter verifies this captured chain itself.
-                builder
-                    .dangerous()
-                    .with_custom_certificate_verifier(Arc::new(HostVerification::new()))
-                    .with_no_client_auth()
+                Trust::Host(Arc::new(HostVerification::new()))
             };
+            let tls = tls::client_config(trust)?;
             let connected = Connection::connect_with_tls(&string_field(&fields, "url")?, tls)
                 .await
                 .map_err(|e| e.to_string())?;

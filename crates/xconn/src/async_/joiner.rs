@@ -3,7 +3,7 @@ use crate::async_::rawsocket::connect_rawsocket;
 use crate::async_::websocket::WebSocketPeer;
 use crate::common::types::{Error, JSONSerializerSpec, SerializerSpec, SessionDetails};
 use futures_util::{StreamExt, TryFutureExt};
-use tokio_tungstenite::connect_async_with_config;
+use tokio_tungstenite::connect_async_tls_with_config;
 use tungstenite::ClientRequestBuilder;
 use tungstenite::protocol::WebSocketConfig;
 use wampproto::authenticators::anonymous::AnonymousAuthenticator;
@@ -68,7 +68,14 @@ impl WebSocketJoiner {
         let request = ClientRequestBuilder::new(uri).with_sub_protocol(self.serializer.subprotocol());
         let config = Some(WebSocketConfig::default());
 
-        let (ws, response) = connect_async_with_config(request, config, false)
+        #[cfg(target_os = "ios")]
+        let connector = Some(tokio_tungstenite::Connector::Rustls(std::sync::Arc::new(
+            crate::common::tls::client_config()?,
+        )));
+        #[cfg(not(target_os = "ios"))]
+        let connector = None;
+
+        let (ws, response) = connect_async_tls_with_config(request, config, false, connector)
             .await
             .map_err(|e| Error::new(format!("failed to connect: {e}")))?;
         if response

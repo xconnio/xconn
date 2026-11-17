@@ -83,3 +83,6 @@ required-features = ["async"]
 [[example]]
 name = "discovery"
 required-features = ["services"]
+
+[target.'cfg(target_os = "ios")'.dependencies]
+rustls-platform-verifier = "0.7"
