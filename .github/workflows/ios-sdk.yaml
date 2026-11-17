@@ -17,6 +17,10 @@ jobs:
   ios:
     runs-on: macos-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [aarch64-apple-ios, aarch64-apple-ios-sim]
     steps:
       - uses: actions/checkout@v6
         with:
@@ -26,26 +30,42 @@ jobs:
           python-version: '3.12'
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: aarch64-apple-ios,aarch64-apple-ios-sim
+          targets: ${{ matrix.target }}
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: native-ios
+          shared-key: native-ios-${{ matrix.target }}
+          cache-on-failure: true
       - uses: subosito/flutter-action@v2
+        id: flutter
         with:
           channel: stable
+          flutter-version: '3.50.0'
           cache: true
       - name: Check release version
         if: inputs.release_tag != ''
         run: python3 ci/release_version.py "$RELEASE_TAG"
         env:
           RELEASE_TAG: ${{ inputs.release_tag }}
-      - name: Build iPhone and simulator SDKs
-        run: ci/build-ios-sdk.sh target/native-dist
-      - name: Test Flutter bundling and simulator execution
-        run: ci/test-ios-sdk.sh target/native-dist
+      - name: Build native SDK
+        run: ci/build-ios-sdk.sh target/native-dist "${{ matrix.target }}"
+      - name: Test Flutter bundling and native execution
+        run: ci/test-ios-sdk.sh target/native-dist "${{ matrix.target }}"
       - uses: actions/upload-artifact@v4
         with:
-          name: native-sdk-ios
+          name: native-sdk-${{ matrix.target }}
           path: target/native-dist/*
           if-no-files-found: error
           compression-level: 0
+      # The setup action saves on success; keep completed downloads after test failures too.
+      - name: Save Flutter SDK after failure
+        if: failure() && steps.flutter.outcome == 'success' && steps.flutter.outputs.CACHE-HIT != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.flutter.outputs.CACHE-PATH }}
+          key: ${{ steps.flutter.outputs.CACHE-KEY }}
+      - name: Save Dart packages after failure
+        if: failure() && steps.flutter.outcome == 'success' && steps.flutter.outputs.PUB-CACHE-HIT != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.flutter.outputs.PUB-CACHE-PATH }}
+          key: ${{ steps.flutter.outputs.PUB-CACHE-KEY }}-${{ hashFiles('**/pubspec.lock') }}
