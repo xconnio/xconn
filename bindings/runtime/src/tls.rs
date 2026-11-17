@@ -1,7 +1,46 @@
-//! Certificate discovery shared by verified native QUIC and WebTransport clients.
-use rustls::pki_types::CertificateDer;
+//! TLS configuration shared by native QUIC and WebTransport clients.
+use crate::Result;
+use rustls::{ClientConfig, client::danger::ServerCertVerifier, pki_types::CertificateDer};
+use std::sync::Arc;
 
-pub(super) fn trusted_certificates() -> Vec<CertificateDer<'static>> {
+pub(super) enum Trust {
+    System,
+    Certificates(Vec<CertificateDer<'static>>),
+    Host(Arc<dyn ServerCertVerifier>),
+}
+
+pub(super) fn client_config(trust: Trust) -> Result<ClientConfig> {
+    let builder = ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+        .with_safe_default_protocol_versions()
+        .map_err(|error| error.to_string())?;
+    let builder = match trust {
+        Trust::System => {
+            #[cfg(target_os = "ios")]
+            {
+                use rustls_platform_verifier::BuilderVerifierExt;
+                builder.with_platform_verifier().map_err(|error| error.to_string())?
+            }
+            #[cfg(not(target_os = "ios"))]
+            {
+                let mut roots = rustls::RootCertStore::empty();
+                roots.add_parsable_certificates(trusted_certificates());
+                builder.with_root_certificates(roots)
+            }
+        }
+        Trust::Certificates(certificates) => {
+            let mut roots = rustls::RootCertStore::empty();
+            for certificate in certificates {
+                roots.add(certificate).map_err(|error| error.to_string())?;
+            }
+            builder.with_root_certificates(roots)
+        }
+        Trust::Host(verifier) => builder.dangerous().with_custom_certificate_verifier(verifier),
+    };
+    Ok(builder.with_no_client_auth())
+}
+
+#[cfg(not(target_os = "ios"))]
+fn trusted_certificates() -> Vec<CertificateDer<'static>> {
     #[cfg(target_os = "android")]
     if std::env::var_os("SSL_CERT_FILE").is_none() && std::env::var_os("SSL_CERT_DIR").is_none() {
         // Android 14+ updates system roots through Conscrypt's APEX module.
@@ -68,6 +107,12 @@ mod tests {
         fn drop(&mut self) {
             let _ = std::fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn explicit_roots_reject_invalid_certificates() {
+        let invalid = CertificateDer::from(vec![0, 1, 2]);
+        assert!(client_config(Trust::Certificates(vec![invalid])).is_err());
     }
 
     #[test]

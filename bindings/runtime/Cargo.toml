@@ -36,3 +36,6 @@ time = "0.3"
 [[example]]
 name = "transport_peer"
 required-features = ["quic", "webtransport", "webrtc"]
+
+[target.'cfg(target_os = "ios")'.dependencies]
+rustls-platform-verifier = "0.7"

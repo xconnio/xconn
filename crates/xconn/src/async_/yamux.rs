@@ -235,14 +235,18 @@ pub(crate) async fn connect_uri(
                 .map_err(|e| Error::new(e.to_string()))?;
             stream.set_nodelay(true).map_err(|e| Error::new(e.to_string()))?;
             if url.scheme() == "yamuxs" {
-                let mut roots = rustls::RootCertStore::empty();
-                roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
-                let tls =
+                #[cfg(target_os = "ios")]
+                let tls = crate::common::tls::client_config()?;
+                #[cfg(not(target_os = "ios"))]
+                let tls = {
+                    let mut roots = rustls::RootCertStore::empty();
+                    roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
                     rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
                         .with_safe_default_protocol_versions()
                         .map_err(|e| Error::new(e.to_string()))?
                         .with_root_certificates(roots)
-                        .with_no_client_auth();
+                        .with_no_client_auth()
+                };
                 let name =
                     rustls::pki_types::ServerName::try_from(host.to_owned()).map_err(|e| Error::new(e.to_string()))?;
                 Box::new(

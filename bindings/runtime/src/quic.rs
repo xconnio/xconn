@@ -3,6 +3,7 @@ use crate::{
     ByteArray, Result, Value,
     callbacks::{authenticator, codec, server_router},
     resources::{ForeignSession, Output, Resource as BridgeResource, get_resource},
+    tls::{self, Trust},
     values::{handle_field, session_fields, string_field},
 };
 use std::{collections::HashMap, sync::Arc};
@@ -129,35 +130,24 @@ pub(super) async fn dispatch(method: &str, f: HashMap<String, Value>) -> Result<
             ))
         }
         "quic_dial" => {
-            let mut roots = rustls::RootCertStore::empty();
-            if f.get("host_verification") == Some(&Value::Bool(true)) {
+            let trust = if f.get("host_verification") == Some(&Value::Bool(true)) {
                 // The host verifies the chain before exposing the connection.
+                Trust::Host(Arc::new(HostVerification::new()))
             } else if let Some(Value::Bytes(certificate)) = f.get("certificate") {
-                roots
-                    .add(rustls::pki_types::CertificateDer::from(certificate.0.clone()))
-                    .map_err(|e| e.to_string())?;
+                Trust::Certificates(vec![rustls::pki_types::CertificateDer::from(certificate.0.clone())])
             } else if let Some(Value::List(certificates)) = f.get("roots") {
+                let mut roots = Vec::with_capacity(certificates.len());
                 for certificate in certificates {
                     let Value::Bytes(certificate) = certificate else {
                         return Err("expected DER root certificate".into());
                     };
-                    roots
-                        .add(rustls::pki_types::CertificateDer::from(certificate.0.clone()))
-                        .map_err(|e| e.to_string())?;
+                    roots.push(rustls::pki_types::CertificateDer::from(certificate.0.clone()));
                 }
+                Trust::Certificates(roots)
             } else {
-                roots.add_parsable_certificates(crate::tls::trusted_certificates());
-            }
-            let mut tls =
-                rustls::ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-                    .with_safe_default_protocol_versions()
-                    .map_err(|e| e.to_string())?
-                    .with_root_certificates(roots)
-                    .with_no_client_auth();
-            if f.get("host_verification") == Some(&Value::Bool(true)) {
-                tls.dangerous()
-                    .set_certificate_verifier(Arc::new(HostVerification::new()));
-            }
+                Trust::System
+            };
+            let mut tls = tls::client_config(trust)?;
             tls.alpn_protocols = vec![xconn::async_::quic::ALPN.to_vec()];
             let mut config = quinn::ClientConfig::new(Arc::new(
                 quinn::crypto::rustls::QuicClientConfig::try_from(tls).map_err(|e| e.to_string())?,
