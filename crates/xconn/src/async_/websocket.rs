@@ -58,13 +58,16 @@ impl<S: AsyncRead + AsyncWrite + Unpin + Send + 'static> Peer for WebSocketPeer<
         }
 
         let ping = self.pings.start();
-        self.writer
-            .lock()
-            .await
-            .send(Message::Ping(ping.payload.to_vec().into()))
-            .await
-            .map_err(|e| Error::new(e.to_string()))?;
-        ping.wait(timeout).await
+        let payload = ping.payload;
+        ping.wait(timeout, async {
+            self.writer
+                .lock()
+                .await
+                .send(Message::Ping(payload.to_vec().into()))
+                .await
+                .map_err(|e| Error::new(e.to_string()))
+        })
+        .await
     }
 
     async fn read(&self) -> Result<Vec<u8>, Error> {

@@ -71,6 +71,9 @@ async fn client_router_matrix() {
                 };
                 let callee = connect().await;
                 let caller = connect().await;
+                if transport != "memory" {
+                    caller.ping(Duration::from_secs(1)).await.unwrap();
+                }
                 let registration = callee
                     .execute_register(RegisterRequest::new("echo", |inv| async move {
                         RpcResult::new(inv.args, inv.kwargs)
