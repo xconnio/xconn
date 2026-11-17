@@ -36,6 +36,7 @@ jobs:
           shared-key: native-ios-${{ matrix.target }}
           cache-on-failure: true
       - uses: subosito/flutter-action@v2
+        if: matrix.target == 'aarch64-apple-ios'
         id: flutter
         with:
           channel: stable
@@ -48,7 +49,9 @@ jobs:
           RELEASE_TAG: ${{ inputs.release_tag }}
       - name: Build native SDK
         run: ci/build-ios-sdk.sh target/native-dist "${{ matrix.target }}"
+      # Simulator SDKs are still published, but simulator tests are disabled in CI.
       - name: Test Flutter bundling and native execution
+        if: matrix.target == 'aarch64-apple-ios'
         run: ci/test-ios-sdk.sh target/native-dist "${{ matrix.target }}"
       - uses: actions/upload-artifact@v4
         with:
