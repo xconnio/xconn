@@ -8,6 +8,8 @@ from release_version import ROOT, check_versions, release_version
 
 TARGETS = (
     "aarch64-apple-darwin",
+    "aarch64-apple-ios",
+    "aarch64-apple-ios-sim",
     "aarch64-linux-android",
     "aarch64-unknown-linux-gnu",
     "x86_64-unknown-linux-gnu",

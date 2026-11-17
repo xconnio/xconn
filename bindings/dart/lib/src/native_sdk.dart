@@ -25,7 +25,7 @@ class NativeSdk {
   final Directory _directory;
   final Uri _releaseBase;
 
-  String get libraryName => target.endsWith("apple-darwin") ? "libxconn_ffi.dylib" : "libxconn_ffi.so";
+  String get libraryName => target.contains("-apple-") ? "libxconn_ffi.dylib" : "libxconn_ffi.so";
 
   Future<File> download() async {
     if (_directory.existsSync()) {

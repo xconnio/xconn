@@ -12,19 +12,25 @@ const _target = "x86_64-unknown-linux-gnu";
 const _libraryName = "libxconn_ffi.so";
 final _libraryBytes = Uint8List.fromList(utf8.encode("fixture native library"));
 
-Uint8List _archive({String target = _target, int abi = 1, bool includeLibrary = true}) {
-  const prefix = "xconn-native-$nativeSdkVersion-$_target";
+Uint8List _archive({
+  String target = _target,
+  String archiveTarget = _target,
+  String libraryName = _libraryName,
+  int abi = 1,
+  bool includeLibrary = true,
+}) {
+  final prefix = "xconn-native-$nativeSdkVersion-$archiveTarget";
   final manifest = {
     "version": nativeSdkVersion,
     "target": target,
     "abi_version": abi,
-    "files": {"lib/$_libraryName": sha256.convert(_libraryBytes).toString()},
+    "files": {"lib/$libraryName": sha256.convert(_libraryBytes).toString()},
   };
   final archive = Archive()
     ..addFile(ArchiveFile.string("$prefix/manifest.json", jsonEncode(manifest)))
     ..addFile(ArchiveFile.string("../escaped-file", "must not be extracted"));
   if (includeLibrary) {
-    archive.addFile(ArchiveFile("$prefix/lib/$_libraryName", _libraryBytes.length, _libraryBytes));
+    archive.addFile(ArchiveFile("$prefix/lib/$libraryName", _libraryBytes.length, _libraryBytes));
   }
   return Uint8List.fromList(const GZipEncoder().encode(TarEncoder().encode(archive)));
 }
@@ -70,6 +76,23 @@ void main() {
     await server.close(force: true);
     expect((await downloader.download()).path, library.path);
     expect(requests, 1);
+  });
+
+  test("iPhone and simulator downloads use the Apple dynamic library", () async {
+    for (final target in ["aarch64-apple-ios", "aarch64-apple-ios-sim"]) {
+      archive = _archive(target: target, archiveTarget: target, libraryName: "libxconn_ffi.dylib");
+      final downloader = NativeSdk(
+        cacheDirectory: temporary,
+        target: target,
+        archiveSha256: sha256.convert(archive).toString(),
+        releaseBase: Uri.parse("http://127.0.0.1:${server.port}/"),
+      );
+      final library = await downloader.download();
+      expect(library.uri.pathSegments.last, "libxconn_ffi.dylib");
+      expect(await library.readAsBytes(), _libraryBytes);
+      expect((await downloader.download()).path, library.path);
+    }
+    expect(requests, 2);
   });
 
   test("an incorrect archive hash is rejected without caching a library", () async {
