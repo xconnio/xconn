@@ -96,6 +96,11 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo check --locked -p xconn-crypto --target wasm32-unknown-unknown
 
+  ios:
+    needs: changes
+    if: needs.changes.outputs.dart == 'true'
+    uses: ./.github/workflows/ios-sdk.yaml
+
   sctp-regression:
     needs: changes
     if: needs.changes.outputs.sctp == 'true'
@@ -106,7 +111,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           repository: xconnio/webrtc
-          ref: b4b91964e91973778c3080e0f403561f6765522b
+          ref: e2aee163c9d4858003a36f974d1b8cedc3ae11d2
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:

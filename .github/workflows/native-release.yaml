@@ -115,6 +115,12 @@ jobs:
           if-no-files-found: error
           compression-level: 0
 
+  ios:
+    uses: ./.github/workflows/ios-sdk.yaml
+    with:
+      ref: refs/tags/${{ inputs.tag || github.ref_name }}
+      release_tag: ${{ inputs.tag || github.ref_name }}
+
   windows:
     uses: ./.github/workflows/windows-sdk.yaml
     with:
@@ -124,7 +130,7 @@ jobs:
   publish:
     name: Publish SDK archives
     timeout-minutes: 10
-    needs: [build, android, windows]
+    needs: [build, android, ios, windows]
     runs-on: ubuntu-22.04
     permissions:
       contents: write
