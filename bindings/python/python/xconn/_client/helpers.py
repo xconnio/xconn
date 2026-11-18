@@ -1,12 +1,15 @@
 import contextlib
+import functools
 import importlib
 import inspect
 import os
 import sys
+import types
 from collections.abc import Awaitable, Callable
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from dataclasses import dataclass
 from typing import (
+    Annotated,
     Any,
     Union,
     get_args,
@@ -81,19 +84,106 @@ class EventMetadata(BaseMetadata):
     func: callable
 
 
-def create_model_from_func(func):
+def _name(obj: Any) -> str:
+    """A name for error messages. Partials and callable instances have no __name__."""
+
+    return getattr(obj, "__qualname__", None) or getattr(obj, "__name__", None) or repr(obj)
+
+
+class _ConflictingDependencies(Exception):
+    pass
+
+
+def _same_dependency(a: Depends, b: Depends) -> bool:
+    # Depends wraps async generators in a new context manager each time, so compare the functions underneath.
+    return inspect.unwrap(a.dependency) is inspect.unwrap(b.dependency)
+
+
+def _merge(found: list[Depends]) -> Depends | None:
+    for dep in found[1:]:
+        if not _same_dependency(found[0], dep):
+            raise _ConflictingDependencies
+
+    return found[0] if found else None
+
+
+def _depends_in(hint: Any) -> Depends | None:
+    """Finds the Depends in a type, also inside unions and nested Annotated: `Annotated[DB, ...] | None`.
+
+    Within one Annotated metadata list the last Depends wins, as in FastAPI. Depends found anywhere else in the type,
+    such as in other union members or inside an Annotated that has its own Depends, must be the same dependency.
+    """
+
+    origin = get_origin(hint)
+
+    if origin is Annotated:
+        own = [m for m in hint.__metadata__ if isinstance(m, Depends)][-1:]
+        inner = _depends_in(get_args(hint)[0])
+        return _merge(own + ([inner] if inner is not None else []))
+
+    if origin is Union or origin is types.UnionType:
+        return _merge([dep for arg in get_args(hint) if (dep := _depends_in(arg)) is not None])
+
+    return None
+
+
+def find_dependencies(func: callable) -> dict[str, Depends]:
+    """Returns the function's dependencies by parameter name.
+
+    A dependency is declared in the parameter's type: `DB = Annotated[Session, Depends(get_db)]`, then `db: DB`.
+    """
+
+    hints = get_type_hints(func, include_extras=True)
+    found = {}
+
+    for name, param in inspect.signature(func).parameters.items():
+        if isinstance(param.default, Depends):
+            raise RuntimeError(
+                f"Parameter '{name}' of '{_name(func)}' declares Depends as its default value. "
+                f"Declare it in the type instead: {name}: Annotated[<type>, Depends(...)]"
+            )
+
+        try:
+            dep = _depends_in(hints.get(name))
+        except _ConflictingDependencies:
+            raise RuntimeError(f"Parameter '{name}' of '{_name(func)}' declares different dependencies") from None
+
+        if dep is not None:
+            found[name] = dep
+
+    return found
+
+
+def _check_dependency(func: callable, name: str, dep: Depends) -> None:
+    where = f"dependency '{_name(dep.dependency)}' for parameter '{name}' of '{_name(func)}'"
+
+    # Partials of functions are fine. Classes and callable instances aren't, since whether one is async or a
+    # generator can't be told reliably, and a wrong guess would inject a coroutine or generator object.
+    target = dep.dependency
+    while isinstance(target, functools.partial):
+        target = target.func
+    if not (inspect.isfunction(target) or inspect.ismethod(target)):
+        raise RuntimeError(f"The {where} must be a function or method, not {type(dep.dependency).__name__}")
+
+    parameters = list(inspect.signature(dep.dependency).parameters)
+    if parameters:
+        raise RuntimeError(f"The {where} must take no parameters, but takes: {', '.join(parameters)}")
+
+    if (dep.is_async or dep.is_async_gen) and not inspect.iscoroutinefunction(func):
+        raise RuntimeError(f"The {where} is async, so '{_name(func)}' must be async too")
+
+
+def create_model_from_func(func, skip: set[str]):
     signature = inspect.signature(func)
-    type_hints = get_type_hints(func)
+    # With extras, so constraints such as Annotated[str, Field(min_length=3)] are kept.
+    type_hints = get_type_hints(func, include_extras=True)
     fields = {}
 
     for param_name, param in signature.parameters.items():
-        if isinstance(param.default, Depends):
+        if param_name in skip:
             continue
 
         annotated_type = type_hints.get(param_name)
-
-        if is_subclass_of_any(annotated_type, CallDetails) or is_subclass_of_any(annotated_type, EventDetails):
-            continue
 
         # Handle default values
 
@@ -102,7 +192,7 @@ def create_model_from_func(func):
         else:
             fields[param_name] = (annotated_type | None, param.default)
 
-    return create_model(func.__name__.capitalize() + "Model", **fields)
+    return create_model(getattr(func, "__name__", "Handler").capitalize() + "Model", **fields)
 
 
 def is_primitive(obj) -> bool:
@@ -128,7 +218,7 @@ def _assemble_base_metadata(
 
     for name, param in sig.parameters.items():
         if param.annotation is inspect._empty:
-            raise RuntimeError(f"Missing type hint for parameter: '{name}' in function '{func.__name__}'")
+            raise RuntimeError(f"Missing type hint for parameter: '{name}' in function '{_name(func)}'")
 
     if issubclass(incoming_class, Event):
         context = "topic"
@@ -154,35 +244,21 @@ def _assemble_base_metadata(
     async_dependencies = {}
     async_ctx_dependencies = {}
 
-    for name, param in sig.parameters.items():
-        if isinstance(param.default, Depends):
-            sig = inspect.signature(param.default.dependency)
+    found = find_dependencies(func)
 
-            if len(sig.parameters) != 0:
-                raise RuntimeError("Dependency functions support no parameters")
+    for name, dep in found.items():
+        _check_dependency(func, name, dep)
 
-            dep: Depends = param.default
+        if dep.is_async:
+            async_dependencies[name] = dep.dependency
+        elif dep.is_async_gen:
+            async_ctx_dependencies[name] = dep.dependency
+        elif inspect.isgeneratorfunction(dep.dependency):
+            ctx_dependencies[name] = contextlib.contextmanager(dep.dependency)
+        else:
+            dependencies[name] = dep.dependency
 
-            if dep.is_async:
-                async_dependencies[name] = param.default.dependency
-            elif dep.is_async_gen:
-                async_ctx_dependencies[name] = param.default.dependency
-            elif inspect.isgeneratorfunction(param.default.dependency):
-                ctx_dependencies[name] = contextlib.contextmanager(param.default.dependency)
-            elif inspect.isfunction(param.default.dependency) or inspect.ismethod(param.default.dependency):
-                dependencies[name] = param.default.dependency
-
-    for key in dependencies.keys():
-        del hints[key]
-
-    for key in ctx_dependencies.keys():
-        del hints[key]
-
-    for key in async_dependencies.keys():
-        del hints[key]
-
-    for key in async_ctx_dependencies.keys():
-        del hints[key]
+        hints.pop(name, None)
 
     # check if CallDetails are in the function
 
@@ -191,7 +267,7 @@ def _assemble_base_metadata(
     for name, type_ in hints.items():
         if is_subclass_of_any(type_, details_class):
             if details_field is not None:
-                raise RuntimeError(f"Duplicate {details_class.__name__} in function '{func.__name__}'")
+                raise RuntimeError(f"Duplicate {details_class.__name__} in function '{_name(func)}'")
 
             details_field = name
 
@@ -203,7 +279,7 @@ def _assemble_base_metadata(
     has_incoming_class_in_sig = False
 
     for name, type_ in hints.items():
-        if issubclass(type_, BaseModel):
+        if isinstance(type_, type) and issubclass(type_, BaseModel):
             if len(hints) != 1:
                 raise RuntimeError(f"Cannot mix pydantic BaseModel with other types in signature of {context} '{uri}'")
 
@@ -235,7 +311,7 @@ def _assemble_base_metadata(
         no_args = True
     else:
         # let's create a dynamic pydantic model based on the procedure signature
-        request_model = create_model_from_func(func)
+        request_model = create_model_from_func(func, skip={*found, details_field})
 
         for key, value in request_model.model_fields.items():
             if value.is_required():
@@ -329,7 +405,7 @@ def validate_event_parameters(event: Event, meta: EventMetadata):
         msg += f"expected {len(meta.request_kwargs)} keyword arguments, got {len(event.kwargs)}"
 
     if msg != "":
-        prefix = f"error: function '{meta.func.__name__}' for topic '{meta.uri}' received invalid number of arguments. "
+        prefix = f"error: function '{_name(meta.func)}' for topic '{meta.uri}' received invalid number of arguments. "
         prefix += msg
         raise ValueError(prefix)
 
