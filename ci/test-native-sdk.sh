@@ -23,6 +23,13 @@ for archive in "$archives"/*.tar.gz; do
       flags=(-static "-Wl,--gc-sections")
     fi
     test_tags=xconn_static
+  elif [[ -n "${MAX_GLIBC_VERSION:-}" ]]; then
+    required_glibc=$(LC_ALL=C readelf --version-info --wide "$sdk/lib/libxconn_ffi.so" |
+      grep -oE 'Name: GLIBC_[^[:space:]]+' | cut -d_ -f2- | sort -V | tail -n 1)
+    if [[ "$(printf '%s\n' "$required_glibc" "$MAX_GLIBC_VERSION" | sort -V | tail -n 1)" != "$MAX_GLIBC_VERSION" ]]; then
+      echo "$archive requires GLIBC_$required_glibc (maximum GLIBC_$MAX_GLIBC_VERSION)" >&2
+      exit 1
+    fi
   fi
   # CI paths contain no spaces; pkg-config emits compiler arguments.
   read -r -a compiler_flags <<< "$(pkg-config --cflags --libs "$package")"
