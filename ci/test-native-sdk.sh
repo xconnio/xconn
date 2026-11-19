@@ -30,6 +30,12 @@ for archive in "$archives"/*.tar.gz; do
       echo "$archive requires GLIBC_$required_glibc (maximum GLIBC_$MAX_GLIBC_VERSION)" >&2
       exit 1
     fi
+  elif [[ -n "${MACOSX_DEPLOYMENT_TARGET:-}" && "$(uname -s)" == Darwin ]]; then
+    min_macos=$(vtool -show-build "$sdk/lib/libxconn_ffi.dylib" | awk '$1 == "minos" { print $2 }')
+    if [[ "$min_macos" != "$MACOSX_DEPLOYMENT_TARGET" ]]; then
+      echo "$archive has macOS minimum version '${min_macos}' (expected $MACOSX_DEPLOYMENT_TARGET)" >&2
+      exit 1
+    fi
   fi
   # CI paths contain no spaces; pkg-config emits compiler arguments.
   read -r -a compiler_flags <<< "$(pkg-config --cflags --libs "$package")"

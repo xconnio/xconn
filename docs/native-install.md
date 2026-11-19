@@ -13,10 +13,10 @@ go get github.com/xconnio/xconn/bindings/go
 go build ./...
 ```
 
-Supported hosts are Linux amd64/arm64 with glibc 2.28 or newer, and macOS
-arm64. The installer does not support Windows, Intel macOS, musl or
-cross-installation. Windows amd64 SDK archives use the manual installation
-described below.
+The Linux amd64/arm64 SDKs target glibc 2.28 or newer, and the Apple Silicon
+SDK targets macOS 12.0 or newer. The installer does not support Windows, Intel
+macOS, musl or cross-installation. Windows amd64 SDK archives use the manual
+installation described below.
 
 The script downloads the archive and SHA-256 sidecar from the same versioned
 GitHub Release over HTTPS. It checks the archive hash before extracting, rejects
