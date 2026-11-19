@@ -47,22 +47,19 @@ impl Peer for RawSocketPeer {
         }
 
         let ping = self.pings.start();
-        {
+        let payload = ping.payload;
+        ping.wait(timeout, async {
             let mut writer = self.writer.lock().await;
             writer
                 .write_all(&rs::send_message_header(&rs::MessageHeader::new(
                     rs::Message::Ping,
-                    ping.payload.len(),
+                    payload.len(),
                 )))
                 .await
                 .map_err(|e| Error::new(e.to_string()))?;
-            writer
-                .write_all(&ping.payload)
-                .await
-                .map_err(|e| Error::new(e.to_string()))?;
-        }
-
-        ping.wait(timeout).await
+            writer.write_all(&payload).await.map_err(|e| Error::new(e.to_string()))
+        })
+        .await
     }
 
     async fn read(&self) -> Result<Vec<u8>, Error> {
