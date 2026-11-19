@@ -225,26 +225,29 @@ impl Listener {
                                 #[cfg(feature = "rpc-streams")]
                                 rpc_session: Arc::new(Mutex::new(false)),
                             };
-                            let mut announced = false;
+                            let mut identified = false;
+                            let mut pending_notification = None;
                             let mut streams = tokio::task::JoinSet::new();
 
                             loop {
                                 tokio::select! {
-                                    changed = identity.changed(), if !announced => {
+                                    changed = identity.changed(), if !identified => {
                                         if changed.is_err() { break; }
                                         let session = identity.borrow_and_update().clone();
                                         if let Some(session) = session {
                                             if enabled.load(std::sync::atomic::Ordering::Acquire) {
-                                                let event = AuthenticatedConnection { connection: accepted.clone(), session };
-                                                tokio::select! {
-                                                    result = notifications.send(event) => {
-                                                        if result.is_err() { break; }
-                                                    }
-                                                    _ = connection.closed() => break,
-                                                }
+                                                pending_notification = Some(AuthenticatedConnection {
+                                                    connection: accepted.clone(),
+                                                    session,
+                                                });
                                             }
-                                            announced = true;
+                                            identified = true;
                                         }
+                                    }
+                                    // A full notification queue must not block stream acceptance.
+                                    permit = notifications.reserve(), if pending_notification.is_some() => {
+                                        let Ok(permit) = permit else { break };
+                                        permit.send(pending_notification.take().unwrap());
                                     }
                                     incoming = connection.accept_bi() => {
                                         let Ok((send, recv)) = incoming else { break };
