@@ -124,3 +124,45 @@ async fn webtransport_sessions_and_authenticated_raw_stream() {
     .await
     .unwrap();
 }
+
+#[cfg(feature = "quic")]
+#[tokio::test]
+async fn quic_full_notification_queue_keeps_accepting_streams() {
+    tokio::time::timeout(Duration::from_secs(15), async {
+        use xconn::async_::quic::*;
+        let router = Router::new();
+        router.add_realm("first", RealmConfig::default()).unwrap();
+        router.add_realm("second", RealmConfig::default()).unwrap();
+        let server = Listener::bind(router, "127.0.0.1:0".parse().unwrap()).await.unwrap();
+        server.enable_connection_notifications();
+
+        let mut clients = Vec::new();
+        // The listener buffers 64 notifications. Keep the connections alive and
+        // leave all notifications queued while opening a second WAMP session.
+        for _ in 0..65 {
+            let client = Connection::connect(server.local_addr, "localhost", server.client_config().unwrap())
+                .await
+                .unwrap();
+            let session = client
+                .open_session("first", Box::new(JSONSerializerSpec), auth())
+                .await
+                .unwrap();
+            clients.push((client, session));
+        }
+        let (client, first) = clients.last().unwrap();
+        let second = client
+            .open_session("second", Box::new(JSONSerializerSpec), auth())
+            .await
+            .unwrap();
+        assert_ne!(first.details().id(), second.details().id());
+
+        let mut saw_last = false;
+        for _ in &clients {
+            let event = server.accept_connection().await.unwrap();
+            saw_last |= event.session.id == first.details().id();
+        }
+        assert!(saw_last, "the pending notification must still be delivered");
+    })
+    .await
+    .unwrap();
+}
