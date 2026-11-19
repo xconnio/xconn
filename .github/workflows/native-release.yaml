@@ -52,6 +52,7 @@ jobs:
       - name: Set up Linux SDK build tools
         if: runner.os == 'Linux'
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           dnf --enablerepo=powertools install -y glibc-static
           echo /opt/python/cp312-cp312/bin >> "$GITHUB_PATH"
       - uses: actions/setup-go@v6
