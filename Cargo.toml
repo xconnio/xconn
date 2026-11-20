@@ -36,5 +36,5 @@ strip = "symbols"
 # Preserve queued SCTP replies after remote reset and support iOS interface discovery.
 # See docs/sctp-patch.md for provenance and the removal condition.
 [patch.crates-io]
-webrtc-sctp = { git = "https://github.com/xconnio/webrtc", rev = "e2aee163c9d4858003a36f974d1b8cedc3ae11d2" }
-webrtc-util = { git = "https://github.com/xconnio/webrtc", rev = "e2aee163c9d4858003a36f974d1b8cedc3ae11d2" }
+webrtc-sctp = { git = "https://github.com/xconnio/webrtc", rev = "c9cda582156106c967849c1d9d8d0e8f41ac8721" }
+webrtc-util = { git = "https://github.com/xconnio/webrtc", rev = "c9cda582156106c967849c1d9d8d0e8f41ac8721" }
