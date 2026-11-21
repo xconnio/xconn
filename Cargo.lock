@@ -2988,7 +2988,7 @@ dependencies = [
 
 [[package]]
 name = "wampproto"
-version = "0.6.5"
+version = "0.6.6"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -3326,7 +3326,7 @@ dependencies = [
 
 [[package]]
 name = "xconn"
-version = "0.6.5"
+version = "0.6.6"
 dependencies = [
  "async-trait",
  "clap",
@@ -3389,7 +3389,7 @@ dependencies = [
 
 [[package]]
 name = "xconn-crypto"
-version = "0.6.5"
+version = "0.6.6"
 dependencies = [
  "chacha20poly1305",
  "getrandom 0.2.17",
@@ -3404,14 +3404,14 @@ dependencies = [
 
 [[package]]
 name = "xconn-ffi"
-version = "0.6.5"
+version = "0.6.6"
 dependencies = [
  "xconn-binding-runtime",
 ]
 
 [[package]]
 name = "xconn-framing"
-version = "0.6.5"
+version = "0.6.6"
 dependencies = [
  "bytes",
 ]
