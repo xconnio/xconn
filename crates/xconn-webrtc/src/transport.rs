@@ -373,7 +373,7 @@ impl DataChannel {
             }
         };
         let drained = tokio::time::timeout(timeout, drain).await.is_ok();
-        self.channel.close().await?;
+        self.close().await?;
         if !drained {
             return Err(Error("channel flush timeout".into()));
         }
@@ -382,8 +382,10 @@ impl DataChannel {
 
     pub async fn close(&self) -> std::result::Result<(), Error> {
         self.closed.send_replace(true);
-        self.channel.close().await?;
-        Ok(())
+        match self.channel.close().await {
+            Ok(()) | Err(webrtc::error::Error::ErrDataChannelClosed) => Ok(()),
+            Err(error) => Err(error.into()),
+        }
     }
 }
 
