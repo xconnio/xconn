@@ -3433,6 +3433,7 @@ dependencies = [
  "bytes",
  "serde",
  "serde_json",
+ "socket2",
  "tokio",
  "uuid",
  "webrtc",

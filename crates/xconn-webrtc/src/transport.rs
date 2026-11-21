@@ -489,6 +489,7 @@ impl Connection {
             PeerConnectionBuilder::new()
                 .with_configuration(RTCConfigurationBuilder::default().with_ice_servers(ice_servers).build())
                 .with_udp_addrs(vec!["0.0.0.0:0", "[::]:0"])
+                .with_runtime(Arc::new(crate::runtime::WebRtcRuntime))
                 .with_data_channel_send_buffer_limit(512 * 1024)
                 .with_handler(events.clone())
                 .build()
