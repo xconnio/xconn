@@ -62,7 +62,7 @@ pub struct SignalingConfig {
     pub offer_procedure: String,
     pub remote_candidates_topic: String,
     pub local_candidates_topic: String,
-    pub ice_servers: Vec<crate::webrtc::ice_transport::ice_server::RTCIceServer>,
+    pub ice_servers: Vec<crate::webrtc::peer_connection::RTCIceServer>,
 }
 
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -81,7 +81,7 @@ pub struct Provider {
     connections: Arc<std::sync::Mutex<std::collections::HashMap<String, Connection>>>,
     tasks: Arc<std::sync::Mutex<Vec<tokio::task::JoinHandle<()>>>>,
     closed: tokio::sync::watch::Sender<bool>,
-    ice_servers: Arc<std::sync::RwLock<Vec<crate::webrtc::ice_transport::ice_server::RTCIceServer>>>,
+    ice_servers: Arc<std::sync::RwLock<Vec<crate::webrtc::peer_connection::RTCIceServer>>>,
 }
 
 impl Provider {
@@ -231,7 +231,7 @@ impl Provider {
     }
 
     /// Configure ICE servers for future connections without disturbing existing peers.
-    pub fn update_ice_servers(&self, servers: Vec<crate::webrtc::ice_transport::ice_server::RTCIceServer>) {
+    pub fn update_ice_servers(&self, servers: Vec<crate::webrtc::peer_connection::RTCIceServer>) {
         *self.ice_servers.write().unwrap() = servers;
     }
 
@@ -339,7 +339,7 @@ pub async fn connect_with_timeouts(
     .map_err(|_| Error::new("WebRTC connect timeout"))?
 }
 
-type IceCandidate = crate::webrtc::ice_transport::ice_candidate::RTCIceCandidateInit;
+type IceCandidate = crate::webrtc::peer_connection::RTCIceCandidateInit;
 
 enum RemoteCandidate {
     Candidate(String, IceCandidate),
@@ -439,9 +439,9 @@ async fn connect_inner(
                 let remote = remote.clone();
                 async move {
                     if let [xconn::Value::Str(id), xconn::Value::Str(json), ..] = event.args.as_slice() {
-                        let Ok(candidate) = serde_json::from_str::<
-                            crate::webrtc::ice_transport::ice_candidate::RTCIceCandidateInit,
-                        >(json) else {
+                        let Ok(candidate) =
+                            serde_json::from_str::<crate::webrtc::peer_connection::RTCIceCandidateInit>(json)
+                        else {
                             return;
                         };
                         if candidates

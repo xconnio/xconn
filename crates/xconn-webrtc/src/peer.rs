@@ -1,7 +1,7 @@
 //! Default realm-scoped discovery and direct connection establishment.
 use crate::{
     wamp::{Provider, SignalingConfig, Timeouts, WebRTCSession, connect_with_timeouts},
-    webrtc::ice_transport::ice_server::RTCIceServer,
+    webrtc::peer_connection::RTCIceServer,
 };
 use std::sync::Arc;
 use tokio::sync::watch;

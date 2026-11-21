@@ -13,7 +13,7 @@ use std::{collections::HashMap, sync::Arc};
 use xconn_webrtc::{
     Connection, DataChannel,
     wamp::{Provider, SignalingConfig, Timeouts, WebRTCSession, connect_with_timeouts},
-    webrtc::{data_channel::data_channel_init::RTCDataChannelInit, ice_transport::ice_server::RTCIceServer},
+    webrtc::{data_channel::RTCDataChannelInit, peer_connection::RTCIceServer},
 };
 
 pub(super) enum Resource {
@@ -191,11 +191,11 @@ fn options(f: &HashMap<String, Value>) -> Result<RTCDataChannelInit> {
         _ => return Err("ordered must be a boolean".into()),
     };
     Ok(RTCDataChannelInit {
-        ordered,
+        ordered: ordered.unwrap_or(true),
         max_packet_life_time: integer("max_packet_life_time")?,
         max_retransmits: integer("max_retransmits")?,
         negotiated: integer("negotiated")?,
-        protocol: None,
+        protocol: String::new(),
     })
 }
 
