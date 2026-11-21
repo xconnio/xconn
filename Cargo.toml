@@ -18,10 +18,10 @@ edition = "2024"
 license = "MIT"
 repository = "https://github.com/xconnio/xconn"
 
-# Size-focused builds retain unwinding for the native FFI panic boundary.
+# Native builds retain unwinding for the FFI panic boundary.
 [profile.native]
 inherits = "release"
-opt-level = "z"
+opt-level = 3
 lto = "thin"
 codegen-units = 1
 
