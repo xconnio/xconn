@@ -37,5 +37,5 @@ strip = "symbols"
 # See docs/sctp-patch.md for provenance and the removal condition.
 
 [patch.crates-io]
-# Preserve incoming DCEP reliability settings until the upstream fix is released.
-rtc = { git = "https://github.com/webrtc-rs/rtc", rev = "70901c3df6ad92dcb87d97af3d1e2fa8a2e2ae38" }
+# Carry the SCTP reset fix and upstream DCEP reliability fix.
+rtc = { git = "https://github.com/xconnio/rtc", rev = "6d96e51dee1cf6596690d4d48b124037a1653322" }
