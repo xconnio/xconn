@@ -251,7 +251,7 @@ impl WebRTCSession {
     pub async fn open_channel(
         &self,
         label: &str,
-        options: crate::webrtc::data_channel::data_channel_init::RTCDataChannelInit,
+        options: crate::webrtc::data_channel::RTCDataChannelInit,
     ) -> std::result::Result<Arc<DataChannel>, Error> {
         let channel = self
             .connection

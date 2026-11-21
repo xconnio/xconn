@@ -37,9 +37,9 @@ pub(crate) fn opener(connection: Connection, session: Arc<DataChannel>, timeout:
             let permit = capacity
                 .try_acquire_owned()
                 .map_err(|_| xconn::Error::new("too many RPC streams"))?;
-            let options = crate::webrtc::data_channel::data_channel_init::RTCDataChannelInit {
-                ordered: Some(true),
-                protocol: Some(PROTOCOL.into()),
+            let options = crate::webrtc::data_channel::RTCDataChannelInit {
+                ordered: true,
+                protocol: PROTOCOL.into(),
                 ..Default::default()
             };
             let channel = tokio::select! {
@@ -204,11 +204,11 @@ impl Drop for ChannelStream {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::webrtc::data_channel::data_channel_init::RTCDataChannelInit;
+    use crate::webrtc::data_channel::RTCDataChannelInit;
 
     async fn pair(ordered: bool) -> (Connection, Connection, Arc<DataChannel>, Arc<DataChannel>) {
         pair_with_options(RTCDataChannelInit {
-            ordered: Some(ordered),
+            ordered,
             ..Default::default()
         })
         .await
@@ -217,7 +217,7 @@ mod tests {
     async fn pair_with_options(
         mut options: RTCDataChannelInit,
     ) -> (Connection, Connection, Arc<DataChannel>, Arc<DataChannel>) {
-        options.protocol = Some(PROTOCOL.into());
+        options.protocol = PROTOCOL.into();
         let a = Connection::new(vec![]).await.unwrap();
         let b = Connection::new(vec![]).await.unwrap();
         let local = a.open_channel_with_options(PROTOCOL, options).await.unwrap();
@@ -270,12 +270,12 @@ mod tests {
         tokio::time::timeout(Duration::from_secs(10), async {
             for options in [
                 RTCDataChannelInit {
-                    ordered: Some(true),
+                    ordered: true,
                     max_retransmits: Some(0),
                     ..Default::default()
                 },
                 RTCDataChannelInit {
-                    ordered: Some(true),
+                    ordered: true,
                     max_packet_life_time: Some(20),
                     ..Default::default()
                 },

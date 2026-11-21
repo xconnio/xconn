@@ -1,14 +1,14 @@
 use bytes::Bytes;
 use serde::{Deserialize, Serialize};
 use std::{fmt, sync::Arc, time::Duration};
-use tokio::sync::{Mutex, Notify, mpsc, watch};
+use tokio::sync::{Mutex, mpsc, watch};
 pub use webrtc;
 use webrtc::{
-    api::APIBuilder,
-    data_channel::{RTCDataChannel, data_channel_init::RTCDataChannelInit, data_channel_state::RTCDataChannelState},
-    ice_transport::{ice_candidate::RTCIceCandidateInit, ice_server::RTCIceServer},
+    data_channel::{DataChannel as NativeChannel, DataChannelEvent, RTCDataChannelInit, RTCDataChannelState},
     peer_connection::{
-        RTCPeerConnection, configuration::RTCConfiguration, sdp::session_description::RTCSessionDescription,
+        PeerConnection, PeerConnectionBuilder, PeerConnectionEventHandler, RTCConfigurationBuilder,
+        RTCIceCandidateInit, RTCIceGatheringState, RTCIceServer, RTCPeerConnectionIceEvent, RTCPeerConnectionState,
+        RTCSessionDescription,
     },
 };
 
@@ -25,8 +25,8 @@ impl fmt::Display for Error {
 }
 
 impl std::error::Error for Error {}
-impl From<webrtc::Error> for Error {
-    fn from(e: webrtc::Error) -> Self {
+impl From<webrtc::error::Error> for Error {
+    fn from(e: webrtc::error::Error) -> Self {
         Self(e.to_string())
     }
 }
@@ -57,12 +57,14 @@ pub struct Packet {
 /// Owns all data-channel callbacks once, so negotiation cannot lose messages
 /// while switching callbacks between handshake and WAMP processing.
 pub struct DataChannel {
-    channel: Arc<RTCDataChannel>,
+    channel: Arc<dyn NativeChannel>,
+    label: String,
+    protocol: String,
+    reliable_ordered: bool,
     incoming: Mutex<mpsc::Receiver<Packet>>,
     send_lock: Mutex<()>,
     open: watch::Sender<bool>,
     closed: watch::Sender<bool>,
-    ready: Arc<Notify>,
     low_events: watch::Sender<u64>,
     low_threshold: Arc<std::sync::atomic::AtomicUsize>,
     pending_low: watch::Sender<u64>,
@@ -74,25 +76,26 @@ pub struct DataChannel {
 
 impl fmt::Debug for DataChannel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("DataChannel")
-            .field("label", &self.channel.label())
-            .finish()
+        f.debug_struct("DataChannel").field("label", &self.label).finish()
     }
 }
 
 impl DataChannel {
-    async fn attach(channel: Arc<RTCDataChannel>) -> Arc<Self> {
+    async fn attach(channel: Arc<dyn NativeChannel>) -> Result<Arc<Self>, Error> {
+        let label = channel.label().await?;
+        let protocol = channel.protocol().await?;
+        let reliable_ordered = channel.ordered().await?
+            && channel.max_retransmits().await?.is_none()
+            && channel.max_packet_life_time().await?.is_none();
         let (tx, incoming) = mpsc::channel(64);
-        let open = watch::channel(channel.ready_state() == RTCDataChannelState::Open).0;
+        let open = watch::channel(channel.ready_state().await? == RTCDataChannelState::Open).0;
         let closed = watch::channel(false).0;
-        let ready = Arc::new(Notify::new());
         let (low_events, _) = watch::channel(0_u64);
         let (failure, _) = watch::channel(None);
         let low_threshold = Arc::new(std::sync::atomic::AtomicUsize::new(256 * 1024));
         let (pending_low, mut pending) = watch::channel(0_u64);
         let pending_peak = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let peak = pending_peak.clone();
-        let ready_wakeup = ready.clone();
         let threshold = low_threshold.clone();
         let weak_channel = Arc::downgrade(&channel);
         let low_notifications = low_events.clone();
@@ -110,11 +113,12 @@ impl DataChannel {
                     let Some(channel) = weak_channel.upgrade() else {
                         return;
                     };
-                    let amount = channel.buffered_amount().await;
+                    let Ok(amount) = channel.outstanding_bytes().await else {
+                        return;
+                    };
                     drop(channel);
                     let requested = threshold.load(std::sync::atomic::Ordering::Acquire);
                     if amount <= requested.min(256 * 1024) {
-                        ready_wakeup.notify_one();
                         if peak.swap(0, std::sync::atomic::Ordering::AcqRel) > requested {
                             low_notifications.send_modify(|value| *value = value.wrapping_add(1));
                         }
@@ -127,91 +131,62 @@ impl DataChannel {
                 }
             }
         });
+        #[cfg(feature = "rpc-streams")]
+        let backpressure = protocol == crate::rpc_streams::PROTOCOL;
+        #[cfg(not(feature = "rpc-streams"))]
+        let backpressure = false;
+        let native = channel.clone();
         let opened = open.clone();
-        channel.on_open(Box::new(move || {
-            let opened = opened.clone();
-            Box::pin(async move {
-                opened.send_replace(true);
-            })
-        }));
-        let ended = closed.clone();
-        channel.on_close(Box::new(move || {
-            let ended = ended.clone();
-            Box::pin(async move {
-                ended.send_replace(true);
-            })
-        }));
         let ended = closed.clone();
         let errors = failure.clone();
-        channel.on_error(Box::new(move |error| {
-            let errors = errors.clone();
-            let ended = ended.clone();
-            Box::pin(async move {
-                errors.send_replace(Some(error.to_string()));
-                ended.send_replace(true);
-            })
-        }));
-        let ended = closed.clone();
-        let errors = failure.clone();
-        let weak_channel = Arc::downgrade(&channel);
-        channel.on_message(Box::new(move |message| {
-            let tx = tx.clone();
-            let ended = ended.clone();
-            let errors = errors.clone();
-            let weak_channel = weak_channel.clone();
-            Box::pin(async move {
-                #[cfg(feature = "rpc-streams")]
-                if weak_channel
-                    .upgrade()
-                    .is_some_and(|channel| channel.protocol() == crate::rpc_streams::PROTOCOL)
-                {
-                    // webrtc-rs invokes this on the channel's own reader task.
-                    // Pausing it propagates SCTP receive backpressure instead
-                    // of dropping packets when the application reads slowly.
-                    let mut closed = ended.subscribe();
-                    tokio::select! {
-                        biased;
-                        _ = closed.wait_for(|closed| *closed) => {},
-                        _ = tx.send(Packet { data: message.data, is_string: message.is_string }) => {},
+        let mut closing = ended.subscribe();
+        tokio::spawn(async move {
+            loop {
+                let event = tokio::select! {
+                    _ = tx.closed() => break,
+                    _ = closing.wait_for(|closed| *closed) => break,
+                    event = native.poll() => event,
+                };
+                match event {
+                    Some(DataChannelEvent::OnOpen) => {
+                        opened.send_replace(true);
                     }
-                    return;
-                }
-                // Packet-oriented consumers retain their overflow/error behavior.
-                if tx
-                    .try_send(Packet {
-                        data: message.data,
-                        is_string: message.is_string,
-                    })
-                    .is_err()
-                {
-                    errors.send_replace(Some("WebRTC receive queue overflow".into()));
-                    if !ended.send_replace(true) {
-                        tokio::spawn(async move {
-                            if let Some(channel) = weak_channel.upgrade() {
-                                let _ = channel.close().await;
+                    Some(DataChannelEvent::OnMessage(message)) => {
+                        let packet = Packet {
+                            data: message.data.freeze(),
+                            is_string: message.is_string,
+                        };
+                        if backpressure {
+                            tokio::select! {
+                                _ = closing.wait_for(|closed| *closed) => break,
+                                result = tx.send(packet) => if result.is_err() { break; },
                             }
-                        });
+                        } else if tx.try_send(packet).is_err() {
+                            errors.send_replace(Some("WebRTC receive queue overflow".into()));
+                            ended.send_replace(true);
+                            let _ = native.close().await;
+                            break;
+                        }
                     }
+                    Some(DataChannelEvent::OnError) => {
+                        errors.send_replace(Some("WebRTC data channel error".into()));
+                        break;
+                    }
+                    Some(DataChannelEvent::OnClose) | None => break,
+                    _ => {}
                 }
-            })
-        }));
-        channel.set_buffered_amount_low_threshold(256 * 1024).await;
-        let notification = ready.clone();
-        channel
-            .on_buffered_amount_low(Box::new(move || {
-                let ready = notification.clone();
-                Box::pin(async move {
-                    ready.notify_one();
-                })
-            }))
-            .await;
-        Arc::new(Self {
+            }
+            ended.send_replace(true);
+        });
+        Ok(Arc::new(Self {
             channel,
+            label,
+            protocol,
+            reliable_ordered,
             incoming: Mutex::new(incoming),
             send_lock: Mutex::new(()),
             open,
             closed,
-            ready,
             low_events,
             low_threshold,
             pending_low,
@@ -219,22 +194,20 @@ impl DataChannel {
             failure,
             assembler: Mutex::new(Assembler::new(DEFAULT_MAX_MESSAGE)),
             prefetched: Mutex::new(std::collections::VecDeque::new()),
-        })
+        }))
     }
 
     pub fn label(&self) -> &str {
-        self.channel.label()
+        &self.label
     }
 
     #[cfg(feature = "rpc-streams")]
     pub(crate) fn reliable_ordered(&self) -> bool {
-        self.channel.ordered()
-            && self.channel.max_retransmits().is_none()
-            && self.channel.max_packet_lifetime().is_none()
+        self.reliable_ordered
     }
 
     pub fn protocol(&self) -> &str {
-        self.channel.protocol()
+        &self.protocol
     }
 
     pub async fn wait_open(&self, timeout: Duration) -> std::result::Result<(), Error> {
@@ -289,24 +262,16 @@ impl DataChannel {
     }
 
     async fn send_packet_inner(&self, data: Bytes) -> std::result::Result<(), Error> {
-        let mut closed = self.closed.subscribe();
-
-        while self.channel.buffered_amount().await + data.len() > 512 * 1024 {
-            tokio::select! {
-                _ = self.ready.notified() => {}
-                _ = closed.wait_for(|v| *v) => {
-                    return Err(Error("channel closed".into()));
-                }
-            }
-        }
-
-        if *closed.borrow() {
+        if *self.closed.borrow() {
             return Err(Error("channel closed".into()));
         }
-
-        let before = self.channel.buffered_amount().await;
-        self.channel.send(&data).await?;
-        self.note_send(before.saturating_add(data.len()));
+        self.channel
+            .send(
+                data.try_into_mut()
+                    .unwrap_or_else(|data| bytes::BytesMut::from(data.as_ref())),
+            )
+            .await?;
+        self.note_send(self.buffered_amount().await);
         Ok(())
     }
 
@@ -324,24 +289,16 @@ impl DataChannel {
             return Err(Error("text packet exceeds 65535 bytes".into()));
         }
         let _lock = self.send_lock.lock().await;
-        let mut closed = self.closed.subscribe();
-        while self.channel.buffered_amount().await + text.len() > 512 * 1024 {
-            tokio::select! {
-                _ = self.ready.notified() => {},
-                _ = closed.wait_for(|v| *v) => return Err(Error("channel closed".into())),
-            }
-        }
-        if *closed.borrow() {
+        if *self.closed.borrow() {
             return Err(Error("channel closed".into()));
         }
-        let before = self.channel.buffered_amount().await;
         self.channel.send_text(text).await?;
-        self.note_send(before.saturating_add(text.len()));
+        self.note_send(self.buffered_amount().await);
         Ok(())
     }
 
     pub async fn buffered_amount(&self) -> usize {
-        self.channel.buffered_amount().await
+        self.channel.outstanding_bytes().await.unwrap_or_default()
     }
 
     fn note_send(&self, amount: usize) {
@@ -359,7 +316,7 @@ impl DataChannel {
     pub async fn set_buffered_amount_low_threshold(&self, threshold: usize) {
         self.low_threshold
             .store(threshold, std::sync::atomic::Ordering::Release);
-        self.note_send(self.channel.buffered_amount().await);
+        self.note_send(self.channel.outstanding_bytes().await.unwrap_or_default());
     }
 
     pub async fn next_buffered_low(&self, previous: u64) -> std::result::Result<u64, Error> {
@@ -411,7 +368,7 @@ impl DataChannel {
         self.closed.send_replace(true);
         let drain = async {
             let _writer = self.send_lock.lock().await;
-            while self.channel.ready_state() == RTCDataChannelState::Open && self.channel.buffered_amount().await > 0 {
+            while self.channel.outstanding_bytes().await.unwrap_or_default() > 0 {
                 tokio::time::sleep(Duration::from_millis(1)).await;
             }
         };
@@ -441,12 +398,13 @@ pub struct Description {
 pub struct Connection {
     #[cfg(feature = "rpc-streams")]
     pub(crate) rpc_session: Arc<Mutex<bool>>,
-    pub peer: Arc<RTCPeerConnection>,
+    pub peer: Arc<dyn PeerConnection>,
     incoming: Arc<Mutex<mpsc::Receiver<Arc<DataChannel>>>>,
     candidates: Arc<Mutex<mpsc::UnboundedReceiver<RTCIceCandidateInit>>>,
     closed: watch::Sender<bool>,
     remote: Arc<Mutex<RemoteCandidates>>,
     connected: watch::Sender<bool>,
+    gathered: watch::Sender<bool>,
 }
 
 #[derive(Default)]
@@ -455,75 +413,88 @@ struct RemoteCandidates {
     pending: Vec<RTCIceCandidateInit>,
 }
 
+struct ConnectionEvents {
+    peer: std::sync::OnceLock<std::sync::Weak<dyn PeerConnection>>,
+    incoming: mpsc::Sender<Arc<DataChannel>>,
+    candidates: mpsc::UnboundedSender<RTCIceCandidateInit>,
+    closed: watch::Sender<bool>,
+    connected: watch::Sender<bool>,
+    gathered: watch::Sender<bool>,
+}
+
+#[async_trait::async_trait]
+impl PeerConnectionEventHandler for ConnectionEvents {
+    async fn on_data_channel(&self, native: Arc<dyn NativeChannel>) {
+        if let Ok(channel) = DataChannel::attach(native.clone()).await
+            && self.incoming.try_send(channel).is_ok()
+        {
+            return;
+        }
+        // The event driver must be free to process the close request.
+        tokio::spawn(async move {
+            let _ = native.close().await;
+        });
+    }
+
+    async fn on_ice_candidate(&self, event: RTCPeerConnectionIceEvent) {
+        if let Ok(candidate) = event.candidate.to_json() {
+            let _ = self.candidates.send(candidate);
+        }
+    }
+
+    async fn on_ice_gathering_state_change(&self, state: RTCIceGatheringState) {
+        if state == RTCIceGatheringState::Complete {
+            self.gathered.send_replace(true);
+            let _ = self.candidates.send(RTCIceCandidateInit::default());
+        }
+    }
+
+    async fn on_connection_state_change(&self, state: RTCPeerConnectionState) {
+        match state {
+            RTCPeerConnectionState::Connected => {
+                self.connected.send_replace(true);
+            }
+            RTCPeerConnectionState::Failed => {
+                self.closed.send_replace(true);
+                if let Some(peer) = self.peer.get().and_then(std::sync::Weak::upgrade) {
+                    tokio::spawn(async move {
+                        let _ = peer.close().await;
+                    });
+                }
+            }
+            RTCPeerConnectionState::Closed => {
+                self.closed.send_replace(true);
+            }
+            _ => {}
+        }
+    }
+}
+
 impl Connection {
     pub async fn new(ice_servers: Vec<RTCIceServer>) -> std::result::Result<Self, Error> {
-        let peer = Arc::new(
-            APIBuilder::new()
+        let (incoming, rx) = mpsc::channel(64);
+        let (candidate_tx, candidates) = mpsc::unbounded_channel();
+        let closed = watch::channel(false).0;
+        let connected = watch::channel(false).0;
+        let gathered = watch::channel(false).0;
+        let events = Arc::new(ConnectionEvents {
+            peer: std::sync::OnceLock::new(),
+            incoming,
+            candidates: candidate_tx,
+            closed: closed.clone(),
+            connected: connected.clone(),
+            gathered: gathered.clone(),
+        });
+        let peer: Arc<dyn PeerConnection> = Arc::new(
+            PeerConnectionBuilder::new()
+                .with_configuration(RTCConfigurationBuilder::default().with_ice_servers(ice_servers).build())
+                .with_udp_addrs(vec!["0.0.0.0:0", "[::]:0"])
+                .with_data_channel_send_buffer_limit(512 * 1024)
+                .with_handler(events.clone())
                 .build()
-                .new_peer_connection(RTCConfiguration {
-                    ice_servers,
-                    ..Default::default()
-                })
                 .await?,
         );
-        let (tx, rx) = mpsc::channel(64);
-        peer.on_data_channel(Box::new(move |channel| {
-            let tx = tx.clone();
-            Box::pin(async move {
-                let channel = DataChannel::attach(channel).await;
-
-                if let Err(err) = tx.try_send(channel) {
-                    let _ = err.into_inner().close().await;
-                }
-            })
-        }));
-        let (tx, candidates) = mpsc::unbounded_channel();
-        peer.on_ice_candidate(Box::new(move |candidate| {
-            let tx = tx.clone();
-            Box::pin(async move {
-                match candidate {
-                    Some(candidate) => {
-                        if let Ok(candidate) = candidate.to_json() {
-                            let _ = tx.send(candidate);
-                        }
-                    }
-                    None => {
-                        let _ = tx.send(RTCIceCandidateInit::default());
-                    }
-                }
-            })
-        }));
-        let closed = watch::channel(false).0;
-        let ended = closed.clone();
-        let connected = watch::channel(false).0;
-        let ready = connected.clone();
-        let failing_peer = Arc::downgrade(&peer);
-        peer.on_peer_connection_state_change(Box::new(move |state| {
-            let failing_peer = failing_peer.clone();
-            let ended = ended.clone();
-            let ready = ready.clone();
-            Box::pin(async move {
-                if state == webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState::Connected {
-                    ready.send_replace(true);
-                }
-
-                if matches!(
-                    state,
-                    webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState::Failed
-                        | webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState::Closed
-                ) {
-                    ended.send_replace(true);
-                    if state == webrtc::peer_connection::peer_connection_state::RTCPeerConnectionState::Failed {
-                        // Close outside the callback: closing invokes state callbacks itself.
-                        tokio::spawn(async move {
-                            if let Some(peer) = failing_peer.upgrade() {
-                                let _ = peer.close().await;
-                            }
-                        });
-                    }
-                }
-            })
-        }));
+        let _ = events.peer.set(Arc::downgrade(&peer));
         Ok(Self {
             #[cfg(feature = "rpc-streams")]
             rpc_session: Arc::new(Mutex::new(false)),
@@ -533,6 +504,7 @@ impl Connection {
             candidates: Arc::new(Mutex::new(candidates)),
             remote: Arc::new(Mutex::new(RemoteCandidates::default())),
             connected,
+            gathered,
         })
     }
 
@@ -540,7 +512,7 @@ impl Connection {
         self.open_channel_with_options(
             label,
             RTCDataChannelInit {
-                ordered: Some(true),
+                ordered: true,
                 ..Default::default()
             },
         )
@@ -553,7 +525,7 @@ impl Connection {
         options: RTCDataChannelInit,
     ) -> std::result::Result<Arc<DataChannel>, Error> {
         let channel = self.peer.create_data_channel(label, Some(options)).await?;
-        Ok(DataChannel::attach(channel).await)
+        DataChannel::attach(channel).await
     }
 
     /// Open an explicitly raw channel. It is independent of every WAMP session.
@@ -562,7 +534,7 @@ impl Connection {
         label: &str,
         mut options: RTCDataChannelInit,
     ) -> std::result::Result<Arc<DataChannel>, Error> {
-        options.protocol = Some(RAW_CHANNEL_PROTOCOL.into());
+        options.protocol = RAW_CHANNEL_PROTOCOL.into();
         self.open_channel_with_options(label, options).await
     }
 
@@ -593,20 +565,9 @@ impl Connection {
     /// Address used by the nominated ICE pair, for applications that pin routes.
     /// This is the peer or TURN relay address seen by the ICE transport.
     pub async fn selected_remote_address(&self) -> Option<String> {
-        use webrtc::stats::StatsReportType;
-        let stats = self.peer.get_stats().await;
-        stats.reports.values().find_map(|report| {
-            let StatsReportType::CandidatePair(pair) = report else {
-                return None;
-            };
-            if !pair.nominated || pair.state != webrtc::ice::candidate::CandidatePairState::Succeeded {
-                return None;
-            }
-            match stats.reports.get(&pair.remote_candidate_id) {
-                Some(StatsReportType::RemoteCandidate(candidate)) => Some(candidate.ip.clone()),
-                _ => None,
-            }
-        })
+        let ice = self.peer.sctp().await?.transport().ice_transport();
+        let pair = ice.get_selected_candidate_pair().await.ok()??;
+        Some(pair.remote().address.clone())
     }
 
     pub async fn next_candidate(&self) -> Option<RTCIceCandidateInit> {
@@ -653,11 +614,12 @@ impl Connection {
     }
 
     async fn local(&self, description: RTCSessionDescription) -> std::result::Result<Description, Error> {
-        let mut gathered = self.peer.gathering_complete_promise().await;
+        let mut gathered = self.gathered.subscribe();
         self.peer.set_local_description(description).await?;
-        tokio::time::timeout(Duration::from_secs(20), gathered.recv())
+        tokio::time::timeout(Duration::from_secs(20), gathered.wait_for(|done| *done))
             .await
-            .map_err(|_| Error("ICE gathering timeout".into()))?;
+            .map_err(|_| Error("ICE gathering timeout".into()))?
+            .map_err(|_| Error("connection closed".into()))?;
         Ok(Description {
             candidates: Vec::new(),
             description: self
