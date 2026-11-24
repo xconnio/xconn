@@ -49,6 +49,7 @@ fn connect_and_upgrade(addr: &str, subprotocol: &str) -> Result<TcpStream, Error
         .ok_or_else(|| Error::new("Could not resolve any addresses".to_string()))?;
 
     let stream = TcpStream::connect(socket_addr).map_err(|e| Error::new(format!("Connection failed: {e}")))?;
+    stream.set_nodelay(true).map_err(|e| Error::new(e.to_string()))?;
 
     // Perform WebSocket handshake
     let request = ClientRequestBuilder::new(uri.as_str().parse().unwrap()).with_sub_protocol(subprotocol);

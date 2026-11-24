@@ -75,7 +75,8 @@ impl WebSocketJoiner {
         #[cfg(not(target_os = "ios"))]
         let connector = None;
 
-        let (ws, response) = connect_async_tls_with_config(request, config, false, connector)
+        // disable_nagle: WAMP messages are small; Nagle would hold back every pipelined request.
+        let (ws, response) = connect_async_tls_with_config(request, config, true, connector)
             .await
             .map_err(|e| Error::new(format!("failed to connect: {e}")))?;
         if response

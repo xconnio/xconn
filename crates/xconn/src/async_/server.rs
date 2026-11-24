@@ -102,6 +102,7 @@ impl Server {
                     Some(_) = connections.join_next(), if !connections.is_empty() => {}
                     incoming = listener.accept() => {
                         let Ok((stream, _)) = incoming else { break };
+                        let _ = stream.set_nodelay(true);
                         let router = router.clone();
                         let protocols = protocols.clone();
                         let transport = transport.clone();

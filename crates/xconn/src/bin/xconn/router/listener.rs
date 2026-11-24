@@ -50,6 +50,7 @@ impl Socket {
         match self {
             Self::Tcp(socket) => {
                 let (stream, _) = socket.accept().await?;
+                let _ = stream.set_nodelay(true);
                 Ok(Box::new(stream))
             }
 

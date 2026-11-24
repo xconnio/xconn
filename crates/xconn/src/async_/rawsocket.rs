@@ -190,14 +190,16 @@ pub(crate) async fn server_handshake_header(
 pub async fn connect_rawsocket(uri: &str, serializer: Box<dyn SerializerSpec>) -> Result<Box<dyn Peer>, Error> {
     let url = url::Url::parse(uri).map_err(|e| Error::new(e.to_string()))?;
     let stream: BoxStream = match url.scheme() {
-        "rs" | "tcp" => Box::new(
-            tokio::net::TcpStream::connect((
+        "rs" | "tcp" => {
+            let stream = tokio::net::TcpStream::connect((
                 url.host_str().ok_or_else(|| Error::new("missing host"))?,
                 url.port().ok_or_else(|| Error::new("missing port"))?,
             ))
             .await
-            .map_err(|e| Error::new(e.to_string()))?,
-        ),
+            .map_err(|e| Error::new(e.to_string()))?;
+            stream.set_nodelay(true).map_err(|e| Error::new(e.to_string()))?;
+            Box::new(stream)
+        }
         #[cfg(unix)]
         "unix" | "unix+rs" => Box::new(
             tokio::net::UnixStream::connect(url.path())
