@@ -81,6 +81,20 @@ commands to select another file.
 To use an existing router configuration, run
 `xconn router start --config .nxt/config.yaml`.
 
+For Bash completion with a Cargo-installed CLI, add
+`source <(xconn completions bash)` to your `~/.bashrc`.
+
+### Snap package
+
+From a Git checkout on a Linux Snapcraft host, run `snapcraft pack` to build
+the strictly confined Core 26 snap. A matching release tag such as `v0.6.6`
+produces version `0.6.6`. Other commits append `+<first-six-commit-characters>`
+to the Cargo version. Install the locally built file with
+`sudo snap install --dangerous ./xconn_<version>_<arch>.snap`. The snap exposes
+the same `xconn router` commands and includes Bash completion. Run the router
+commands from a non-hidden directory in your home directory so the snap can
+read and write the configuration.
+
 ## Verification
 
 ```sh

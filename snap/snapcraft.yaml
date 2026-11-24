@@ -1,0 +1,58 @@
+name: xconn
+base: core26
+adopt-info: xconn
+summary: Run and configure the XConn router
+description: |
+  XConn is a connectivity toolkit for edge and cloud applications. It provides
+  remote procedure calls, publish/subscribe messaging, and byte streams for
+  deployments that route through a cloud relay or connect peers directly,
+  including across NAT. This package provides the CLI for configuring and
+  running the XConn router.
+license: MIT
+grade: stable
+confinement: strict
+
+apps:
+  xconn:
+    command: bin/xconn
+    completer: share/bash-completion/completions/xconn
+    plugs:
+      - home
+      - network
+      - network-bind
+
+parts:
+  xconn:
+    plugin: rust
+    source: .
+    rust-path:
+      - crates/xconn
+    rust-features:
+      - router
+    rust-cargo-parameters:
+      - --bin
+      - xconn
+    build-packages:
+      - build-essential
+      - git
+    override-build: |
+      set -eu
+      version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' crates/xconn/Cargo.toml)
+
+      if ! revision=$(git -C "$CRAFT_PROJECT_DIR" -c safe.directory="$CRAFT_PROJECT_DIR" \
+        rev-parse --verify HEAD); then
+        echo "Build the XConn snap from a Git checkout to determine its version." >&2
+        exit 1
+      fi
+      release_tag=$(git -C "$CRAFT_PROJECT_DIR" -c safe.directory="$CRAFT_PROJECT_DIR" \
+        tag --points-at "$revision" --list "v$version")
+      if [ -z "$release_tag" ]; then
+        version="$version+$(printf '%.6s' "$revision")"
+      fi
+
+      craftctl set version="$version"
+      craftctl default
+
+      completion_dir="$CRAFT_PART_INSTALL/share/bash-completion/completions"
+      mkdir -p "$completion_dir"
+      "$CRAFT_PART_INSTALL/bin/xconn" completions bash > "$completion_dir/xconn"
