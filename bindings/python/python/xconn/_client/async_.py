@@ -8,6 +8,8 @@ from xconn import App, AsyncClient
 from xconn._client.helpers import (
     INITIAL_WAIT,
     MAX_WAIT,
+    SETUP_FAILED,
+    EventMetadata,
     ProcedureMetadata,
     _handle_result,
     _sanitize_incoming_data,
@@ -15,11 +17,15 @@ from xconn._client.helpers import (
     _validate_topic_function,
     assemble_call_details,
     assemble_event_details,
+    check_app,
     collect_docs,
     ensure_caller_allowed,
     handle_model_validation,
     import_app,
+    raise_setup_errors,
+    report_undo,
     select_authenticator,
+    setup_names,
     validate_event_parameters,
     validate_invocation_parameters,
 )
@@ -31,14 +37,35 @@ from xconn.utils import run
 
 async def _setup(app: App, session: AsyncSession):
     app.set_session(session)
+    check_app(app, _check_procedure, _check_topic)
 
-    for uri, func in app.procedures.items():
-        await register_async(session, uri, func)
-        print(f"Registered procedure {uri}")
+    # Register concurrently; if the router rejects any, best-effort roll back the ones that succeeded.
+    names = setup_names(app)
+    tasks = [asyncio.ensure_future(register_async(session, uri, func)) for uri, func in app.procedures.items()]
+    tasks += [asyncio.ensure_future(subscribe_async(session, uri, func)) for uri, func in app.topics.items()]
+    try:
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    except asyncio.CancelledError:
+        await asyncio.gather(*tasks, return_exceptions=True)  # gather cancelled them; let them settle
+        await _undo(names, tasks)
+        raise
 
-    for uri, func in app.topics.items():
-        await subscribe_async(session, uri, func)
-        print(f"Subscribed topic {uri}")
+    errors = [result for result in results if isinstance(result, BaseException)]
+    if errors:
+        raise_setup_errors(errors, SETUP_FAILED, await _undo(names, tasks))
+
+
+async def _undo(names: list[str], tasks: list[asyncio.Future]) -> list[str]:
+    done = [
+        (name, task.result())
+        for name, task in zip(names, tasks, strict=True)
+        if not task.cancelled() and task.exception() is None
+    ]
+    outcomes = await asyncio.gather(
+        *(handle.unregister() if isinstance(handle, Registration) else handle.unsubscribe() for _, handle in done),
+        return_exceptions=True,
+    )
+    return report_undo([name for name, _ in done], outcomes)
 
 
 async def _connect_async(app: App, config: ClientConfig, directory: str = "."):
@@ -115,11 +142,22 @@ async def resolve_dependencies(meta: ProcedureMetadata) -> AsyncGenerator:
         yield result
 
 
-async def register_async(session: AsyncSession, uri: str, func: callable) -> Registration:
+def _check_procedure(uri: str, func: callable) -> ProcedureMetadata:
     if not inspect.iscoroutinefunction(func):
         raise RuntimeError(f"function {func.__name__} for procedure '{uri}' must be a coroutine")
 
-    meta = _validate_procedure_function(func, uri)
+    return _validate_procedure_function(func, uri)
+
+
+def _check_topic(topic: str, func: callable) -> EventMetadata:
+    if not inspect.iscoroutinefunction(func):
+        raise RuntimeError(f"function {func.__name__} for topic '{topic}' must be a coroutine")
+
+    return _validate_topic_function(func, topic)
+
+
+async def register_async(session: AsyncSession, uri: str, func: callable) -> Registration:
+    meta = _check_procedure(uri, func)
 
     async def _handle_invocation(invocation: Invocation) -> Result:
         ensure_caller_allowed(invocation.details, meta.allowed_roles)
@@ -155,14 +193,13 @@ async def register_async(session: AsyncSession, uri: str, func: callable) -> Reg
 
             return _handle_result(result, meta.response_model, meta.response_args)
 
-    return await session.register(uri, _handle_invocation).options(**meta.register_options or {}).execute()
+    registration = await session.register(uri, _handle_invocation).options(**meta.register_options or {}).execute()
+    print(f"Registered procedure {uri}")
+    return registration
 
 
 async def subscribe_async(session: AsyncSession, topic: str, func: callable) -> Subscription:
-    if not inspect.iscoroutinefunction(func):
-        raise RuntimeError(f"function {func.__name__} for topic '{topic}' must be a coroutine")
-
-    meta = _validate_topic_function(func, topic)
+    meta = _check_topic(topic, func)
 
     async def _handle_event(event: Event) -> None:
         details = assemble_event_details(topic, meta, event)
@@ -191,4 +228,6 @@ async def subscribe_async(session: AsyncSession, topic: str, func: callable) -> 
                 input_data = {meta.positional_field_name: event}
                 await func(**input_data, **deps, **details)
 
-    return await session.subscribe(topic, _handle_event).options(**meta.subscribe_options or {}).execute()
+    subscription = await session.subscribe(topic, _handle_event).options(**meta.subscribe_options or {}).execute()
+    print(f"Subscribed topic {topic}")
+    return subscription

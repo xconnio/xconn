@@ -5,7 +5,7 @@ import inspect
 import os
 import sys
 import types
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from dataclasses import dataclass
 from typing import (
@@ -82,6 +82,52 @@ class ProcedureMetadata(BaseMetadata):
 class EventMetadata(BaseMetadata):
     subscribe_options: dict[str, Any] | SubscribeOptions | None
     func: callable
+
+
+def check_app(app: App, check_procedure: Callable, check_topic: Callable) -> None:
+    """Validate every procedure and topic before anything is sent to the router."""
+
+    errors = []
+    for check, items in ((check_procedure, app.procedures), (check_topic, app.topics)):
+        for uri, func in items.items():
+            try:
+                check(uri, func)
+            except Exception as e:
+                errors.append(e)
+
+    raise_setup_errors(errors, "procedures/topics are invalid")
+
+
+def setup_names(app: App) -> list[str]:
+    return [f"procedure '{uri}'" for uri in app.procedures] + [f"topic '{uri}'" for uri in app.topics]
+
+
+def report_undo(names: list[str], outcomes: list) -> list[str]:
+    """Print what was rolled back and return what could not be."""
+
+    failures = []
+    for name, outcome in zip(names, outcomes, strict=True):
+        if isinstance(outcome, BaseException):
+            failures.append(f"could not undo {name}: {type(outcome).__name__}: {outcome}")
+        else:
+            print(f"Rolled back {name}")
+
+    return failures
+
+
+SETUP_FAILED = "registrations/subscriptions failed"
+
+
+def raise_setup_errors(errors: list[BaseException], headline: str, undo_failures: Sequence[str] = ()) -> None:
+    if not errors:
+        return
+
+    if len(errors) == 1 and not undo_failures:
+        raise errors[0]
+
+    # ponytail: one combined message since ExceptionGroup needs Python 3.11; switch once 3.10 is dropped.
+    lines = [f"  {type(e).__name__}: {e}" for e in errors] + [f"  {failure}" for failure in undo_failures]
+    raise RuntimeError(f"{len(errors)} {headline}:\n" + "\n".join(lines)) from errors[0]
 
 
 def _name(obj: Any) -> str:

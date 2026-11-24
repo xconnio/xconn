@@ -3,12 +3,15 @@ import inspect
 import random
 import time
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from xconn import App
 from xconn._client.helpers import (
     INITIAL_WAIT,
     MAX_WAIT,
+    SETUP_FAILED,
+    EventMetadata,
     ProcedureMetadata,
     _handle_result,
     _sanitize_incoming_data,
@@ -16,27 +19,44 @@ from xconn._client.helpers import (
     _validate_topic_function,
     assemble_call_details,
     assemble_event_details,
+    check_app,
     collect_docs,
     ensure_caller_allowed,
     handle_model_validation,
     import_app,
+    raise_setup_errors,
+    report_undo,
     select_authenticator,
+    setup_names,
     validate_event_parameters,
     validate_invocation_parameters,
 )
 from xconn._client.types import ClientConfig
-from xconn.client import Client, Session
+from xconn.client import Client, Registration, Session, Subscription
 from xconn.types import Event, Invocation, InvokeOptions, RegisterOptions, Result
 
 
 def _setup(app: App, session: Session):
     app.set_session(session)
+    check_app(app, _check_procedure, _check_topic)
 
-    for uri, func in app.procedures.items():
-        register_sync(session, uri, func)
+    # Register concurrently; if the router rejects any, best-effort roll back the ones that succeeded.
+    names = setup_names(app)
+    with ThreadPoolExecutor(thread_name_prefix="xconn-setup") as pool:
+        futures = [pool.submit(register_sync, session, uri, func) for uri, func in app.procedures.items()]
+        futures += [pool.submit(subscribe_sync, session, uri, func) for uri, func in app.topics.items()]
+        errors = [future.exception() for future in futures if future.exception() is not None]
+        if not errors:
+            return
 
-    for uri, func in app.topics.items():
-        subscribe_sync(session, uri, func)
+        done = [(name, future.result()) for name, future in zip(names, futures, strict=True) if not future.exception()]
+        undo = [
+            pool.submit(handle.unregister if isinstance(handle, Registration) else handle.unsubscribe)
+            for _, handle in done
+        ]
+        undo_failures = report_undo([name for name, _ in done], [future.exception() for future in undo])
+
+    raise_setup_errors(errors, SETUP_FAILED, undo_failures)
 
 
 def _connect_sync(app: App, config: ClientConfig, directory: str = "."):
@@ -105,11 +125,22 @@ def resolve_dependencies(meta: ProcedureMetadata) -> Generator[dict[Any, Any], A
         yield result
 
 
-def register_sync(session: Session, uri: str, func: callable):
+def _check_procedure(uri: str, func: callable) -> ProcedureMetadata:
     if inspect.iscoroutinefunction(func):
         raise RuntimeError(f"function {func.__name__} for procedure '{uri}' must not be a coroutine")
 
-    meta = _validate_procedure_function(func, uri)
+    return _validate_procedure_function(func, uri)
+
+
+def _check_topic(topic: str, func: callable) -> EventMetadata:
+    if inspect.iscoroutinefunction(func):
+        raise RuntimeError(f"function {func.__name__} for topic '{topic}' must not be a coroutine")
+
+    return _validate_topic_function(func, topic)
+
+
+def register_sync(session: Session, uri: str, func: callable) -> Registration:
+    meta = _check_procedure(uri, func)
 
     def _handle_invocation(invocation: Invocation) -> Result:
         ensure_caller_allowed(invocation.details, meta.allowed_roles)
@@ -145,15 +176,13 @@ def register_sync(session: Session, uri: str, func: callable):
 
             return _handle_result(result, meta.response_model, meta.response_args)
 
-    session.register(uri, _handle_invocation).options(**meta.register_options or {}).execute()
+    registration = session.register(uri, _handle_invocation).options(**meta.register_options or {}).execute()
     print(f"Registered procedure {uri}")
+    return registration
 
 
-def subscribe_sync(session: Session, topic: str, func: callable):
-    if inspect.iscoroutinefunction(func):
-        raise RuntimeError(f"function {func.__name__} for topic '{topic}' must not be a coroutine")
-
-    meta = _validate_topic_function(func, topic)
+def subscribe_sync(session: Session, topic: str, func: callable) -> Subscription:
+    meta = _check_topic(topic, func)
 
     def _handle_event(event: Event):
         details = assemble_event_details(topic, meta, event)
@@ -182,5 +211,6 @@ def subscribe_sync(session: Session, topic: str, func: callable):
                 input_data = {meta.positional_field_name: event}
                 func(**input_data, **deps, **details)
 
-    session.subscribe(topic, _handle_event).options(**meta.subscribe_options or {}).execute()
+    subscription = session.subscribe(topic, _handle_event).options(**meta.subscribe_options or {}).execute()
     print(f"Subscribed topic {topic}")
+    return subscription
