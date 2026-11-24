@@ -85,7 +85,7 @@ jobs:
         run: cargo check --locked -p xconn --no-default-features --features crypto
       - run: cargo check --locked -p xconn --no-default-features --features async
       - run: cargo check --locked -p xconn --no-default-features --features sync
-      - run: cargo check --locked -p xconn --no-default-features --features router --bin xconn-router
+      - run: cargo check --locked -p xconn --no-default-features --features router --bin xconn
       - if: runner.os == 'Linux'
         run: cargo package --locked -p wampproto
       - if: runner.os == 'Linux'
@@ -173,11 +173,11 @@ jobs:
           shared-key: linux-test-helpers
       - run: >-
           cargo build --locked -p xconn --features router,services
-          --bin xconn-router --example discovery --example streaming_peer
+          --bin xconn --example discovery --example streaming_peer
       - run: cargo build --locked -p xconn-binding-runtime --all-features --example transport_peer
       - run: >-
           tar -cf "$RUNNER_TEMP/test-helpers.tar"
-          target/debug/xconn-router target/debug/examples/discovery
+          target/debug/xconn target/debug/examples/discovery
           target/debug/examples/streaming_peer target/debug/examples/transport_peer
       - uses: actions/upload-artifact@v4
         with:

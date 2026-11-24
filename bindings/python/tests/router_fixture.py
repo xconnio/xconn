@@ -64,9 +64,9 @@ class Router:
         }
         path = Path(self._directory.name) / "config.yaml"
         path.write_text(json.dumps(config))
-        binary = Path(__file__).resolve().parents[3] / "target/debug/xconn-router"
+        binary = Path(__file__).resolve().parents[3] / "target/debug/xconn"
         self._process = subprocess.Popen(
-            [str(binary), "--config-file", str(path), "start"], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
+            [str(binary), "router", "start", "--config", str(path)], stdout=subprocess.DEVNULL, stderr=subprocess.PIPE
         )
         deadline = time.monotonic() + 5
         while time.monotonic() < deadline:

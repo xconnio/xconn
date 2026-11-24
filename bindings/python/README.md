@@ -70,7 +70,7 @@ uv build bindings/python --out-dir target/python-dist
 uv venv target/python-release-venv
 uv pip install --python target/python-release-venv/bin/python target/python-dist/xconn-*.whl
 uv pip install --python target/python-release-venv/bin/python pytest pytest-asyncio ruff==0.17.1
-cargo build -p xconn --features router --bin xconn-router
+cargo build -p xconn --features router --bin xconn
 target/python-release-venv/bin/python -m pytest bindings/python/tests
 ```
 
