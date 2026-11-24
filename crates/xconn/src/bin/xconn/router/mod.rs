@@ -1,42 +1,23 @@
 mod config;
 mod listener;
-use clap::{Parser, Subcommand};
+
+use clap::Subcommand;
 use config::{Config, Result};
 use std::path::PathBuf;
 
-#[derive(Parser)]
-#[command(version, about = "Run the XConn WAMP router")]
-struct Args {
-    /// Configuration directory (contains .nxt/config.yaml).
-    #[arg(short = 'c', long, global = true, default_value = ".")]
-    config: PathBuf,
-    /// Explicit configuration file, overrides --config.
-    #[arg(long, global = true)]
-    config_file: Option<PathBuf>,
-    #[command(subcommand)]
-    command: Command,
-}
-
 #[derive(Subcommand)]
-enum Command {
+pub enum Command {
+    /// Write a starter configuration.
     Init,
-    Check,
+    /// Validate the configuration without opening listeners.
+    Validate,
+    /// Run the router in the foreground.
     Start,
 }
 
 #[tokio::main]
-async fn main() {
-    if let Err(error) = run().await {
-        eprintln!("xconn-router: {error}");
-        std::process::exit(1);
-    }
-}
-
-async fn run() -> Result<()> {
-    let args = Args::parse();
-    let file = args.config_file.unwrap_or_else(|| args.config.join(".nxt/config.yaml"));
-
-    if matches!(args.command, Command::Init) {
+pub async fn run(command: Command, file: PathBuf) -> Result<()> {
+    if matches!(command, Command::Init) {
         if let Some(parent) = file.parent().filter(|p| !p.as_os_str().is_empty()) {
             std::fs::create_dir_all(parent)?;
         }
@@ -68,7 +49,7 @@ async fn run() -> Result<()> {
         }
     }
 
-    if matches!(args.command, Command::Check) {
+    if matches!(command, Command::Validate) {
         println!("Configuration valid");
         return Ok(());
     }

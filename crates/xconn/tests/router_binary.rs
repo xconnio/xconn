@@ -25,7 +25,7 @@ impl Files {
     }
 
     fn config(&self, kind: &str, serializers: &str) -> PathBuf {
-        let text = include_str!("../src/bin/xconn-router/config.yaml").replace("realm1", "realm");
+        let text = include_str!("../src/bin/xconn/router/config.yaml").replace("realm1", "realm");
         let start = text.find("transports:").unwrap();
         let end = text.find("authenticators:").unwrap();
         let text = format!(
@@ -45,8 +45,9 @@ impl Drop for Files {
 }
 
 async fn start(file: &std::path::Path) -> (tokio::process::Child, String) {
-    let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_xconn-router"))
-        .args(["--config-file", file.to_str().unwrap(), "start"])
+    let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_xconn"));
+    command.args(["router", "start", "--config"]).arg(file);
+    let mut child = command
         .stdout(std::process::Stdio::piped())
         .kill_on_drop(true)
         .spawn()
@@ -58,7 +59,17 @@ async fn start(file: &std::path::Path) -> (tokio::process::Child, String) {
         .unwrap()
         .expect("binary exited before binding");
     assert!(first.starts_with("Listening "), "{first}");
-    assert_eq!(lines.next_line().await.unwrap().unwrap(), "Ready");
+    loop {
+        let line = tokio::time::timeout(Duration::from_secs(10), lines.next_line())
+            .await
+            .unwrap()
+            .unwrap()
+            .expect("binary exited before becoming ready");
+        if line == "Ready" {
+            break;
+        }
+        assert!(line.starts_with("Listening "), "{line}");
+    }
     (child, first.split_whitespace().last().unwrap().into())
 }
 
@@ -128,23 +139,54 @@ async fn executable_routes_and_enforces_serializer_policy() {
 }
 
 #[test]
-fn init_never_overwrites_and_check_rejects_unknown_settings() {
+fn init_never_overwrites_and_validate_rejects_unknown_settings() {
     let files = Files::new();
-    let bin = env!("CARGO_BIN_EXE_xconn-router");
+    let bin = env!("CARGO_BIN_EXE_xconn");
     let run = |command: &str| {
         std::process::Command::new(bin)
-            .args([command, "--config", files.0.to_str().unwrap()])
+            .args(["router", command])
+            .current_dir(&files.0)
             .output()
             .unwrap()
     };
     assert!(run("init").status.success());
     assert!(!run("init").status.success());
-    assert!(run("check").status.success());
-    let path = files.0.join(".nxt/config.yaml");
+    assert!(run("validate").status.success());
+    let path = files.0.join("xconn.yaml");
     let mut text = std::fs::read_to_string(&path).unwrap();
     text.push_str("typo: true\n");
     std::fs::write(path, text).unwrap();
-    assert!(!run("check").status.success());
+    assert!(!run("validate").status.success());
+}
+
+#[tokio::test]
+async fn xconn_router_initializes_validates_and_starts() {
+    let files = Files::new();
+    let bin = env!("CARGO_BIN_EXE_xconn");
+    let run = |args: &[&str]| {
+        std::process::Command::new(bin)
+            .arg("router")
+            .args(args)
+            .current_dir(&files.0)
+            .output()
+            .unwrap()
+    };
+    assert!(run(&["init"]).status.success());
+    assert!(!run(&["init"]).status.success());
+    assert!(run(&["validate"]).status.success());
+
+    let path = files.0.join("xconn.yaml");
+    let text = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("127.0.0.1:8080", "127.0.0.1:0")
+        .replace("127.0.0.1:8082", "127.0.0.1:0");
+    std::fs::write(&path, text).unwrap();
+    let (mut child, address) = start(&path).await;
+    let _session = client(Box::new(JSONSerializerSpec))
+        .connect(&format!("ws://{address}"), "realm1")
+        .await
+        .unwrap();
+    child.kill().await.unwrap();
 }
 
 #[cfg(unix)]

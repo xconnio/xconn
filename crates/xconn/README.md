@@ -52,7 +52,7 @@ invocations, and RPC results share the `Payload` parsing helpers.
 | `crypto` | Re-export portable packet encryption as `xconn::crypto` |
 | `async` | Async client, router, WebSocket and RawSocket transports |
 | `sync` | Blocking client and router adapters; enabled by default with `async` |
-| `router` | Configurable `xconn-router` executable, including TLS listeners |
+| `router` | Configurable `xconn router` command, including TLS listeners |
 | `quic` | QUIC connections and multiplexed byte streams |
 | `webtransport` | WebTransport connections and multiplexed byte streams |
 
@@ -63,14 +63,23 @@ See the workspace guide at `docs/streaming.md` for ownership and buffering rules
 
 ## Router executable
 
+From the repository root, run `make build` to build `target/debug/xconn`.
+To install the CLI on your PATH:
+
 ```sh
-cargo run -p xconn --features router --bin xconn-router -- init
-cargo run -p xconn --features router --bin xconn-router -- check
-cargo run -p xconn --features router --bin xconn-router -- start
+cargo install --locked --path crates/xconn --features router --bin xconn
+xconn router init
+xconn router validate
+xconn router start
 ```
 
-`init` creates `.nxt/config.yaml` without overwriting an existing file. Pass
-`--config-file` to use another configuration file.
+`init` creates `xconn.yaml` in the current directory and refuses to overwrite
+it. `validate` checks the configuration and TLS files without opening listeners.
+`start` runs in the foreground. Use `--config <path>` with any of the three
+commands to select another file.
+
+To use an existing router configuration, run
+`xconn router start --config .nxt/config.yaml`.
 
 ## Verification
 

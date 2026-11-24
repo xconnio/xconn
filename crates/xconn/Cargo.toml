@@ -71,8 +71,8 @@ rcgen = "0.13"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [[bin]]
-name = "xconn-router"
-path = "src/bin/xconn-router/main.rs"
+name = "xconn"
+path = "src/bin/xconn/main.rs"
 required-features = ["router"]
 
 [[example]]
