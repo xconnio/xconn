@@ -52,7 +52,7 @@ invocations, and RPC results share the `Payload` parsing helpers.
 | `crypto` | Re-export portable packet encryption as `xconn::crypto` |
 | `async` | Async client, router, WebSocket and RawSocket transports |
 | `sync` | Blocking client and router adapters; enabled by default with `async` |
-| `router` | Configurable `xconn router` command, including TLS listeners |
+| `router` | XConn CLI, including client commands and a configurable router with TLS listeners |
 | `quic` | QUIC connections and multiplexed byte streams |
 | `webtransport` | WebTransport connections and multiplexed byte streams |
 
@@ -60,6 +60,45 @@ invocations, and RPC results share the `Payload` parsing helpers.
 are configured independently with `StreamOptions`. These RPCs are distinct
 from transport byte streams. Close unfinished calls to cancel remote work.
 See the workspace guide at `docs/streaming.md` for ownership and buffering rules.
+
+## Client commands
+
+[Start a local router](#router-executable). Run each pair in separate terminals.
+
+| Start first | Then run |
+| --- | --- |
+| `xconn register example.echo` | `xconn call example.echo 42 --kwarg ready=true` |
+| `xconn subscribe example.events` | `xconn publish example.events hello` |
+
+The client defaults to `ws://localhost:8080/ws`, realm `realm1`, and JSON.
+Change these with `--url`, `--realm`, and `--serializer`. Run a command with
+`--help` to see all its options.
+
+For structured arguments, use `--payload` in place of positional arguments
+and `--kwarg`.
+
+```sh
+xconn call example.echo --payload '{"args":["42"],"kwargs":{"ready":true}}'
+```
+
+`xconn keygen` prints a cryptosign key pair. Use `xconn keygen --output-file my-key`
+to create `my-key` and `my-key.pub`. Configure the router with the public key,
+then pass `--authid <ID> --private-key-file my-key` to a client command.
+
+### Scripting
+
+`call`, `register`, and `subscribe` write JSON objects to stdout. Objects may
+span multiple lines. Status messages and errors go to stderr.
+
+| Exit code | Meaning |
+| --- | --- |
+| `0` | Success, help displayed, or a clean Ctrl+C shutdown of a listener |
+| `1` | Command failed |
+| `2` | Invalid command-line arguments |
+
+`publish` waits for broker acknowledgement by default. With `--no-ack`, success
+means the client sent the request. A failure can occur after a request succeeds
+or after key files are written.
 
 ## Router executable
 
