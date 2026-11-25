@@ -223,6 +223,23 @@ impl Acceptor {
     }
 
     pub fn begin_message(&mut self, message: &dyn Message) -> Result<AcceptorAction, Error> {
+        self.begin_message_inner(message, None)
+    }
+
+    /// Start processing a message using the host's allowed authentication methods.
+    pub fn begin_message_with_methods(
+        &mut self,
+        message: &dyn Message,
+        methods: &[String],
+    ) -> Result<AcceptorAction, Error> {
+        self.begin_message_inner(message, Some(methods))
+    }
+
+    fn begin_message_inner(
+        &mut self,
+        message: &dyn Message,
+        methods: Option<&[String]>,
+    ) -> Result<AcceptorAction, Error> {
         if matches!(self.state, AcceptorState::WelcomeSent | AcceptorState::Aborted) {
             return Err(Error::new("acceptor handshake is already complete"));
         }
@@ -243,7 +260,14 @@ impl Acceptor {
                     .as_any()
                     .downcast_ref::<Hello>()
                     .ok_or_else(|| Error::new("expected typed HELLO"))?;
-                let method = match server::select_auth_method(&self.authenticator.methods(), &hello.auth_methods) {
+                let configured;
+                let methods = if let Some(methods) = methods {
+                    methods
+                } else {
+                    configured = self.authenticator.methods();
+                    &configured
+                };
+                let method = match server::select_auth_method(methods, &hello.auth_methods) {
                     Ok(m) => m,
                     Err(_) => return self.abort("wamp.error.authentication_failed").map(AcceptorAction::Send),
                 };

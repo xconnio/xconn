@@ -1273,3 +1273,269 @@ authenticators:"#,
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn rpc_authentication_preserves_static_bootstrap_and_applies_remote_roles() {
+    use std::collections::HashMap;
+    use wampproto::authenticators::{
+        authenticator::ClientAuthenticator,
+        cryptosign::CryptoSignAuthenticator,
+        server::{CRAKey, Salt},
+        wampcra::WAMPCRAAuthenticator,
+    };
+
+    tokio::time::timeout(Duration::from_secs(15), async {
+        let files = Files::new();
+        let path = files.0.join("config.yaml");
+        let crypto = |id: &str, byte: &str| {
+            Box::new(CryptoSignAuthenticator::try_new(id, &byte.repeat(32), HashMap::new()).unwrap())
+        };
+        let provider = crypto("provider", "11");
+        let provider_key = match &provider.auth_extra()["pubkey"] {
+            Value::Str(key) => key.clone(),
+            _ => panic!("expected CryptoSign public key"),
+        };
+        let config = r#"
+version: '1'
+realms:
+  - name: control
+    disclose_caller: true
+    roles:
+      - name: provider
+        permissions:
+          - {uri: fixture., match: prefix, allow_register: true}
+          - {uri: fixture.remove, match: exact, allow_call: true}
+      - name: source
+        permissions:
+          - {uri: fixture., match: prefix, allow_call: true, allow_register: true}
+      - name: user:cra
+        permissions:
+          - {uri: fixture.echo, match: exact, allow_call: true}
+realm_source:
+  control_realm: control
+  role: source
+  list: fixture.list
+  add: fixture.add
+  remove: fixture.remove
+  authentication:
+    cryptosign: fixture.verify_key
+    wampcra: fixture.verify_password
+    control_roles: [user:cra]
+    realm_roles:
+      - name: user:member
+        permissions:
+          - {uri: fixture.echo, match: exact, allow_call: true}
+    realm_machine_role:
+      name: 'machine:{authid}'
+      permissions:
+        - {uri: fixture.echo, match: exact, allow_register: true}
+    control_machine_role:
+      name: 'machine:{authid}'
+      permissions:
+        - {uri: 'fixture.machine.{authid}', match: exact, allow_call: true}
+transports:
+  - {type: websocket, listener: tcp, address: '127.0.0.1:0', serializers: [json]}
+authenticators:
+  cryptosign:
+    - {realm: control, role: provider, authid: provider, authorized_keys: ['PROVIDER_KEY']}
+"#;
+        std::fs::write(&path, config.replace("PROVIDER_KEY", &provider_key)).unwrap();
+
+        let (mut child, mut lines) = spawn_router(&path);
+        let address = lines.next_line().await.unwrap().unwrap();
+        let url = format!("ws://{}", address.strip_prefix("Listening websocket ").unwrap());
+        let client =
+            |authenticator: Box<dyn ClientAuthenticator>| Client::new(Box::new(JSONSerializerSpec), authenticator);
+        // A static identity that offers multiple methods must be challenged with its configured method.
+        {
+            use futures_util::{SinkExt, StreamExt};
+            use wampproto::{
+                joiner::get_client_roles,
+                messages::{challenge::Challenge, hello::Hello},
+            };
+
+            let request = tungstenite::ClientRequestBuilder::new(url.parse().unwrap()).with_sub_protocol("wamp.2.json");
+            let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+            let hello = Hello::new(
+                "control",
+                "provider",
+                provider.auth_extra(),
+                get_client_roles(),
+                vec!["wampcra".into(), "cryptosign".into()],
+            );
+            let serializer = JSONSerializerSpec.serializer();
+            let message = String::from_utf8(serializer.serialize(&hello).unwrap()).unwrap();
+            socket.send(tungstenite::Message::Text(message.into())).await.unwrap();
+            let reply = socket.next().await.unwrap().unwrap().into_data().to_vec();
+            let message = serializer.deserialize(reply).unwrap();
+            let challenge = message
+                .as_any()
+                .downcast_ref::<Challenge>()
+                .expect("static CryptoSign challenge");
+            assert_eq!(challenge.auth_method, "cryptosign");
+            socket.close(None).await.unwrap();
+        }
+        let provider = client(provider).connect(&url, "control").await.unwrap();
+        let registration = provider
+            .register("fixture.list", |_| async {
+                RpcResult::arg(Value::List(vec![Value::Dict(HashMap::from([
+                    ("realm".into(), Value::Str("test.machine".into())),
+                    ("authid".into(), Value::Str("host".into())),
+                ]))]))
+            })
+            .execute()
+            .await
+            .unwrap();
+        assert!(registration.error.is_none());
+        let registration = provider
+            .register("fixture.verify_key", |inv| async move {
+                assert_eq!(inv.details["caller_authrole"], Value::Str("source".into()));
+                let [Value::Str(id), Value::Str(key), Value::Str(realm)] = inv.args.as_slice() else {
+                    panic!("expected identity, public key and realm");
+                };
+                assert_eq!(key.len(), 64);
+                let role = match (id.as_str(), realm.as_str()) {
+                    ("member", "test.machine") => "user:member",
+                    ("host", _) | ("other-host", "test.machine") => "machine:host",
+                    ("provider", "control") => "user:cra",
+                    ("intruder", "control") => "source",
+                    _ => return RpcResult::error("fixture.denied"),
+                };
+                RpcResult::arg(Value::Dict(HashMap::from([
+                    ("authid".into(), Value::Str(id.clone())),
+                    ("authrole".into(), Value::Str(role.into())),
+                ])))
+            })
+            .execute()
+            .await
+            .unwrap();
+        assert!(registration.error.is_none());
+
+        let salt = Salt {
+            salt: "test-salt".into(),
+            iterations: 1000,
+            key_length: 32,
+        };
+        let key = CRAKey::from_secret("password", Some(salt.clone())).unwrap().key;
+        let registration = provider
+            .register("fixture.verify_password", move |inv| {
+                let salt = salt.clone();
+                let key = String::from_utf8(key.clone()).unwrap();
+                async move {
+                    assert_eq!(inv.args, vec![Value::Str("user".into()), Value::Str("control".into())]);
+                    RpcResult::arg(Value::Dict(HashMap::from([
+                        ("authrole".into(), Value::Str("user:cra".into())),
+                        ("password".into(), Value::Str(key)),
+                        ("salt".into(), Value::Str(salt.salt)),
+                        ("iterations".into(), Value::Int(i64::from(salt.iterations))),
+                        ("key_length".into(), Value::Int(salt.key_length as i64)),
+                    ])))
+                }
+            })
+            .execute()
+            .await
+            .unwrap();
+        assert!(registration.error.is_none());
+        assert_eq!(lines.next_line().await.unwrap().as_deref(), Some("Ready"));
+
+        assert!(client(crypto("provider", "22")).connect(&url, "control").await.is_err());
+        assert!(client(crypto("intruder", "33")).connect(&url, "control").await.is_err());
+        assert!(
+            client(crypto("denied", "44"))
+                .connect(&url, "test.machine")
+                .await
+                .is_err()
+        );
+        assert!(
+            client(crypto("other-host", "55"))
+                .connect(&url, "test.machine")
+                .await
+                .is_err()
+        );
+        let host = client(crypto("host", "66"))
+            .connect(&url, "test.machine")
+            .await
+            .unwrap();
+        let member = client(crypto("member", "77"))
+            .connect(&url, "test.machine")
+            .await
+            .unwrap();
+        let registration = host
+            .register("fixture.echo", |_| async { RpcResult::arg("ok") })
+            .execute()
+            .await
+            .unwrap();
+        assert!(registration.error.is_none());
+        assert_eq!(
+            member.call("fixture.echo").execute().await.unwrap().args,
+            Some(vec![Value::Str("ok".into())])
+        );
+        let host_on_control = client(crypto("host", "66")).connect(&url, "control").await.unwrap();
+        let registration = provider
+            .register("fixture.machine.host", |_| async { RpcResult::default() })
+            .execute()
+            .await
+            .unwrap();
+        assert!(registration.error.is_none());
+        assert!(
+            host_on_control
+                .call("fixture.machine.host")
+                .execute()
+                .await
+                .unwrap()
+                .error
+                .is_none()
+        );
+        assert_eq!(
+            host_on_control
+                .call("fixture.machine.other")
+                .execute()
+                .await
+                .unwrap()
+                .error
+                .unwrap()
+                .uri,
+            "wamp.error.authorization_failed"
+        );
+
+        let password = |value| client(Box::new(WAMPCRAAuthenticator::new("user", value, HashMap::new())));
+        assert!(password("wrong").connect(&url, "control").await.is_err());
+        assert_eq!(
+            password("password")
+                .connect(&url, "control")
+                .await
+                .unwrap()
+                .details()
+                .auth_role(),
+            "user:cra"
+        );
+        assert!(
+            provider
+                .call("fixture.remove")
+                .arg("test.machine")
+                .arg("host")
+                .execute()
+                .await
+                .unwrap()
+                .error
+                .is_none()
+        );
+        host.wait_disconnect().await;
+        member.wait_disconnect().await;
+        assert_eq!(
+            host_on_control
+                .call("fixture.machine.host")
+                .execute()
+                .await
+                .unwrap()
+                .error
+                .unwrap()
+                .uri,
+            "wamp.error.authorization_failed"
+        );
+        assert!(client(crypto("host", "66")).connect(&url, "control").await.is_err());
+        child.kill().await.unwrap();
+    })
+    .await
+    .unwrap();
+}

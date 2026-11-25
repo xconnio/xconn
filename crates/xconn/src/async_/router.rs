@@ -13,13 +13,17 @@ use std::{
 };
 use tokio::sync::mpsc;
 use wampproto::{
-    acceptor::Acceptor,
-    authenticators::server::{AnonymousAuthenticator, ServerAuthenticator},
+    acceptor::{Acceptor, AcceptorAction},
+    authenticators::server::{AnonymousAuthenticator, AuthRequest, AuthResponse, ServerAuthenticator},
     broker::Broker,
     dealer::Dealer,
     messages::{
-        cancel::Cancel, error::Error as ProtocolError, goodbye::Goodbye, message::Message, publish::Publish,
-        types::Value,
+        cancel::Cancel,
+        error::Error as ProtocolError,
+        goodbye::Goodbye,
+        message::Message,
+        publish::Publish,
+        types::{Error as AuthenticationError, Value},
     },
     routing::{MatchPolicy, RoutedMessage},
     serializers::serializer::Serializer,
@@ -28,6 +32,15 @@ use wampproto::{
 
 pub type AuthenticationFactory = Arc<dyn Fn() -> Box<dyn ServerAuthenticator> + Send + Sync>;
 pub type Authorizer = Arc<dyn Fn(&SessionDetails, &dyn Message) -> bool + Send + Sync>;
+
+/// A realm authentication policy that can call services without blocking the router.
+#[async_trait::async_trait]
+pub trait AsyncAuthenticator: Send + Sync {
+    /// Allowed methods for the identity proposed in HELLO.
+    fn methods(&self, realm: &str, authid: &str) -> Vec<String>;
+
+    async fn authenticate(&self, request: &AuthRequest) -> Result<AuthResponse, AuthenticationError>;
+}
 
 #[derive(Clone, Debug)]
 pub struct Permission {
@@ -100,6 +113,7 @@ struct Realm {
     #[cfg(feature = "rpc-streams")]
     rpc_streams: Arc<super::rpc_streams::Registry>,
     config: RealmConfig,
+    async_authenticator: Option<Arc<dyn AsyncAuthenticator>>,
     managed_name: Option<String>,
     broker: Broker,
     dealer: Dealer,
@@ -116,6 +130,7 @@ impl Realm {
             #[cfg(feature = "rpc-streams")]
             rpc_streams: Arc::new(super::rpc_streams::Registry::default()),
             config,
+            async_authenticator: None,
             managed_name,
             broker,
             dealer,
@@ -390,20 +405,47 @@ impl Router {
     }
 
     pub fn add_realm(&self, name: impl Into<String>, config: RealmConfig) -> Result<(), Error> {
-        self.insert_realm(name.into(), config, false)
+        self.insert_realm(name.into(), config, false, None)
     }
 
     pub(crate) fn add_managed_realm(&self, name: String, config: RealmConfig) -> Result<(), Error> {
-        self.insert_realm(name, config, true)
+        self.insert_realm(name, config, true, None)
     }
 
-    fn insert_realm(&self, name: String, config: RealmConfig, managed: bool) -> Result<(), Error> {
+    /// Install authentication for future network joins to an existing realm.
+    /// A router-wide authentication override takes precedence.
+    pub fn set_async_authenticator(&self, name: &str, authenticator: Arc<dyn AsyncAuthenticator>) -> Result<(), Error> {
+        let realms = self.realms.lock().unwrap();
+        let realm = realms.get(name).ok_or_else(|| Error::new("no such realm"))?;
+        realm.lock().unwrap().async_authenticator = Some(authenticator);
+        Ok(())
+    }
+
+    /// Create a realm with an asynchronous authentication policy.
+    pub fn add_realm_with_async_authenticator(
+        &self,
+        name: impl Into<String>,
+        config: RealmConfig,
+        authenticator: Arc<dyn AsyncAuthenticator>,
+    ) -> Result<(), Error> {
+        self.insert_realm(name.into(), config, false, Some(authenticator))
+    }
+
+    fn insert_realm(
+        &self,
+        name: String,
+        config: RealmConfig,
+        managed: bool,
+        authenticator: Option<Arc<dyn AsyncAuthenticator>>,
+    ) -> Result<(), Error> {
         let mut realms = self.realms.lock().unwrap();
         if realms.contains_key(&name) {
             return Err(Error::new("realm already exists"));
         }
         let managed_name = managed.then(|| name.clone());
-        realms.insert(name, Arc::new(Mutex::new(Realm::new(config, managed_name))));
+        let mut realm = Realm::new(config, managed_name);
+        realm.async_authenticator = authenticator;
+        realms.insert(name, Arc::new(Mutex::new(realm)));
         Ok(())
     }
 
@@ -506,15 +548,46 @@ impl Router {
         let Some(realm) = realm else {
             return reject_unknown_realm(peer.as_ref(), serializer.as_ref()).await;
         };
-        let factory = self
-            .authentication_override
-            .clone()
-            .unwrap_or_else(|| realm.lock().unwrap().config.authentication.clone());
-        let auth = factory();
-        let meta_api = realm.lock().unwrap().config.meta_api;
-        let mut acceptor = Acceptor::new(serializer.clone(), auth).with_session_meta_api(meta_api);
-        let mut response = acceptor.receive_message(msg.as_ref())?;
+        let (factory, policy, meta_api) = {
+            let realm = realm.lock().unwrap();
+            let factory = self
+                .authentication_override
+                .clone()
+                .unwrap_or_else(|| realm.config.authentication.clone());
+            let policy = if self.authentication_override.is_none() {
+                realm.async_authenticator.clone()
+            } else {
+                None
+            };
+            (factory, policy, realm.config.meta_api)
+        };
+        let mut acceptor = Acceptor::new(serializer.clone(), factory()).with_session_meta_api(meta_api);
+        let policy = policy.map(|policy| {
+            let methods = policy.methods(&hello.realm, &hello.authid);
+            (policy, methods)
+        });
+        let mut message = msg;
         let (welcome, details) = loop {
+            let response = if let Some((policy, methods)) = &policy {
+                match acceptor.begin_message_with_methods(message.as_ref(), methods)? {
+                    AcceptorAction::Send(response) => response,
+                    AcceptorAction::Authenticate(request) => {
+                        let response = tokio::time::timeout(Duration::from_secs(10), policy.authenticate(&request))
+                            .await
+                            .unwrap_or_else(|_| Err(AuthenticationError::new("authentication timed out")))
+                            .and_then(|response| {
+                                if realm.lock().unwrap().config.roles.contains_key(&response.auth_role) {
+                                    Ok(response)
+                                } else {
+                                    Err(AuthenticationError::new("unknown authentication role"))
+                                }
+                            });
+                        acceptor.complete_authentication(response)?
+                    }
+                }
+            } else {
+                acceptor.receive_message(message.as_ref())?
+            };
             let data = serializer.serialize(response.as_ref())?;
             if let Ok(details) = acceptor.session_details() {
                 break (data, details.clone());
@@ -526,8 +599,7 @@ impl Router {
             let data = tokio::time::timeout(Duration::from_secs(10), peer.read())
                 .await
                 .map_err(|_| Error::new("authentication timeout"))??;
-            let message = serializer.deserialize(data)?;
-            response = acceptor.receive_message(message.as_ref())?;
+            message = serializer.deserialize(data)?;
         };
 
         self.run_established(realm, peer, serializer, details, authenticated, Some(welcome))
@@ -562,6 +634,13 @@ impl Router {
                 .is_some_and(|current| Arc::ptr_eq(current, &realm))
             {
                 let mut realm = realm.lock().unwrap();
+                if network_peer
+                    && self.authentication_override.is_none()
+                    && realm.async_authenticator.is_some()
+                    && !realm.config.roles.contains_key(&details.auth_role)
+                {
+                    return Err(Error::new("authentication role no longer exists"));
+                }
                 realm.broker.add_session(details.clone())?;
 
                 if let Err(err) = realm.dealer.add_session(details.clone()) {

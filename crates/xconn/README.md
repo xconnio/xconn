@@ -163,8 +163,27 @@ to 30 seconds for the initial inventory. It prints `Ready` after applying the
 inventory. Updates during the fetch take precedence over the snapshot. A
 pending removal applies only to a matching realm and auth ID.
 
-The router holds sourced realms in memory and currently rejects network joins
-to them.
+The router holds sourced realms in memory. To enable network joins, configure
+`realm_source.authentication` and grant the source role permission to call
+each verification RPC. Configure static control-realm credentials for the
+inventory and authentication provider so it can connect before serving RPCs.
+A static identity always uses its configured credentials in the control realm.
+
+The `wampcra` RPC receives the auth ID and realm. It returns one dictionary
+with `authrole`, the derived `password` verifier, and `salt`. It may also
+supply `iterations` and `key_length`. The `cryptosign` RPC receives the auth
+ID, public key, and realm. It returns one dictionary with the same `authid`
+and its `authrole`. The router verifies the client's proof for both methods.
+
+List remotely assignable control-realm roles in `control_roles` and define
+the sourced realms' user roles in `realm_roles`. The optional
+`realm_machine_role` and `control_machine_role` templates use `{authid}` in
+the role name to bind permissions to the machine from the inventory.
+Permission URIs that include `{authid}` use exact matching.
+
+The [Deskconn staging example](../../docs/examples/deskconn-router.yaml)
+shows the Management RPCs, Hub role rules, and listener settings. Fill in the
+public keys and TLS file paths before validating or running it.
 
 ### Router management
 
