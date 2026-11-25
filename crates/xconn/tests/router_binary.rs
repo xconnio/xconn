@@ -45,6 +45,11 @@ impl Drop for Files {
 }
 
 async fn start(file: &std::path::Path) -> (tokio::process::Child, String) {
+    let (child, listeners) = start_listeners(file).await;
+    (child, listeners.into_iter().next().unwrap().1)
+}
+
+async fn start_listeners(file: &std::path::Path) -> (tokio::process::Child, Vec<(String, String)>) {
     let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_xconn"));
     command.args(["router", "start", "--config"]).arg(file);
     let mut child = command
@@ -53,12 +58,7 @@ async fn start(file: &std::path::Path) -> (tokio::process::Child, String) {
         .spawn()
         .unwrap();
     let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
-    let first = tokio::time::timeout(Duration::from_secs(10), lines.next_line())
-        .await
-        .unwrap()
-        .unwrap()
-        .expect("binary exited before binding");
-    assert!(first.starts_with("Listening "), "{first}");
+    let mut listeners = Vec::new();
     loop {
         let line = tokio::time::timeout(Duration::from_secs(10), lines.next_line())
             .await
@@ -68,9 +68,13 @@ async fn start(file: &std::path::Path) -> (tokio::process::Child, String) {
         if line == "Ready" {
             break;
         }
-        assert!(line.starts_with("Listening "), "{line}");
+        let (kind, address) = line
+            .strip_prefix("Listening ")
+            .and_then(|listener| listener.split_once(' '))
+            .unwrap_or_else(|| panic!("unexpected router output: {line}"));
+        listeners.push((kind.into(), address.into()));
     }
-    (child, first.split_whitespace().last().unwrap().into())
+    (child, listeners)
 }
 
 fn client(spec: Box<dyn SerializerSpec>) -> Client {
@@ -583,35 +587,44 @@ async fn assert_udp_shutdown(mut child: tokio::process::Child, stream: xconn::as
     assert!(child.wait().await.unwrap().success());
 }
 
+fn quic_test_identity(files: &Files) -> quinn::ClientConfig {
+    use xconn::async_::quic::ALPN;
+
+    let generated = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+    std::fs::write(files.0.join("cert.pem"), generated.cert.pem()).unwrap();
+    std::fs::write(files.0.join("key.pem"), generated.key_pair.serialize_pem()).unwrap();
+    let mut roots = rustls::RootCertStore::empty();
+    roots.add(generated.cert.der().clone()).unwrap();
+    let mut tls =
+        rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::ring::default_provider()))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(roots)
+            .with_no_client_auth();
+    tls.alpn_protocols = vec![ALPN.to_vec()];
+    quinn::ClientConfig::new(std::sync::Arc::new(
+        quinn::crypto::rustls::QuicClientConfig::try_from(tls).unwrap(),
+    ))
+}
+
 #[tokio::test]
 async fn quic_listener_routes_rpc_streams() {
-    use xconn::async_::quic::{ALPN, Connection};
+    use xconn::async_::quic::Connection;
 
     tokio::time::timeout(Duration::from_secs(15), async {
         let files = Files::new();
         let path = files.config("quic", "json");
-        let generated = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
-        std::fs::write(files.0.join("cert.pem"), generated.cert.pem()).unwrap();
-        std::fs::write(files.0.join("key.pem"), generated.key_pair.serialize_pem()).unwrap();
+        let config = quic_test_identity(&files);
         let text = std::fs::read_to_string(&path)
             .unwrap()
             .replace("listener: tcp", "listener: udp")
-            .replace("serializers: [json]", "tls: {certificate: cert.pem, key: key.pem}");
+            .replace(
+                "serializers: [json]",
+                "serializers: [cbor]\n    tls: {certificate: cert.pem, key: key.pem}",
+            );
         std::fs::write(&path, text).unwrap();
         let (child, address) = start(&path).await;
         let address = address.parse().unwrap();
-        let mut roots = rustls::RootCertStore::empty();
-        roots.add(generated.cert.der().clone()).unwrap();
-        let mut tls =
-            rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::ring::default_provider()))
-                .with_safe_default_protocol_versions()
-                .unwrap()
-                .with_root_certificates(roots)
-                .with_no_client_auth();
-        tls.alpn_protocols = vec![ALPN.to_vec()];
-        let config = quinn::ClientConfig::new(std::sync::Arc::new(
-            quinn::crypto::rustls::QuicClientConfig::try_from(tls).unwrap(),
-        ));
         let a = Connection::connect(address, "localhost", config.clone()).await.unwrap();
         let b = Connection::connect(address, "localhost", config).await.unwrap();
         let caller = a
@@ -631,6 +644,125 @@ async fn quic_listener_routes_rpc_streams() {
             .await
             .unwrap();
         assert_rpc_stream(&caller, &callee).await;
+        assert!(
+            a.open_session(
+                "realm",
+                Box::new(JSONSerializerSpec),
+                Box::new(AnonymousAuthenticator::default()),
+            )
+            .await
+            .is_err()
+        );
+        assert_unassociated_stream_rejected(Box::new(a.open_raw().await.unwrap())).await;
+        #[cfg(unix)]
+        assert_udp_shutdown(child, Box::new(a.open_raw().await.unwrap())).await;
+        #[cfg(not(unix))]
+        {
+            let mut child = child;
+            child.kill().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn webtransport_routes_rpc_streams_to_quic_using_the_published_certificate_hash() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use xconn::async_::webtransport::{Connection, backend};
+
+    tokio::time::timeout(Duration::from_secs(15), async {
+        let files = Files::new();
+        let path = files.config("webtransport", "json");
+        let quic_config = quic_test_identity(&files);
+        let text = std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("listener: tcp", "listener: udp")
+            .replace(
+                "serializers: [json]",
+                "serializers: [cbor]\n    path: /terminal\n    cert_hash_address: 127.0.0.1:0",
+            )
+            .replace(
+                "authenticators:",
+                "  - type: quic\n    listener: udp\n    address: 127.0.0.1:0\n    tls: {certificate: cert.pem, key: key.pem}\nauthenticators:",
+            );
+        std::fs::write(&path, text).unwrap();
+        let (child, listeners) = start_listeners(&path).await;
+        assert_eq!(listeners.len(), 3);
+        assert_eq!(listeners[0].0, "webtransport");
+        assert_eq!(listeners[1].0, "cert-hash");
+        assert_eq!(listeners[2].0, "quic");
+        let address = &listeners[0].1;
+        let hash_url = url::Url::parse(&listeners[1].1).unwrap();
+        let request = |path: &'static str| {
+            let addr = (hash_url.host_str().unwrap().to_owned(), hash_url.port().unwrap());
+            async move {
+                let mut stream = tokio::net::TcpStream::connect((addr.0.as_str(), addr.1)).await.unwrap();
+                stream
+                    .write_all(
+                        format!("GET {path} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n").as_bytes(),
+                    )
+                    .await
+                    .unwrap();
+                let mut response = String::new();
+                stream.read_to_string(&mut response).await.unwrap();
+                response
+            }
+        };
+        let response = request("/wt-cert-hash").await;
+        let (headers, body) = response.split_once("\r\n\r\n").unwrap();
+        assert!(headers.starts_with("HTTP/1.1 200"));
+        assert!(headers.contains("access-control-allow-origin: *"));
+        assert!(headers.contains("cache-control: no-store"));
+        assert!(request("/unknown").await.starts_with("HTTP/1.1 404"));
+        let encoded = body
+            .strip_prefix(r#"{"hash":""#)
+            .unwrap()
+            .strip_suffix(r#""}"#)
+            .unwrap();
+        let hash = STANDARD.decode(encoded).unwrap();
+        assert_eq!(hash.len(), 32);
+        let config = backend::ClientBuilder::new()
+            .with_handshake_timeout(Duration::from_secs(3))
+            .with_server_certificate_hashes(vec![hash])
+            .unwrap();
+        assert!(
+            Connection::connect(&format!("https://{address}/wrong"), config.clone())
+                .await
+                .is_err()
+        );
+        let url = format!("https://{address}/terminal");
+        let a = Connection::connect(&url, config).await.unwrap();
+        let b = xconn::async_::quic::Connection::connect(listeners[2].1.parse().unwrap(), "localhost", quic_config)
+            .await
+            .unwrap();
+        let caller = a
+            .open_session(
+                "realm",
+                Box::new(CBORSerializerSpec),
+                Box::new(AnonymousAuthenticator::default()),
+            )
+            .await
+            .unwrap();
+        let callee = b
+            .open_session(
+                "realm",
+                Box::new(JSONSerializerSpec),
+                Box::new(AnonymousAuthenticator::default()),
+            )
+            .await
+            .unwrap();
+        assert_rpc_stream(&caller, &callee).await;
+        assert!(
+            a.open_session(
+                "realm",
+                Box::new(JSONSerializerSpec),
+                Box::new(AnonymousAuthenticator::default()),
+            )
+            .await
+            .is_err()
+        );
         assert_unassociated_stream_rejected(Box::new(a.open_raw().await.unwrap())).await;
         #[cfg(unix)]
         assert_udp_shutdown(child, Box::new(a.open_raw().await.unwrap())).await;

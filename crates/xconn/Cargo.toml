@@ -20,7 +20,7 @@ async = ["tokio", "tokio-tungstenite", "futures-util", "async-trait"]
 quic = ["async", "dep:quinn", "dep:rcgen"]
 webtransport = ["async", "dep:webtrans-quion", "dep:rcgen"]
 
-router = ["quic", "rpc-streams", "dep:clap", "dep:clap_complete", "dep:serde", "dep:serde_yaml_ng", "dep:tokio-rustls", "dep:rustls-pemfile", "dep:tracing", "dep:tracing-subscriber"]
+router = ["quic", "webtransport", "rpc-streams", "dep:base64", "dep:http-body-util", "dep:hyper", "dep:hyper-util", "dep:sha2", "dep:time", "dep:clap", "dep:clap_complete", "dep:serde", "dep:serde_yaml_ng", "dep:tokio-rustls", "dep:rustls-pemfile", "dep:tracing", "dep:tracing-subscriber"]
 
 [dependencies]
 yamux = { version = "0.14", optional = true }
@@ -46,6 +46,12 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rcgen = { version = "0.13", optional = true }
 webtrans-quion = { version = "0.6", optional = true }
 
+base64 = { version = "0.22", optional = true }
+http-body-util = { version = "0.1", optional = true }
+hyper = { version = "1", features = ["http1", "server"], optional = true }
+hyper-util = { version = "0.1", features = ["tokio"], optional = true }
+sha2 = { version = "0.10", optional = true }
+time = { version = "0.3", optional = true }
 clap = { version = "4.6", features = ["derive"], optional = true }
 clap_complete = { version = "4.6", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }

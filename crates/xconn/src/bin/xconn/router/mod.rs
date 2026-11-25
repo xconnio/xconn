@@ -1,3 +1,4 @@
+mod cert_hash;
 mod config;
 mod listener;
 
@@ -63,6 +64,9 @@ pub async fn run(command: Command, file: PathBuf) -> Result<()> {
         match listener::Listener::bind(router.clone(), transport).await {
             Ok(listener) => {
                 println!("Listening {kind} {}", listener.address());
+                if let Some(address) = listener.cert_hash_address() {
+                    println!("Listening cert-hash http://{address}/wt-cert-hash");
+                }
                 listeners.push(listener);
             }
             Err(error) => {

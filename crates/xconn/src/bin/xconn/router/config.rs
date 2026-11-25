@@ -71,10 +71,11 @@ pub struct Transport {
     pub kind: String,
     pub listener: String,
     pub address: String,
-    #[serde(default)]
-    pub serializers: Vec<String>,
+    pub serializers: Option<Vec<String>>,
     #[serde(default)]
     pub tls: Option<Tls>,
+    pub path: Option<String>,
+    pub cert_hash_address: Option<std::net::SocketAddr>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -205,16 +206,39 @@ impl Config {
         }
 
         for transport in &self.transports {
+            if transport.kind != "webtransport" && (transport.path.is_some() || transport.cert_hash_address.is_some()) {
+                return Err("path and cert_hash_address are only supported for WebTransport".into());
+            }
+            if let Some(serializers) = &transport.serializers
+                && (serializers.is_empty()
+                    || serializers
+                        .iter()
+                        .any(|name| !matches!(name.as_str(), "json" | "cbor" | "msgpack")))
+            {
+                return Err("serializers must contain json, cbor or msgpack".into());
+            }
             match transport.kind.as_str() {
-                "quic" => {
+                "quic" | "webtransport" => {
                     if transport.listener != "udp" || transport.address.parse::<std::net::SocketAddr>().is_err() {
-                        return Err("QUIC requires a UDP listener and an IP socket address".into());
+                        return Err(
+                            format!("{} requires a UDP listener and an IP socket address", transport.kind).into(),
+                        );
                     }
-                    if transport.tls.is_none() {
+                    if transport.kind == "quic" && transport.tls.is_none() {
                         return Err("QUIC requires a TLS certificate and key".into());
                     }
-                    if !transport.serializers.is_empty() {
-                        return Err("QUIC negotiates serializers on each WAMP stream; omit serializers".into());
+                    if let Some(path) = &transport.path
+                        && (!path.starts_with('/')
+                            || !url::Url::parse(&format!("https://localhost{path}")).is_ok_and(|url| {
+                                url.path() == path && url.query().is_none() && url.fragment().is_none()
+                            }))
+                    {
+                        return Err("WebTransport path must be a URL path without a query or fragment".into());
+                    }
+                    if transport.cert_hash_address.is_some() && transport.tls.is_some() {
+                        return Err(
+                            "cert_hash_address requires an automatically generated WebTransport certificate".into(),
+                        );
                     }
                     continue;
                 }
@@ -231,13 +255,8 @@ impl Config {
                 return Err("Unix listeners require a Unix platform".into());
             }
 
-            if transport.serializers.is_empty()
-                || transport
-                    .serializers
-                    .iter()
-                    .any(|s| !["json", "cbor", "msgpack"].contains(&s.as_str()))
-            {
-                return Err("serializers must contain json, cbor or msgpack".into());
+            if transport.serializers.is_none() {
+                return Err("serializers are required for stream listeners".into());
             }
         }
 

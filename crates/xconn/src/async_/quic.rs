@@ -12,6 +12,8 @@ use tokio::{
     sync::{Mutex, mpsc, watch},
     task::JoinHandle,
 };
+use wampproto::transports::rawsocket::SerializerID;
+
 pub const ALPN: &[u8] = b"wamp.2.quic";
 
 pub struct Stream {
@@ -165,6 +167,18 @@ impl Listener {
         certificates: Vec<Vec<u8>>,
         private_key: Vec<u8>,
     ) -> Result<Self, Error> {
+        Self::with_certificate_and_serializers(router, addr, certificates, private_key, Vec::new()).await
+    }
+
+    /// Restrict the serializers accepted during WAMP stream negotiation.
+    /// An empty list allows all supported serializers.
+    pub async fn with_certificate_and_serializers(
+        router: Router,
+        addr: SocketAddr,
+        certificates: Vec<Vec<u8>>,
+        private_key: Vec<u8>,
+        serializers: Vec<SerializerID>,
+    ) -> Result<Self, Error> {
         let certificate = certificates
             .first()
             .cloned()
@@ -186,7 +200,7 @@ impl Listener {
         let config = quinn::ServerConfig::with_crypto(Arc::new(
             quinn::crypto::rustls::QuicServerConfig::try_from(tls).map_err(|e| Error::new(e.to_string()))?,
         ));
-        Self::with_config(router, addr, config, certificate).await
+        Self::bind_with_config(router, addr, config, certificate, serializers).await
     }
 
     pub async fn with_config(
@@ -195,6 +209,16 @@ impl Listener {
         config: quinn::ServerConfig,
         certificate: Vec<u8>,
     ) -> Result<Self, Error> {
+        Self::bind_with_config(router, addr, config, certificate, Vec::new()).await
+    }
+
+    async fn bind_with_config(
+        router: Router,
+        addr: SocketAddr,
+        config: quinn::ServerConfig,
+        certificate: Vec<u8>,
+        serializers: Vec<SerializerID>,
+    ) -> Result<Self, Error> {
         let endpoint = quinn::Endpoint::server(config, addr).map_err(|e| Error::new(e.to_string()))?;
         let local_addr = endpoint.local_addr().map_err(|e| Error::new(e.to_string()))?;
         let incoming = endpoint.clone();
@@ -202,6 +226,7 @@ impl Listener {
         let (notifications, authenticated_connections) = mpsc::channel(64);
         let notifications_enabled = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let enabled = notifications_enabled.clone();
+        let serializers: Arc<[SerializerID]> = serializers.into();
         let task = tokio::spawn(async move {
             let mut connections = tokio::task::JoinSet::new();
 
@@ -211,6 +236,7 @@ impl Listener {
                         let Some(connection) = connection else { break };
                         let router = router.clone();
                         let raw = tx.clone();
+                        let serializers = serializers.clone();
                         let notifications = notifications.clone();
                         let enabled = enabled.clone();
                         let endpoint = incoming.clone();
@@ -253,6 +279,7 @@ impl Listener {
                                         let Ok((send, recv)) = incoming else { break };
                                         let router = router.clone();
                                         let raw = raw.clone();
+                                        let serializers = serializers.clone();
                                         let auth = authenticated.clone();
                                         streams.spawn(async move {
                                             let _ = super::multiplex::serve_stream(
@@ -260,6 +287,7 @@ impl Listener {
                                                 Box::new(Stream { send, recv }),
                                                 auth,
                                                 raw,
+                                                &serializers,
                                             )
                                                 .await;
                                         });

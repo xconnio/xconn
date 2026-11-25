@@ -1,4 +1,7 @@
-use super::config::{Result, Tls, Transport};
+use super::{
+    cert_hash::CertHashServer,
+    config::{Result, Tls, Transport},
+};
 use futures_util::StreamExt;
 use std::{
     path::PathBuf,
@@ -17,11 +20,13 @@ use xconn::async_::{
     rawsocket::{BoxStream, RawSocketPeer},
     router::{Router, serializer},
     websocket::WebSocketPeer,
+    webtransport,
 };
 
 pub enum Listener {
     Stream(StreamListener),
     Quic(quic::Listener),
+    WebTransport(webtransport::Listener, Option<CertHashServer>),
 }
 
 impl Listener {
@@ -29,15 +34,38 @@ impl Listener {
         if config.kind == "quic" {
             let tls = config.tls.as_ref().ok_or("QUIC requires a TLS certificate and key")?;
             let (chain, key) = tls_identity(tls)?;
-            let mut listener = quic::Listener::with_certificate(
+            let mut listener = quic::Listener::with_certificate_and_serializers(
                 router,
                 config.address.parse()?,
                 chain.into_iter().map(|cert| cert.to_vec()).collect(),
                 key.secret_der().to_vec(),
+                codecs(&config),
             )
             .await?;
             listener.disable_raw_streams();
             return Ok(Self::Quic(listener));
+        }
+        if config.kind == "webtransport" {
+            let (chain, key) = match &config.tls {
+                Some(tls) => tls_identity(tls)?,
+                None => self_signed_webtransport_identity()?,
+            };
+            let serializers = codecs(&config);
+            let mut listener = webtransport::Listener::with_certificate_and_serializers(
+                router,
+                config.address.parse()?,
+                chain,
+                key,
+                Some(config.path.unwrap_or_else(|| "/wamp".into())),
+                serializers,
+            )
+            .await?;
+            listener.disable_raw_streams();
+            let hash_server = match config.cert_hash_address {
+                Some(address) => Some(CertHashServer::bind(address, &listener.certificate).await?),
+                None => None,
+            };
+            return Ok(Self::WebTransport(listener, hash_server));
         }
         Ok(Self::Stream(StreamListener::bind(router, config).await?))
     }
@@ -46,6 +74,14 @@ impl Listener {
         match self {
             Self::Stream(listener) => listener.address.clone(),
             Self::Quic(listener) => listener.local_addr.to_string(),
+            Self::WebTransport(listener, _) => listener.local_addr.to_string(),
+        }
+    }
+
+    pub fn cert_hash_address(&self) -> Option<std::net::SocketAddr> {
+        match self {
+            Self::WebTransport(_, Some(server)) => Some(server.address),
+            _ => None,
         }
     }
 
@@ -62,7 +98,7 @@ impl Listener {
                     let _ = task.await;
                 }
             }
-            Self::Quic(listener) => {
+            listener => {
                 // Keep the endpoint alive while WAMP GOODBYE is written and delivered.
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 drop(listener);
@@ -116,12 +152,25 @@ impl Socket {
     }
 }
 
-fn tls_identity(
-    tls: &Tls,
-) -> Result<(
+type TlsIdentity = (
     Vec<rustls::pki_types::CertificateDer<'static>>,
     rustls::pki_types::PrivateKeyDer<'static>,
-)> {
+);
+
+fn self_signed_webtransport_identity() -> Result<TlsIdentity> {
+    let key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)?;
+    let mut params = rcgen::CertificateParams::new(vec!["localhost".into(), "127.0.0.1".into(), "::1".into()])?;
+    let now = time::OffsetDateTime::now_utc();
+    params.not_before = now - time::Duration::minutes(1);
+    params.not_after = now + time::Duration::days(13);
+    params.key_usages = vec![rcgen::KeyUsagePurpose::DigitalSignature];
+    params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
+    let cert = params.self_signed(&key)?;
+    let key = rustls::pki_types::PrivatePkcs8KeyDer::from(key.serialize_der());
+    Ok((vec![cert.der().clone()], key.into()))
+}
+
+fn tls_identity(tls: &Tls) -> Result<TlsIdentity> {
     let certificates = rustls_pemfile::certs(&mut std::io::BufReader::new(std::fs::File::open(&tls.certificate)?))
         .collect::<std::io::Result<Vec<_>>>()?;
     let key = rustls_pemfile::private_key(&mut std::io::BufReader::new(std::fs::File::open(&tls.key)?))?
@@ -236,6 +285,16 @@ fn codec(name: &str) -> SerializerID {
     }
 }
 
+fn codecs(config: &Transport) -> Vec<SerializerID> {
+    config
+        .serializers
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .map(|name| codec(name))
+        .collect()
+}
+
 async fn negotiate(
     stream: BoxStream,
     config: &Transport,
@@ -247,7 +306,7 @@ async fn negotiate(
     } else {
         config.kind == "websocket"
     };
-    let allowed: Vec<_> = config.serializers.iter().map(|s| codec(s)).collect();
+    let allowed = codecs(config);
 
     if !websocket {
         use tokio::io::AsyncWriteExt;
