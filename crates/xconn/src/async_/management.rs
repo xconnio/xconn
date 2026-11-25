@@ -8,6 +8,8 @@ use super::{
 use crate::{Error, JSONSerializerSpec, RpcResult, Value};
 use std::collections::HashMap;
 pub const REALM: &str = "io.xconn.mgmt";
+/// Role used by the in-process management session to register its procedures.
+pub const INTERNAL_ROLE: &str = "trusted";
 pub const LIST_REALMS: &str = "io.xconn.mgmt.realm.list";
 pub const LIST_SESSIONS: &str = "io.xconn.mgmt.session.list";
 pub const KILL_SESSION: &str = "io.xconn.mgmt.session.kill";
@@ -20,13 +22,13 @@ pub struct Management {
 impl Management {
     pub async fn start(router: Router, config: Option<RealmConfig>) -> Result<Self, Error> {
         let config = config.unwrap_or_else(|| RealmConfig {
-            roles: HashMap::from([("trusted".into(), vec![Permission::all()])]),
+            roles: HashMap::from([(INTERNAL_ROLE.into(), vec![Permission::all()])]),
             disclose_caller: true,
             ..Default::default()
         });
         router.add_realm(REALM, config)?;
         let session = match router
-            .connect_internal(REALM, "management", "trusted", Box::new(JSONSerializerSpec))
+            .connect_internal(REALM, "management", INTERNAL_ROLE, Box::new(JSONSerializerSpec))
             .await
         {
             Ok(session) => session,

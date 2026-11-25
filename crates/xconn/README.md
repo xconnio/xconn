@@ -125,6 +125,54 @@ certificate, supply `tls` as in the QUIC example and omit `cert_hash_address`.
 For Bash completion with a Cargo-installed CLI, add
 `source <(xconn completions bash)` to your `~/.bashrc`.
 
+### Router management
+
+The router executable can expose the library's management WAMP procedures.
+Set `management: true` under `config`, add a realm named `io.xconn.mgmt`, and configure
+its roles and credentials in the same YAML file. For example, merge these
+entries into your existing configuration:
+
+```yaml
+config:
+  management: true
+
+realms:
+  - name: io.xconn.mgmt
+    roles:
+      - name: operator
+        permissions:
+          - uri: io.xconn.mgmt.realm.list
+            match: exact
+            allow_call: true
+          - uri: io.xconn.mgmt.session.list
+            match: exact
+            allow_call: true
+          - uri: io.xconn.mgmt.session.kill
+            match: exact
+            allow_call: true
+
+authenticators:
+  ticket:
+    - authid: operator
+      realm: io.xconn.mgmt
+      role: operator
+      ticket: replace-with-a-secret
+```
+
+Connect a WAMP client to `io.xconn.mgmt` and call the procedures its role
+allows.
+
+- `io.xconn.mgmt.realm.list` takes no arguments.
+- `io.xconn.mgmt.session.list` takes a realm name and accepts the optional
+  keyword arguments `offset` and `limit`.
+- `io.xconn.mgmt.session.kill` takes a realm name and session ID and accepts
+  the optional keyword argument `reason`.
+
+Management is off by default. The management realm requires authenticated
+credentials and reserves the `trusted` role for the internal session. The
+management realm is reachable through the configured listeners. Keep plaintext
+listeners local and use TLS-protected listeners for remote access.
+
 ### Snap package
 
 From a Git checkout on a Linux Snapcraft host, run `snapcraft pack` to build
