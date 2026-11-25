@@ -62,7 +62,7 @@ pub async fn run(command: Command, file: PathBuf) -> Result<()> {
 
         match listener::Listener::bind(router.clone(), transport).await {
             Ok(listener) => {
-                println!("Listening {kind} {}", listener.address);
+                println!("Listening {kind} {}", listener.address());
                 listeners.push(listener);
             }
             Err(error) => {
@@ -84,9 +84,7 @@ pub async fn run(command: Command, file: PathBuf) -> Result<()> {
 
     router.close();
 
-    for listener in &mut listeners {
-        listener.finish().await;
-    }
+    futures_util::future::join_all(listeners.into_iter().map(listener::Listener::finish)).await;
 
     eprintln!("Stopped");
     Ok(())

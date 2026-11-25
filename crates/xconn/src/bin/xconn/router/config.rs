@@ -71,6 +71,7 @@ pub struct Transport {
     pub kind: String,
     pub listener: String,
     pub address: String,
+    #[serde(default)]
     pub serializers: Vec<String>,
     #[serde(default)]
     pub tls: Option<Tls>,
@@ -204,8 +205,21 @@ impl Config {
         }
 
         for transport in &self.transports {
-            if !["websocket", "rawsocket", "universal"].contains(&transport.kind.as_str()) {
-                return Err(format!("unsupported transport: {}", transport.kind).into());
+            match transport.kind.as_str() {
+                "quic" => {
+                    if transport.listener != "udp" || transport.address.parse::<std::net::SocketAddr>().is_err() {
+                        return Err("QUIC requires a UDP listener and an IP socket address".into());
+                    }
+                    if transport.tls.is_none() {
+                        return Err("QUIC requires a TLS certificate and key".into());
+                    }
+                    if !transport.serializers.is_empty() {
+                        return Err("QUIC negotiates serializers on each WAMP stream; omit serializers".into());
+                    }
+                    continue;
+                }
+                "websocket" | "rawsocket" | "universal" => {}
+                _ => return Err(format!("unsupported transport: {}", transport.kind).into()),
             }
 
             if !["tcp", "unix"].contains(&transport.listener.as_str()) || transport.address.is_empty() {

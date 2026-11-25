@@ -126,7 +126,7 @@ pub struct AuthenticatedConnection {
 pub struct Listener {
     pub local_addr: SocketAddr,
     pub certificate: Vec<u8>,
-    raw: Mutex<mpsc::Receiver<AuthenticatedStream>>,
+    raw: Option<Mutex<mpsc::Receiver<AuthenticatedStream>>>,
     authenticated: Mutex<mpsc::Receiver<AuthenticatedConnection>>,
     notifications_enabled: Arc<std::sync::atomic::AtomicBool>,
     endpoint: quinn::Endpoint,
@@ -276,7 +276,7 @@ impl Listener {
         Ok(Self {
             local_addr,
             certificate,
-            raw: Mutex::new(raw),
+            raw: Some(Mutex::new(raw)),
             authenticated: Mutex::new(authenticated_connections),
             notifications_enabled,
             endpoint,
@@ -294,8 +294,13 @@ impl Listener {
         self.authenticated.lock().await.recv().await
     }
 
+    /// Reject unassociated raw streams while continuing to accept WAMP and RPC streams.
+    pub fn disable_raw_streams(&mut self) {
+        self.raw = None;
+    }
+
     pub async fn accept_raw(&self) -> Option<AuthenticatedStream> {
-        self.raw.lock().await.recv().await
+        self.raw.as_ref()?.lock().await.recv().await
     }
 
     pub fn close(&self) {
