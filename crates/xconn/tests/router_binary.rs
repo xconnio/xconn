@@ -957,3 +957,149 @@ async fn management_procedures_are_absent_when_disabled() {
     .await
     .unwrap();
 }
+
+#[tokio::test]
+async fn management_provisions_and_removes_realms() {
+    use futures_util::{SinkExt, StreamExt};
+    use wampproto::{
+        authenticators::ticket::TicketAuthenticator,
+        messages::{abort::Abort, challenge::Challenge},
+    };
+    use xconn::async_::management::{CREATE_REALM, REALM, REMOVE_REALM};
+
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let files = Files::new();
+        let path = management_config(&files);
+        let (mut child, address) = start(&path).await;
+        let url = format!("ws://{address}");
+        let ticket_client = |authid, ticket| {
+            Client::new(
+                Box::new(JSONSerializerSpec),
+                Box::new(TicketAuthenticator::new(authid, ticket, Default::default())),
+            )
+        };
+        let admin = ticket_client("admin", "admin-secret")
+            .connect(&url, REALM)
+            .await
+            .unwrap();
+        let viewer = ticket_client("viewer", "viewer-secret")
+            .connect(&url, REALM)
+            .await
+            .unwrap();
+        let realm = "test.created";
+        let spec: Value = serde_yaml_ng::from_str(
+            r#"
+roles:
+  - name: member
+    permissions:
+      - uri: echo
+        match: exact
+        allow_call: true
+        allow_register: true
+authenticators:
+  ticket:
+    - authid: member
+      realm: test.created
+      role: member
+      ticket: member-secret
+"#,
+        )
+        .unwrap();
+        let create = || CallRequest::new(CREATE_REALM).arg(realm).arg(spec.clone());
+        let remove = |realm: &str| CallRequest::new(REMOVE_REALM).arg(realm);
+        assert_eq!(
+            viewer.execute_call(create()).await.unwrap().error.unwrap().uri,
+            "wamp.error.authorization_failed"
+        );
+        assert_eq!(
+            admin.execute_call(remove("realm")).await.unwrap().error.unwrap().uri,
+            "wamp.error.no_such_realm"
+        );
+        assert_eq!(
+            admin.execute_call(remove(REALM)).await.unwrap().error.unwrap().uri,
+            "wamp.error.invalid_argument"
+        );
+        assert_eq!(
+            admin
+                .execute_call(CallRequest::new(CREATE_REALM).arg(realm).arg(Value::Null))
+                .await
+                .unwrap()
+                .error
+                .unwrap()
+                .uri,
+            "wamp.error.invalid_argument"
+        );
+        assert!(admin.execute_call(create()).await.unwrap().error.is_none());
+        assert_eq!(
+            admin.execute_call(create()).await.unwrap().error.unwrap().uri,
+            "wamp.error.already_exists"
+        );
+        assert!(ticket_client("member", "wrong").connect(&url, realm).await.is_err());
+        let member = ticket_client("member", "member-secret")
+            .connect(&url, realm)
+            .await
+            .unwrap();
+        assert!(
+            member
+                .execute_register(RegisterRequest::new("echo", |_| async { RpcResult::arg("ok") }))
+                .await
+                .unwrap()
+                .error
+                .is_none()
+        );
+        assert_eq!(
+            member.execute_call(CallRequest::new("echo")).await.unwrap().args,
+            Some(vec![Value::Str("ok".into())])
+        );
+        assert_eq!(
+            viewer.execute_call(remove(realm)).await.unwrap().error.unwrap().uri,
+            "wamp.error.authorization_failed"
+        );
+        let request = tungstenite::ClientRequestBuilder::new(url.parse().unwrap()).with_sub_protocol("wamp.2.json");
+        let (mut pending, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+        pending
+            .send(tungstenite::Message::Text(
+                r#"[1,"test.created",{"authid":"member","authmethods":["ticket"],"roles":{"caller":{}}}]"#.into(),
+            ))
+            .await
+            .unwrap();
+        let serializer = JSONSerializerSpec.serializer();
+        let reply = pending.next().await.unwrap().unwrap().into_data().to_vec();
+        assert!(serializer.deserialize(reply).unwrap().as_any().is::<Challenge>());
+
+        assert!(admin.execute_call(remove(realm)).await.unwrap().error.is_none());
+        member.wait_disconnect().await;
+        assert!(
+            ticket_client("member", "member-secret")
+                .connect(&url, realm)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            admin.execute_call(remove(realm)).await.unwrap().error.unwrap().uri,
+            "wamp.error.no_such_realm"
+        );
+        assert!(admin.execute_call(create()).await.unwrap().error.is_none());
+        pending
+            .send(tungstenite::Message::Text(r#"[5,"member-secret",{}]"#.into()))
+            .await
+            .unwrap();
+        let reply = pending.next().await.unwrap().unwrap().into_data().to_vec();
+        let message = serializer.deserialize(reply).unwrap();
+        let abort = message
+            .as_any()
+            .downcast_ref::<Abort>()
+            .expect("stale handshake must abort");
+        assert_eq!(abort.reason, "wamp.error.no_such_realm");
+
+        assert!(
+            ticket_client("member", "member-secret")
+                .connect(&url, realm)
+                .await
+                .is_ok()
+        );
+        child.kill().await.unwrap();
+    })
+    .await
+    .unwrap();
+}

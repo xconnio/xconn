@@ -168,6 +168,36 @@ allows.
 - `io.xconn.mgmt.session.kill` takes a realm name and session ID and accepts
   the optional keyword argument `reason`.
 
+To let an operator provision realms, grant call permissions for
+`io.xconn.mgmt.realm.create` and `io.xconn.mgmt.realm.remove`. An existing
+prefix permission for `io.xconn.mgmt.realm.` also covers both procedures.
+
+`io.xconn.mgmt.realm.create` takes the realm name as its first argument and
+a configuration dictionary as its second. The dictionary uses the same
+`roles`, optional `meta_api`, and `authenticators` fields as the router
+configuration. Each credential must reference the new realm and one of its
+roles. To create `example.temporary`, pass this dictionary as the second
+argument:
+
+```yaml
+roles:
+  - name: member
+    permissions:
+      - uri: example.echo
+        match: exact
+        allow_call: true
+authenticators:
+  ticket:
+    - authid: member
+      realm: example.temporary
+      role: member
+      ticket: replace-with-a-secret
+```
+
+`io.xconn.mgmt.realm.remove` takes the name of a realm created through this
+API and disconnects its sessions. The router keeps provisioned realms in
+memory until an operator removes them or the process exits.
+
 Management is off by default. The management realm requires authenticated
 credentials and reserves the `trusted` role for the internal session. The
 management realm is reachable through the configured listeners. Keep plaintext
