@@ -2,6 +2,7 @@ mod cert_hash;
 mod config;
 mod listener;
 mod realm_source;
+mod rpc_authentication;
 
 use clap::Subcommand;
 use config::{Config, Result};
@@ -64,8 +65,9 @@ pub async fn run(command: Command, file: PathBuf) -> Result<()> {
         }
         None => None,
     };
+    let source_credentials = config.source_credentials();
     let source = match config.realm_source {
-        Some(config) => Some(realm_source::RealmSource::start(router.clone(), config).await?),
+        Some(config) => Some(realm_source::RealmSource::start(router.clone(), config, source_credentials).await?),
         None => None,
     };
     let mut listeners = Vec::new();

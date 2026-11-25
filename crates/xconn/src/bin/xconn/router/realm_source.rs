@@ -4,7 +4,10 @@
 //! update RPC integration once an authenticated edge connection owns each
 //! machine realm's lifetime.
 
-use super::config::{RealmSourceConfig, Result, sourced_realm_config, valid_uri};
+use super::{
+    config::{Authenticators, RealmSourceConfig, Result, sourced_realm_config, valid_uri},
+    rpc_authentication::RpcAuthentication,
+};
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
@@ -23,6 +26,8 @@ pub struct RealmSource {
 
 struct Realms {
     router: Router,
+    control_realm: String,
+    authentication: Option<Arc<RpcAuthentication>>,
     active: HashMap<String, String>,
     changes_during_load: Option<StartupChanges>,
 }
@@ -34,7 +39,7 @@ struct StartupChanges {
 }
 
 impl RealmSource {
-    pub async fn start(router: Router, config: RealmSourceConfig) -> Result<Self> {
+    pub async fn start(router: Router, config: RealmSourceConfig, local: Authenticators) -> Result<Self> {
         let session = router
             .connect_internal(
                 &config.control_realm,
@@ -43,8 +48,21 @@ impl RealmSource {
                 Box::new(JSONSerializerSpec),
             )
             .await?;
+        let authentication = config.authentication.map(|auth| {
+            Arc::new(RpcAuthentication::new(
+                auth,
+                config.control_realm.clone(),
+                session.clone(),
+                local,
+            ))
+        });
+        if let Some(auth) = &authentication {
+            router.set_async_authenticator(&config.control_realm, auth.clone())?;
+        }
         let state = Arc::new(Mutex::new(Realms {
             router,
+            control_realm: config.control_realm,
+            authentication,
             active: HashMap::new(),
             changes_during_load: Some(StartupChanges::default()),
         }));
@@ -156,9 +174,46 @@ impl Realms {
                 Err("wamp.error.already_exists")
             };
         }
-        self.router
-            .add_realm(name, sourced_realm_config())
-            .map_err(|_| "wamp.error.already_exists")?;
+        let mut config = sourced_realm_config();
+        if let Some(auth) = &self.authentication {
+            config.meta_api = true;
+            config.disclose_caller = true;
+            for role in &auth.config.realm_roles {
+                config.roles.insert(
+                    role.name.clone(),
+                    role.rules(None).map_err(|_| "wamp.error.invalid_argument")?,
+                );
+            }
+            if let Some(role) = &auth.config.realm_machine_role {
+                let permissions = role.rules(Some(authid)).map_err(|_| "wamp.error.invalid_argument")?;
+                if config.roles.insert(role.machine_name(authid), permissions).is_some() {
+                    return Err("wamp.error.already_exists");
+                }
+            }
+            let control_role = auth
+                .config
+                .control_machine_role
+                .as_ref()
+                .map(|role| {
+                    role.rules(Some(authid))
+                        .map(|permissions| (role.machine_name(authid), permissions))
+                })
+                .transpose()
+                .map_err(|_| "wamp.error.invalid_argument")?;
+            self.router
+                .add_realm_with_async_authenticator(name, config, auth.clone())
+                .map_err(|_| "wamp.error.already_exists")?;
+            if let Some((role, permissions)) = control_role
+                && self.router.add_role(&self.control_realm, role, permissions).is_err()
+            {
+                let _ = self.router.remove_realm(name);
+                return Err("wamp.error.already_exists");
+            }
+        } else {
+            self.router
+                .add_realm(name, config)
+                .map_err(|_| "wamp.error.already_exists")?;
+        }
         self.active.insert(name.into(), authid.into());
         Ok(())
     }
@@ -167,6 +222,13 @@ impl Realms {
         match self.active.get(name) {
             Some(owner) if owner == authid => {
                 self.router.remove_realm(name).map_err(|_| "wamp.error.no_such_realm")?;
+                if let Some(role) = self
+                    .authentication
+                    .as_ref()
+                    .and_then(|auth| auth.config.control_machine_role.as_ref())
+                {
+                    let _ = self.router.remove_role(&self.control_realm, &role.machine_name(authid));
+                }
                 self.active.remove(name);
                 Ok(())
             }

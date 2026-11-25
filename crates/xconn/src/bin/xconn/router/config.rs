@@ -40,6 +40,20 @@ pub struct RealmSourceConfig {
     pub list: String,
     pub add: String,
     pub remove: String,
+    pub authentication: Option<RpcAuthenticationConfig>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RpcAuthenticationConfig {
+    pub wampcra: Option<String>,
+    pub cryptosign: Option<String>,
+    #[serde(default)]
+    pub control_roles: Vec<String>,
+    #[serde(default)]
+    pub realm_roles: Vec<Role>,
+    pub realm_machine_role: Option<Role>,
+    pub control_machine_role: Option<Role>,
 }
 
 #[derive(Default, Deserialize)]
@@ -86,8 +100,8 @@ pub fn provision_realm(name: &str, spec: &Value) -> std::result::Result<RealmCon
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Role {
-    name: String,
+pub struct Role {
+    pub name: String,
     permissions: Vec<Permission>,
 }
 
@@ -130,7 +144,7 @@ pub struct Tls {
 
 #[derive(Clone, Default, Deserialize)]
 #[serde(default, deny_unknown_fields)]
-struct Authenticators {
+pub struct Authenticators {
     anonymous: Vec<Credential>,
     ticket: Vec<Credential>,
     wampcra: Vec<Credential>,
@@ -276,6 +290,48 @@ impl Config {
                     return Err(format!("realm_source role {} must be allowed to register {uri}", role.name).into());
                 }
             }
+            if let Some(auth) = &source.authentication {
+                if auth.wampcra.is_none() && auth.cryptosign.is_none() {
+                    return Err("realm source authentication requires at least one RPC URI".into());
+                }
+                for uri in auth.wampcra.iter().chain(&auth.cryptosign) {
+                    if !valid_uri(uri) || [&source.list, &source.add, &source.remove].contains(&uri) {
+                        return Err("invalid realm source authentication procedure URI".into());
+                    }
+                    if !allows(uri, |rule| rule.allow_call) {
+                        return Err(format!("realm_source role {} must be allowed to call {uri}", role.name).into());
+                    }
+                }
+                for role in &auth.control_roles {
+                    if role == &source.role || !control.roles.iter().any(|item| &item.name == role) {
+                        return Err(
+                            "remote authentication must use configured control roles other than the source role".into(),
+                        );
+                    }
+                }
+                let mut names = HashSet::new();
+                for role in &auth.realm_roles {
+                    if !name(&role.name) || !names.insert(&role.name) {
+                        return Err("invalid or duplicate sourced realm role".into());
+                    }
+                    role.rules(None)?;
+                }
+                for role in auth.realm_machine_role.iter().chain(&auth.control_machine_role) {
+                    role.machine_name_parts()?;
+                    role.rules(Some("machine"))?;
+                }
+                if let Some(template) = &auth.control_machine_role {
+                    let (prefix, suffix) = template.machine_name_parts()?;
+                    if control.roles.iter().any(|role| {
+                        role.name
+                            .strip_prefix(prefix)
+                            .and_then(|name| name.strip_suffix(suffix))
+                            .is_some_and(|authid| !authid.is_empty())
+                    }) {
+                        return Err("control machine role template overlaps a configured role".into());
+                    }
+                }
+            }
         }
 
         for transport in &self.transports {
@@ -346,6 +402,14 @@ impl Config {
         }
     }
 
+    pub fn source_credentials(&self) -> Authenticators {
+        self.realm_source
+            .as_ref()
+            .map_or_else(Authenticators::default, |source| {
+                self.authenticators.for_realm(&source.control_realm)
+            })
+    }
+
     pub fn router(&self) -> Result<(Router, Option<RealmConfig>)> {
         let router = Router::new();
         let mut management_config = None;
@@ -370,21 +434,7 @@ impl Realm {
         let mut roles = HashMap::new();
 
         for role in &self.roles {
-            let rules = role
-                .permissions
-                .iter()
-                .map(|p| {
-                    Ok(Rule {
-                        uri: p.uri.clone(),
-                        matching: matching(&p.matching)?,
-                        call: p.allow_call,
-                        register: p.allow_register,
-                        publish: p.allow_publish,
-                        subscribe: p.allow_subscribe,
-                    })
-                })
-                .collect::<Result<Vec<_>>>()?;
-            roles.insert(role.name.clone(), rules);
+            roles.insert(role.name.clone(), role.rules(None)?);
         }
 
         Ok(RealmConfig {
@@ -394,6 +444,39 @@ impl Realm {
             disclose_caller: self.disclose_caller,
             ..RealmConfig::default()
         })
+    }
+}
+
+impl Role {
+    fn machine_name_parts(&self) -> Result<(&str, &str)> {
+        self.name
+            .split_once("{authid}")
+            .filter(|(_, suffix)| name(&self.name) && !suffix.contains("{authid}"))
+            .ok_or_else(|| "machine role name must contain exactly one {authid}".into())
+    }
+
+    pub fn machine_name(&self, authid: &str) -> String {
+        self.name.replace("{authid}", authid)
+    }
+
+    pub fn rules(&self, authid: Option<&str>) -> Result<Vec<Rule>> {
+        self.permissions
+            .iter()
+            .map(|permission| {
+                let matching = matching(&permission.matching)?;
+                if authid.is_some() && permission.uri.contains("{authid}") && matching != MatchPolicy::Exact {
+                    return Err("machine permission URIs with {authid} must use exact matching".into());
+                }
+                Ok(Rule {
+                    uri: authid.map_or_else(|| permission.uri.clone(), |id| permission.uri.replace("{authid}", id)),
+                    matching,
+                    call: permission.allow_call,
+                    register: permission.allow_register,
+                    publish: permission.allow_publish,
+                    subscribe: permission.allow_subscribe,
+                })
+            })
+            .collect()
     }
 }
 
@@ -518,6 +601,29 @@ impl Authenticators {
             wampcra: credentials(&self.wampcra),
             cryptosign: credentials(&self.cryptosign),
         }
+    }
+
+    pub fn identity_methods(&self, authid: &str) -> Vec<String> {
+        self.entries()
+            .into_iter()
+            .filter(|(method, credentials)| {
+                *method != "anonymous" && credentials.iter().any(|item| item.authid == authid)
+            })
+            .map(|(method, _)| method.into())
+            .collect()
+    }
+
+    pub fn is_static_identity(&self, request: &AuthRequest) -> bool {
+        self.entries().iter().any(|(method, credentials)| {
+            credentials.iter().any(|item| {
+                item.realm == request.realm
+                    && if *method == "anonymous" {
+                        request.method == "anonymous"
+                    } else {
+                        item.authid == request.authid
+                    }
+            })
+        })
     }
 
     fn entries(&self) -> [(&str, &Vec<Credential>); 4] {
