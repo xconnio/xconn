@@ -871,3 +871,77 @@ async fn unsolicited_intermediate_result_fails_the_call_and_closes_the_transport
     })
     .await;
 }
+
+#[tokio::test(start_paused = true)]
+async fn execute_when_available_retries_only_missing_procedures() {
+    bounded(async {
+        let router = Router::new();
+        router.add_realm("realm", RealmConfig::default()).unwrap();
+        let caller = router
+            .connect("realm", Box::new(JSONSerializerSpec), auth())
+            .await
+            .unwrap();
+        let callee = router
+            .connect("realm", Box::new(JSONSerializerSpec), auth())
+            .await
+            .unwrap();
+
+        let timeout = caller
+            .call("app.missing")
+            .execute_when_available(Duration::from_millis(20))
+            .await
+            .unwrap_err();
+        assert_eq!(timeout.message, "procedure call timed out");
+
+        let (reply, registered) = tokio::join!(
+            caller
+                .call("app.list")
+                .arg("ready")
+                .execute_when_available(Duration::from_secs(2)),
+            async {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+                callee
+                    .register("app.list", |inv| async move { RpcResult::new(inv.args, inv.kwargs) })
+                    .execute()
+                    .await
+                    .unwrap()
+            }
+        );
+        assert!(registered.error.is_none());
+        assert_eq!(reply.unwrap().args, Some(vec![Value::Str("ready".into())]));
+
+        callee
+            .register("app.error", |_| async { RpcResult::error("app.rejected") })
+            .execute()
+            .await
+            .unwrap();
+        let reply = caller
+            .call("app.error")
+            .execute_when_available(Duration::from_secs(2))
+            .await
+            .unwrap();
+        assert_eq!(reply.error.unwrap().uri, "app.rejected");
+        use std::sync::atomic::{AtomicBool, Ordering};
+        let invoked = Arc::new(AtomicBool::new(false));
+        callee
+            .register("app.slow", {
+                let invoked = invoked.clone();
+                move |_| {
+                    invoked.store(true, Ordering::Relaxed);
+                    std::future::pending()
+                }
+            })
+            .execute()
+            .await
+            .unwrap();
+        let timeout = caller
+            .call("app.slow")
+            .execute_when_available(Duration::from_millis(20))
+            .await
+            .unwrap_err();
+        assert_eq!(timeout.message, "procedure call timed out");
+        assert!(invoked.load(Ordering::Relaxed));
+        router.close();
+    })
+    .await;
+}

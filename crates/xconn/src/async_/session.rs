@@ -771,6 +771,10 @@ impl Session {
     }
 
     pub async fn call_stream(&self, request: CallRequest) -> Result<CallStream, Error> {
+        self.start_call(&request).await
+    }
+
+    async fn start_call(&self, request: &CallRequest) -> Result<CallStream, Error> {
         if !self.connected() {
             return Err(Error::new("session not established"));
         }
@@ -807,11 +811,15 @@ impl Session {
 
     #[doc(hidden)]
     pub async fn execute_call(&self, request: CallRequest) -> Result<RpcResult, Error> {
+        self.execute_call_ref(&request).await
+    }
+
+    pub(super) async fn execute_call_ref(&self, request: &CallRequest) -> Result<RpcResult, Error> {
         if request.request_options().get("progress") == Some(&Value::Bool(true)) {
             return Err(Error::new("progressive input requires stream()"));
         }
 
-        let mut stream = self.call_stream(request).await?;
+        let mut stream = self.start_call(request).await?;
 
         loop {
             let result = stream.next().await?.ok_or_else(|| Error::new("call closed"))?;

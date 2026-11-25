@@ -125,6 +125,15 @@ certificate, supply `tls` as in the QUIC example and omit `cert_hash_address`.
 For Bash completion with a Cargo-installed CLI, add
 `source <(xconn completions bash)` to your `~/.bashrc`.
 
+### Procedure readiness
+
+Use `session.call(uri).execute_when_available(timeout).await` when a service
+may register its procedure after the caller connects. The helper retries only
+`wamp.error.no_such_procedure`, with capped exponential backoff. A callee can
+return the same error, so use the helper only for calls that are safe to repeat.
+The timeout covers the entire operation, including the wait for a reply after
+the router dispatches the call.
+
 ### Router management
 
 The router executable can expose the library's management WAMP procedures.
