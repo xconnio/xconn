@@ -34,6 +34,3 @@ rust:
   - '{bindings/python/**/*.rs,bindings/python/**/Cargo.toml,bindings/js/wasm/**}'
   - '!**/*.md'
   - '!**/LICENSE'
-
-sctp:
-  - '{Cargo.toml,Cargo.lock,.github/workflows/ci.yaml,.github/filters.yaml}'

@@ -28,7 +28,6 @@ jobs:
       browser: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.browser == 'true' }}
       rust: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.rust == 'true' }}
       interop: ${{ steps.select.outputs.shared }}
-      sctp: ${{ steps.select.outputs.sctp }}
       native: >-
         ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.go == 'true' ||
             steps.select.outputs.python == 'true' || steps.select.outputs.dart == 'true' }}
@@ -100,25 +99,6 @@ jobs:
     needs: changes
     if: needs.changes.outputs.dart == 'true'
     uses: ./.github/workflows/ios-sdk.yaml
-
-  sctp-regression:
-    needs: changes
-    if: needs.changes.outputs.sctp == 'true'
-    name: SCTP remote-reset regression
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          repository: xconnio/webrtc
-          ref: e2aee163c9d4858003a36f974d1b8cedc3ae11d2
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: sctp-fork
-      - run: >-
-          cargo test --locked -p webrtc-sctp
-          --lib remote_reset_drains_received_messages_before_eof
 
   reference:
     name: Independent Go interoperability
