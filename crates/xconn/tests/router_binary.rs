@@ -49,7 +49,12 @@ async fn start(file: &std::path::Path) -> (tokio::process::Child, String) {
     (child, listeners.into_iter().next().unwrap().1)
 }
 
-async fn start_listeners(file: &std::path::Path) -> (tokio::process::Child, Vec<(String, String)>) {
+fn spawn_router(
+    file: &std::path::Path,
+) -> (
+    tokio::process::Child,
+    tokio::io::Lines<BufReader<tokio::process::ChildStdout>>,
+) {
     let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_xconn"));
     command.args(["router", "start", "--config"]).arg(file);
     let mut child = command
@@ -57,7 +62,12 @@ async fn start_listeners(file: &std::path::Path) -> (tokio::process::Child, Vec<
         .kill_on_drop(true)
         .spawn()
         .unwrap();
-    let mut lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    let lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    (child, lines)
+}
+
+async fn start_listeners(file: &std::path::Path) -> (tokio::process::Child, Vec<(String, String)>) {
+    let (child, mut lines) = spawn_router(file);
     let mut listeners = Vec::new();
     loop {
         let line = tokio::time::timeout(Duration::from_secs(10), lines.next_line())
@@ -1097,6 +1107,166 @@ authenticators:
                 .connect(&url, realm)
                 .await
                 .is_ok()
+        );
+        child.kill().await.unwrap();
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn realm_source_applies_updates_received_during_inventory_loading() {
+    use tokio::sync::Notify;
+    use wampproto::authenticators::ticket::TicketAuthenticator;
+    use xconn::async_::management::{LIST_REALMS, REALM};
+
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let files = Files::new();
+        let path = management_config(&files);
+        let config = std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("  - name: realm", "  - name: realm\n    disclose_caller: true")
+            .replace(
+                "  - name: io.xconn.mgmt",
+                r#"      - name: source
+        permissions:
+          - {uri: fixture.inventory., match: prefix, allow_call: true, allow_register: true}
+      - name: provider
+        permissions:
+          - {uri: fixture.inventory.list, match: exact, allow_register: true}
+          - {uri: fixture.inventory.add, match: exact, allow_call: true}
+          - {uri: fixture.inventory.remove, match: exact, allow_call: true}
+  - name: io.xconn.mgmt"#,
+            )
+            .replace(
+                "authenticators:",
+                r#"realm_source:
+  control_realm: realm
+  role: source
+  list: fixture.inventory.list
+  add: fixture.inventory.add
+  remove: fixture.inventory.remove
+authenticators:"#,
+            )
+            + "    - {authid: provider, realm: realm, role: provider, ticket: provider-secret}\n";
+        for (field, message) in [
+            ("allow_call", "must be allowed to call fixture.inventory.list"),
+            ("allow_register", "must be allowed to register fixture.inventory.add"),
+        ] {
+            let no_permission = config.replace(
+                "{uri: fixture.inventory., match: prefix, allow_call: true, allow_register: true}",
+                &format!(
+                    "{{uri: fixture.inventory., match: prefix, allow_call: {}, allow_register: {}}}",
+                    field != "allow_call",
+                    field != "allow_register"
+                ),
+            );
+            std::fs::write(&path, no_permission).unwrap();
+            let validation = std::process::Command::new(env!("CARGO_BIN_EXE_xconn"))
+                .args(["router", "validate", "--config"])
+                .arg(&path)
+                .output()
+                .unwrap();
+            assert!(!validation.status.success());
+            let error = String::from_utf8_lossy(&validation.stderr);
+            assert!(error.contains(message), "{error}");
+        }
+        std::fs::write(&path, config).unwrap();
+
+        let (mut child, mut lines) = spawn_router(&path);
+        let address = lines.next_line().await.unwrap().unwrap();
+        let url = format!("ws://{}", address.strip_prefix("Listening websocket ").unwrap());
+        let ticket_client = |authid, ticket| {
+            Client::new(
+                Box::new(JSONSerializerSpec),
+                Box::new(TicketAuthenticator::new(authid, ticket, Default::default())),
+            )
+        };
+        let provider = ticket_client("provider", "provider-secret")
+            .connect(&url, "realm")
+            .await
+            .unwrap();
+        let requested = std::sync::Arc::new(Notify::new());
+        let release = std::sync::Arc::new(Notify::new());
+        let started = requested.clone();
+        let proceed = release.clone();
+        let registered = provider
+            .execute_register(RegisterRequest::new("fixture.inventory.list", move |inv| {
+                let started = started.clone();
+                let proceed = proceed.clone();
+                async move {
+                    assert_eq!(inv.details.get("caller_authrole"), Some(&Value::Str("source".into())));
+                    started.notify_one();
+                    proceed.notified().await;
+                    RpcResult::arg(Value::List(
+                        [("machine.loaded", "a"), ("machine.removed", "b")]
+                            .into_iter()
+                            .map(|(realm, authid)| {
+                                Value::Dict(std::collections::HashMap::from([
+                                    ("realm".into(), Value::Str(realm.into())),
+                                    ("authid".into(), Value::Str(authid.into())),
+                                ]))
+                            })
+                            .collect(),
+                    ))
+                }
+            }))
+            .await
+            .unwrap();
+        assert!(registered.error.is_none());
+        requested.notified().await;
+
+        let update =
+            |procedure, realm, authid| provider.execute_call(CallRequest::new(procedure).arg(realm).arg(authid));
+        assert!(
+            update("fixture.inventory.remove", "machine.removed", "b")
+                .await
+                .unwrap()
+                .error
+                .is_none()
+        );
+        assert!(
+            update("fixture.inventory.add", "machine.added", "c")
+                .await
+                .unwrap()
+                .error
+                .is_none()
+        );
+        assert!(
+            update("fixture.inventory.remove", "machine.loaded", "wrong-authid")
+                .await
+                .unwrap()
+                .error
+                .is_none()
+        );
+        release.notify_one();
+        assert_eq!(lines.next_line().await.unwrap().as_deref(), Some("Ready"));
+
+        let admin = ticket_client("admin", "admin-secret")
+            .connect(&url, REALM)
+            .await
+            .unwrap();
+        let list = || admin.execute_call(CallRequest::new(LIST_REALMS));
+        let reply = list().await.unwrap();
+        let Some([Value::List(realms)]) = reply.args.as_deref() else {
+            panic!("expected realm list")
+        };
+        assert!(realms.contains(&Value::Str("machine.loaded".into())));
+        assert!(realms.contains(&Value::Str("machine.added".into())));
+        assert!(!realms.contains(&Value::Str("machine.removed".into())));
+        assert!(
+            update("fixture.inventory.remove", "machine.loaded", "a")
+                .await
+                .unwrap()
+                .error
+                .is_none()
+        );
+        assert!(
+            update("fixture.inventory.remove", "realm", "a")
+                .await
+                .unwrap()
+                .error
+                .is_some()
         );
         child.kill().await.unwrap();
     })

@@ -1,6 +1,7 @@
 mod cert_hash;
 mod config;
 mod listener;
+mod realm_source;
 
 use clap::Subcommand;
 use config::{Config, Result};
@@ -63,6 +64,10 @@ pub async fn run(command: Command, file: PathBuf) -> Result<()> {
         }
         None => None,
     };
+    let source = match config.realm_source {
+        Some(config) => Some(realm_source::RealmSource::start(router.clone(), config).await?),
+        None => None,
+    };
     let mut listeners = Vec::new();
 
     for transport in config.transports {
@@ -84,10 +89,26 @@ pub async fn run(command: Command, file: PathBuf) -> Result<()> {
     }
 
     let shutdown = shutdown_signal()?;
-    println!("Ready");
+    tokio::pin!(shutdown);
     use std::io::Write;
     std::io::stdout().flush()?;
-    shutdown.await?;
+    let startup = async {
+        match &source {
+            Some(source) => source.load().await,
+            None => Ok(()),
+        }
+    };
+    let result = tokio::select! {
+        signal = &mut shutdown => signal,
+        started = startup => match started {
+            Ok(()) => {
+                println!("Ready");
+                std::io::stdout().flush()?;
+                shutdown.await
+            }
+            Err(error) => Err(error),
+        },
+    };
 
     for listener in &listeners {
         listener.stop();
@@ -98,7 +119,7 @@ pub async fn run(command: Command, file: PathBuf) -> Result<()> {
     futures_util::future::join_all(listeners.into_iter().map(listener::Listener::finish)).await;
 
     eprintln!("Stopped");
-    Ok(())
+    result
 }
 
 fn shutdown_signal() -> Result<impl std::future::Future<Output = Result<()>>> {

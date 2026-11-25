@@ -27,8 +27,19 @@ pub struct Config {
     config: Settings,
     realms: Vec<Realm>,
     pub transports: Vec<Transport>,
+    pub realm_source: Option<RealmSourceConfig>,
     #[serde(default)]
     authenticators: Authenticators,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RealmSourceConfig {
+    pub control_realm: String,
+    pub role: String,
+    pub list: String,
+    pub add: String,
+    pub remove: String,
 }
 
 #[derive(Default, Deserialize)]
@@ -45,6 +56,8 @@ struct Realm {
     roles: Vec<Role>,
     #[serde(default)]
     meta_api: bool,
+    #[serde(default)]
+    disclose_caller: bool,
 }
 
 #[derive(Deserialize)]
@@ -64,6 +77,7 @@ pub fn provision_realm(name: &str, spec: &Value) -> std::result::Result<RealmCon
         name: name.into(),
         roles: provision.roles,
         meta_api: provision.meta_api,
+        disclose_caller: false,
     };
     validate_realms(std::slice::from_ref(&realm), &provision.authenticators, false)
         .and_then(|()| realm.router_config(provision.authenticators))
@@ -158,6 +172,18 @@ fn name(value: &str) -> bool {
     !value.is_empty() && !value.chars().any(|c| c.is_whitespace() || c == '#')
 }
 
+pub fn valid_uri(value: &str) -> bool {
+    name(value) && !value.split('.').any(str::is_empty)
+}
+
+pub fn sourced_realm_config() -> RealmConfig {
+    RealmConfig {
+        authentication: Arc::new(|| Box::<Authenticators>::default()),
+        roles: HashMap::new(),
+        ..RealmConfig::default()
+    }
+}
+
 impl Config {
     pub fn load(path: &Path) -> Result<Self> {
         let mut value: Self = serde_yaml_ng::from_str(&std::fs::read_to_string(path)?)?;
@@ -206,6 +232,51 @@ impl Config {
         }
 
         validate_realms(&self.realms, &self.authenticators, self.config.management)?;
+
+        if let Some(source) = &self.realm_source {
+            let control = self
+                .realms
+                .iter()
+                .find(|realm| realm.name == source.control_realm)
+                .ok_or("realm_source requires a configured control realm")?;
+            if !control.disclose_caller || (self.config.management && control.name == management::REALM) {
+                return Err("realm_source requires a control realm with disclose_caller enabled".into());
+            }
+            let role = control
+                .roles
+                .iter()
+                .find(|role| role.name == source.role)
+                .ok_or("realm_source requires a configured control realm role")?;
+            if self.authenticators.entries().iter().any(|(_, credentials)| {
+                credentials
+                    .iter()
+                    .any(|item| item.realm == control.name && item.role == role.name)
+            }) {
+                return Err("realm_source role must not have network credentials".into());
+            }
+            let procedures = [&source.list, &source.add, &source.remove];
+            if procedures.iter().any(|uri| !valid_uri(uri)) || procedures.into_iter().collect::<HashSet<_>>().len() != 3
+            {
+                return Err("realm_source requires distinct list, add and remove procedure URIs".into());
+            }
+            let allows = |uri: &str, enabled: fn(&Permission) -> bool| {
+                role.permissions.iter().any(|rule| {
+                    enabled(rule) && matching(&rule.matching).is_ok_and(|policy| policy.matches(&rule.uri, uri))
+                })
+            };
+            if !allows(&source.list, |rule| rule.allow_call) {
+                return Err(format!(
+                    "realm_source role {} must be allowed to call {}",
+                    role.name, source.list
+                )
+                .into());
+            }
+            for uri in [&source.add, &source.remove] {
+                if !allows(uri, |rule| rule.allow_register) {
+                    return Err(format!("realm_source role {} must be allowed to register {uri}", role.name).into());
+                }
+            }
+        }
 
         for transport in &self.transports {
             if transport.kind != "webtransport" && (transport.path.is_some() || transport.cert_hash_address.is_some()) {
@@ -320,6 +391,7 @@ impl Realm {
             authentication: Arc::new(move || Box::new(auth.clone())),
             roles,
             meta_api: self.meta_api,
+            disclose_caller: self.disclose_caller,
             ..RealmConfig::default()
         })
     }
