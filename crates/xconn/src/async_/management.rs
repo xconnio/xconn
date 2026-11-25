@@ -6,13 +6,17 @@ use super::{
     types::RegisterRequest,
 };
 use crate::{Error, JSONSerializerSpec, RpcResult, Value};
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 pub const REALM: &str = "io.xconn.mgmt";
 /// Role used by the in-process management session to register its procedures.
 pub const INTERNAL_ROLE: &str = "trusted";
 pub const LIST_REALMS: &str = "io.xconn.mgmt.realm.list";
+pub const CREATE_REALM: &str = "io.xconn.mgmt.realm.create";
+pub const REMOVE_REALM: &str = "io.xconn.mgmt.realm.remove";
 pub const LIST_SESSIONS: &str = "io.xconn.mgmt.session.list";
 pub const KILL_SESSION: &str = "io.xconn.mgmt.session.kill";
+
+type RealmConfigProvider = dyn Fn(&str, &Value) -> Result<RealmConfig, Error> + Send + Sync;
 
 pub struct Management {
     pub session: Session,
@@ -21,6 +25,23 @@ pub struct Management {
 
 impl Management {
     pub async fn start(router: Router, config: Option<RealmConfig>) -> Result<Self, Error> {
+        Self::start_inner(router, config, None).await
+    }
+
+    /// Enable realm creation and removal using the embedding application's configuration format.
+    pub async fn start_with_provisioning(
+        router: Router,
+        config: Option<RealmConfig>,
+        realm_config: impl Fn(&str, &Value) -> Result<RealmConfig, Error> + Send + Sync + 'static,
+    ) -> Result<Self, Error> {
+        Self::start_inner(router, config, Some(Arc::new(realm_config))).await
+    }
+
+    async fn start_inner(
+        router: Router,
+        config: Option<RealmConfig>,
+        realm_config: Option<Arc<RealmConfigProvider>>,
+    ) -> Result<Self, Error> {
         let config = config.unwrap_or_else(|| RealmConfig {
             roles: HashMap::from([(INTERNAL_ROLE.into(), vec![Permission::all()])]),
             disclose_caller: true,
@@ -39,7 +60,7 @@ impl Management {
         };
         let result = Self { session, router };
 
-        if let Err(error) = result.register().await {
+        if let Err(error) = result.register(realm_config).await {
             let _ = result.router.remove_realm(REALM);
             return Err(error);
         }
@@ -47,7 +68,7 @@ impl Management {
         Ok(result)
     }
 
-    async fn register(&self) -> Result<(), Error> {
+    async fn register(&self, realm_config: Option<Arc<RealmConfigProvider>>) -> Result<(), Error> {
         let router = self.router.clone();
         let reply = self
             .session
@@ -158,6 +179,58 @@ impl Management {
             return Err(Error::new(error.uri));
         }
 
+        if let Some(realm_config) = realm_config {
+            let router = self.router.clone();
+            let reply = self
+                .session
+                .execute_register(RegisterRequest::new(CREATE_REALM, move |inv| {
+                    let router = router.clone();
+                    let realm_config = realm_config.clone();
+                    async move {
+                        let [Value::Str(name), spec] = inv.args.as_slice() else {
+                            return RpcResult::error("wamp.error.invalid_argument");
+                        };
+                        if !inv.kwargs.is_empty() || !valid_realm_name(name) || name == REALM {
+                            return RpcResult::error("wamp.error.invalid_argument");
+                        }
+                        let Ok(config) = realm_config(name, spec) else {
+                            return RpcResult::error("wamp.error.invalid_argument");
+                        };
+                        match router.add_managed_realm(name.clone(), config) {
+                            Ok(()) => RpcResult::default(),
+                            Err(_) => RpcResult::error("wamp.error.already_exists"),
+                        }
+                    }
+                }))
+                .await?;
+            if let Some(error) = reply.error {
+                return Err(Error::new(error.uri));
+            }
+
+            let router = self.router.clone();
+            let reply = self
+                .session
+                .execute_register(RegisterRequest::new(REMOVE_REALM, move |inv| {
+                    let router = router.clone();
+                    async move {
+                        let [Value::Str(name)] = inv.args.as_slice() else {
+                            return RpcResult::error("wamp.error.invalid_argument");
+                        };
+                        if !inv.kwargs.is_empty() || !valid_realm_name(name) || name == REALM {
+                            return RpcResult::error("wamp.error.invalid_argument");
+                        }
+                        match router.remove_managed_realm(name) {
+                            Ok(()) => RpcResult::default(),
+                            Err(_) => RpcResult::error("wamp.error.no_such_realm"),
+                        }
+                    }
+                }))
+                .await?;
+            if let Some(error) = reply.error {
+                return Err(Error::new(error.uri));
+            }
+        }
+
         Ok(())
     }
 
@@ -165,4 +238,8 @@ impl Management {
         let _ = self.session.leave().await;
         let _ = self.router.remove_realm(REALM);
     }
+}
+
+fn valid_realm_name(name: &str) -> bool {
+    !name.split('.').any(str::is_empty) && !name.chars().any(|c| c.is_whitespace() || c == '#')
 }

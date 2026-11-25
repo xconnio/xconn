@@ -100,13 +100,14 @@ struct Realm {
     #[cfg(feature = "rpc-streams")]
     rpc_streams: Arc<super::rpc_streams::Registry>,
     config: RealmConfig,
+    managed_name: Option<String>,
     broker: Broker,
     dealer: Dealer,
     clients: HashMap<i64, Client>,
 }
 
 impl Realm {
-    fn new(config: RealmConfig) -> Self {
+    fn new(config: RealmConfig, managed_name: Option<String>) -> Self {
         let mut broker = Broker::new();
         broker.auto_disclose_publisher(config.disclose_publisher);
         let mut dealer = Dealer::new();
@@ -115,6 +116,7 @@ impl Realm {
             #[cfg(feature = "rpc-streams")]
             rpc_streams: Arc::new(super::rpc_streams::Registry::default()),
             config,
+            managed_name,
             broker,
             dealer,
             clients: HashMap::new(),
@@ -388,14 +390,20 @@ impl Router {
     }
 
     pub fn add_realm(&self, name: impl Into<String>, config: RealmConfig) -> Result<(), Error> {
-        let mut realms = self.realms.lock().unwrap();
-        let name = name.into();
+        self.insert_realm(name.into(), config, false)
+    }
 
+    pub(crate) fn add_managed_realm(&self, name: String, config: RealmConfig) -> Result<(), Error> {
+        self.insert_realm(name, config, true)
+    }
+
+    fn insert_realm(&self, name: String, config: RealmConfig, managed: bool) -> Result<(), Error> {
+        let mut realms = self.realms.lock().unwrap();
         if realms.contains_key(&name) {
             return Err(Error::new("realm already exists"));
         }
-
-        realms.insert(name, Arc::new(Mutex::new(Realm::new(config))));
+        let managed_name = managed.then(|| name.clone());
+        realms.insert(name, Arc::new(Mutex::new(Realm::new(config, managed_name))));
         Ok(())
     }
 
@@ -496,14 +504,7 @@ impl Router {
             .ok_or_else(|| Error::new("expected HELLO"))?;
         let realm = self.realms.lock().unwrap().get(&hello.realm).cloned();
         let Some(realm) = realm else {
-            peer.write(serializer.serialize(&wampproto::messages::abort::Abort {
-                details: HashMap::new(),
-                reason: "wamp.error.no_such_realm".into(),
-                args: None,
-                kwargs: None,
-            })?)
-            .await?;
-            return Err(Error::new("no such realm"));
+            return reject_unknown_realm(peer.as_ref(), serializer.as_ref()).await;
         };
         let factory = self
             .authentication_override
@@ -512,20 +513,24 @@ impl Router {
         let auth = factory();
         let meta_api = realm.lock().unwrap().config.meta_api;
         let mut acceptor = Acceptor::new(serializer.clone(), auth).with_session_meta_api(meta_api);
-        let response = acceptor.receive_message(msg.as_ref())?;
-        let mut data = serializer.serialize(response.as_ref())?;
-        peer.write(std::mem::take(&mut data)).await?;
-
-        while acceptor.session_details().is_err() {
+        let mut response = acceptor.receive_message(msg.as_ref())?;
+        let (welcome, details) = loop {
+            let data = serializer.serialize(response.as_ref())?;
+            if let Ok(details) = acceptor.session_details() {
+                break (data, details.clone());
+            }
+            peer.write(data).await?;
+            if response.as_any().is::<wampproto::messages::abort::Abort>() {
+                return Err(Error::new("authentication failed"));
+            }
             let data = tokio::time::timeout(Duration::from_secs(10), peer.read())
                 .await
                 .map_err(|_| Error::new("authentication timeout"))??;
-            let (response, _) = acceptor.receive(data)?;
-            peer.write(response).await?;
-        }
+            let message = serializer.deserialize(data)?;
+            response = acceptor.receive_message(message.as_ref())?;
+        };
 
-        let details = acceptor.session_details()?.clone();
-        self.run_established(realm, peer, serializer, details, authenticated)
+        self.run_established(realm, peer, serializer, details, authenticated, Some(welcome))
             .await
     }
 
@@ -536,35 +541,59 @@ impl Router {
         serializer: Box<dyn Serializer>,
         details: SessionDetails,
         authenticated: Option<tokio::sync::watch::Sender<Option<SessionDetails>>>,
+        welcome: Option<Vec<u8>>,
     ) -> Result<(), Error> {
         let id = details.id;
         let metadata = details.clone();
         let attachment = Arc::new(());
         let (outgoing, mut incoming) = mpsc::channel::<Vec<u8>>(256);
-        {
-            let mut realm = realm.lock().unwrap();
-            realm.broker.add_session(details.clone())?;
+        let network_peer = welcome.is_some();
+        if let Some(welcome) = welcome {
+            // Queue WELCOME first. It will only be sent if the session attaches.
+            outgoing
+                .try_send(welcome)
+                .map_err(|error| Error::new(error.to_string()))?;
+        }
+        let attached = {
+            // A realm may have been removed while this peer was authenticating.
+            let realms = self.realms.lock().unwrap();
+            if realms
+                .get(&details.realm)
+                .is_some_and(|current| Arc::ptr_eq(current, &realm))
+            {
+                let mut realm = realm.lock().unwrap();
+                realm.broker.add_session(details.clone())?;
 
-            if let Err(err) = realm.dealer.add_session(details.clone()) {
-                let _ = realm.broker.remove_session(id);
-                return Err(err.into());
+                if let Err(err) = realm.dealer.add_session(details.clone()) {
+                    let _ = realm.broker.remove_session(id);
+                    return Err(err.into());
+                }
+
+                #[cfg(feature = "rpc-streams")]
+                realm.rpc_streams.attach(id);
+                realm.clients.insert(
+                    id,
+                    Client {
+                        attachment: attachment.clone(),
+                        details,
+                        serializer: serializer.clone(),
+                        outgoing,
+                    },
+                );
+
+                if realm.config.meta_api {
+                    realm.meta_event(id, true);
+                }
+                true
+            } else {
+                false
             }
-
-            #[cfg(feature = "rpc-streams")]
-            realm.rpc_streams.attach(id);
-            realm.clients.insert(
-                id,
-                Client {
-                    attachment: attachment.clone(),
-                    details,
-                    serializer: serializer.clone(),
-                    outgoing,
-                },
-            );
-
-            if realm.config.meta_api {
-                realm.meta_event(id, true);
+        };
+        if !attached {
+            if network_peer {
+                return reject_unknown_realm(peer.as_ref(), serializer.as_ref()).await;
             }
+            return Err(Error::new("no such realm"));
         }
 
         let attachment_guard = Attachment {
@@ -703,6 +732,17 @@ impl Router {
 
         realms.clear();
     }
+}
+
+async fn reject_unknown_realm(peer: &dyn Peer, serializer: &dyn Serializer) -> Result<(), Error> {
+    let abort = wampproto::messages::abort::Abort {
+        details: HashMap::new(),
+        reason: "wamp.error.no_such_realm".into(),
+        args: None,
+        kwargs: None,
+    };
+    peer.write(serializer.serialize(&abort)?).await?;
+    Err(Error::new("no such realm"))
 }
 
 pub fn serializer(id: wampproto::transports::rawsocket::SerializerID) -> Box<dyn Serializer> {
@@ -996,13 +1036,27 @@ impl Router {
     }
 
     pub fn remove_realm(&self, name: &str) -> Result<(), Error> {
-        let realm = self
-            .realms
-            .lock()
-            .unwrap()
-            .remove(name)
-            .ok_or_else(|| Error::new("no such realm"))?;
-        let mut realm = realm.lock().unwrap();
+        self.remove_realm_inner(name, false)
+    }
+
+    pub(crate) fn remove_managed_realm(&self, name: &str) -> Result<(), Error> {
+        self.remove_realm_inner(name, true)
+    }
+
+    fn remove_realm_inner(&self, name: &str, managed_only: bool) -> Result<(), Error> {
+        let mut realms = self.realms.lock().unwrap();
+        let handle = realms.get(name).cloned().ok_or_else(|| Error::new("no such realm"))?;
+        let mut realm = handle.lock().unwrap();
+        let managed = realm.managed_name.as_deref() == Some(name);
+        if managed_only && !managed {
+            return Err(Error::new("no such managed realm"));
+        }
+        if managed {
+            realms.retain(|_, realm| !Arc::ptr_eq(realm, &handle));
+        } else {
+            realms.remove(name);
+        }
+        drop(realms);
         let ids: Vec<_> = realm.clients.keys().copied().collect();
 
         for id in ids {
@@ -1129,7 +1183,7 @@ impl Router {
         tokio::spawn(async move {
             let peer: Arc<dyn Peer> = Arc::from(server);
             let _ = router
-                .run_established(realm, peer, serializer, metadata, Some(ready))
+                .run_established(realm, peer, serializer, metadata, Some(ready), None)
                 .await;
         });
         waiting

@@ -9,9 +9,12 @@ use wampproto::{
     messages::types::Error,
     routing::MatchPolicy,
 };
-use xconn::async_::{
-    management,
-    router::{Permission as Rule, RealmConfig, Router},
+use xconn::{
+    Value,
+    async_::{
+        management,
+        router::{Permission as Rule, RealmConfig, Router},
+    },
 };
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -42,6 +45,29 @@ struct Realm {
     roles: Vec<Role>,
     #[serde(default)]
     meta_api: bool,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RealmProvision {
+    roles: Vec<Role>,
+    #[serde(default)]
+    meta_api: bool,
+    authenticators: Authenticators,
+}
+
+pub fn provision_realm(name: &str, spec: &Value) -> std::result::Result<RealmConfig, xconn::Error> {
+    let provision: RealmProvision = serde_yaml_ng::to_value(spec)
+        .and_then(serde_yaml_ng::from_value)
+        .map_err(|error| xconn::Error::new(error.to_string()))?;
+    let realm = Realm {
+        name: name.into(),
+        roles: provision.roles,
+        meta_api: provision.meta_api,
+    };
+    validate_realms(std::slice::from_ref(&realm), &provision.authenticators, false)
+        .and_then(|()| realm.router_config(provision.authenticators))
+        .map_err(|error| xconn::Error::new(error.to_string()))
 }
 
 #[derive(Deserialize)]
@@ -179,35 +205,7 @@ impl Config {
             return Err("at least one realm and transport are required".into());
         }
 
-        let mut realms = HashMap::new();
-
-        for realm in &self.realms {
-            if !name(&realm.name) || realm.name.split('.').any(str::is_empty) || realms.contains_key(&realm.name) {
-                return Err("invalid or duplicate realm".into());
-            }
-
-            let mut roles = HashSet::new();
-
-            for role in &realm.roles {
-                if !name(&role.name) || !roles.insert(role.name.clone()) {
-                    return Err("invalid or duplicate role".into());
-                }
-
-                if self.config.management && realm.name == management::REALM && role.name == management::INTERNAL_ROLE {
-                    return Err(format!("role {} is reserved for the internal management session", role.name).into());
-                }
-
-                for permission in &role.permissions {
-                    matching(&permission.matching)?;
-                }
-            }
-
-            realms.insert(realm.name.clone(), roles);
-        }
-
-        if self.config.management && !realms.contains_key(management::REALM) {
-            return Err(format!("config.management requires a {} realm", management::REALM).into());
-        }
+        validate_realms(&self.realms, &self.authenticators, self.config.management)?;
 
         for transport in &self.transports {
             if transport.kind != "webtransport" && (transport.path.is_some() || transport.cert_hash_address.is_some()) {
@@ -264,58 +262,6 @@ impl Config {
             }
         }
 
-        for (method, credentials) in self.authenticators.entries() {
-            let mut seen = HashSet::new();
-
-            for item in credentials {
-                if !name(&item.authid) || !realms.get(&item.realm).is_some_and(|r| r.contains(&item.role)) {
-                    return Err(
-                        "authenticator must reference an existing realm and role and have a nonempty authid".into(),
-                    );
-                }
-
-                if self.config.management && item.realm == management::REALM && method == "anonymous" {
-                    return Err("the management realm requires authenticated credentials".into());
-                }
-
-                if !seen.insert((&item.realm, if method == "anonymous" { "" } else { &item.authid })) {
-                    return Err("duplicate authenticator identity".into());
-                }
-
-                match method {
-                    "ticket" if item.ticket.is_empty() => return Err("ticket is required".into()),
-                    "wampcra" => {
-                        if item.secret.is_empty() {
-                            return Err("CRA secret is required".into());
-                        }
-
-                        item.cra()?;
-                    }
-                    "cryptosign"
-                        if item.authorized_keys.is_empty()
-                            || item
-                                .authorized_keys
-                                .iter()
-                                .any(|s| s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit())) =>
-                    {
-                        return Err("cryptosign requires 32-byte hexadecimal public keys".into());
-                    }
-                    _ => {}
-                }
-            }
-        }
-
-        for realm in &self.realms {
-            if !self
-                .authenticators
-                .entries()
-                .iter()
-                .any(|(_, items)| items.iter().any(|i| i.realm == realm.name))
-            {
-                return Err(format!("realm {} has no authenticators", realm.name).into());
-            }
-        }
-
         Ok(())
     }
 
@@ -334,33 +280,7 @@ impl Config {
         let mut management_config = None;
 
         for realm in &self.realms {
-            let auth = self.authenticators.for_realm(&realm.name);
-            let mut roles = HashMap::new();
-
-            for role in &realm.roles {
-                let rules = role
-                    .permissions
-                    .iter()
-                    .map(|p| {
-                        Ok(Rule {
-                            uri: p.uri.clone(),
-                            matching: matching(&p.matching)?,
-                            call: p.allow_call,
-                            register: p.allow_register,
-                            publish: p.allow_publish,
-                            subscribe: p.allow_subscribe,
-                        })
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                roles.insert(role.name.clone(), rules);
-            }
-
-            let mut config = RealmConfig {
-                authentication: Arc::new(move || Box::new(auth.clone())),
-                roles,
-                meta_api: realm.meta_api,
-                ..RealmConfig::default()
-            };
+            let mut config = realm.router_config(self.authenticators.for_realm(&realm.name))?;
             if self.config.management && realm.name == management::REALM {
                 config.roles.insert(management::INTERNAL_ROLE.into(), vec![Rule::all()]);
                 config.disclose_caller = true;
@@ -372,6 +292,122 @@ impl Config {
 
         Ok((router, management_config))
     }
+}
+
+impl Realm {
+    fn router_config(&self, auth: Authenticators) -> Result<RealmConfig> {
+        let mut roles = HashMap::new();
+
+        for role in &self.roles {
+            let rules = role
+                .permissions
+                .iter()
+                .map(|p| {
+                    Ok(Rule {
+                        uri: p.uri.clone(),
+                        matching: matching(&p.matching)?,
+                        call: p.allow_call,
+                        register: p.allow_register,
+                        publish: p.allow_publish,
+                        subscribe: p.allow_subscribe,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?;
+            roles.insert(role.name.clone(), rules);
+        }
+
+        Ok(RealmConfig {
+            authentication: Arc::new(move || Box::new(auth.clone())),
+            roles,
+            meta_api: self.meta_api,
+            ..RealmConfig::default()
+        })
+    }
+}
+
+fn validate_realms(realm_configs: &[Realm], authenticators: &Authenticators, management_enabled: bool) -> Result<()> {
+    let mut realms = HashMap::new();
+
+    for realm in realm_configs {
+        if !name(&realm.name) || realm.name.split('.').any(str::is_empty) || realms.contains_key(&realm.name) {
+            return Err("invalid or duplicate realm".into());
+        }
+
+        let mut roles = HashSet::new();
+
+        for role in &realm.roles {
+            if !name(&role.name) || !roles.insert(role.name.clone()) {
+                return Err("invalid or duplicate role".into());
+            }
+
+            if management_enabled && realm.name == management::REALM && role.name == management::INTERNAL_ROLE {
+                return Err(format!("role {} is reserved for the internal management session", role.name).into());
+            }
+
+            for permission in &role.permissions {
+                matching(&permission.matching)?;
+            }
+        }
+
+        realms.insert(realm.name.clone(), roles);
+    }
+
+    if management_enabled && !realms.contains_key(management::REALM) {
+        return Err(format!("config.management requires a {} realm", management::REALM).into());
+    }
+
+    for (method, credentials) in authenticators.entries() {
+        let mut seen = HashSet::new();
+
+        for item in credentials {
+            if !name(&item.authid) || !realms.get(&item.realm).is_some_and(|r| r.contains(&item.role)) {
+                return Err(
+                    "authenticator must reference an existing realm and role and have a nonempty authid".into(),
+                );
+            }
+
+            if management_enabled && item.realm == management::REALM && method == "anonymous" {
+                return Err("the management realm requires authenticated credentials".into());
+            }
+
+            if !seen.insert((&item.realm, if method == "anonymous" { "" } else { &item.authid })) {
+                return Err("duplicate authenticator identity".into());
+            }
+
+            match method {
+                "ticket" if item.ticket.is_empty() => return Err("ticket is required".into()),
+                "wampcra" => {
+                    if item.secret.is_empty() {
+                        return Err("CRA secret is required".into());
+                    }
+
+                    item.cra()?;
+                }
+                "cryptosign"
+                    if item.authorized_keys.is_empty()
+                        || item
+                            .authorized_keys
+                            .iter()
+                            .any(|s| s.len() != 64 || !s.bytes().all(|b| b.is_ascii_hexdigit())) =>
+                {
+                    return Err("cryptosign requires 32-byte hexadecimal public keys".into());
+                }
+                _ => {}
+            }
+        }
+    }
+
+    for realm in realm_configs {
+        if !authenticators
+            .entries()
+            .iter()
+            .any(|(_, items)| items.iter().any(|i| i.realm == realm.name))
+        {
+            return Err(format!("realm {} has no authenticators", realm.name).into());
+        }
+    }
+
+    Ok(())
 }
 
 impl Credential {
