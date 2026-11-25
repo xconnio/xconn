@@ -9,7 +9,10 @@ use wampproto::{
     messages::types::Error,
     routing::MatchPolicy,
 };
-use xconn::async_::router::{Permission as Rule, RealmConfig, Router};
+use xconn::async_::{
+    management,
+    router::{Permission as Rule, RealmConfig, Router},
+};
 
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -168,13 +171,6 @@ impl Config {
             return Err("only configuration version '1' is supported".into());
         }
 
-        if self.config.management {
-            return Err(
-                "config.management is not supported by this executable; use the protected library management API"
-                    .into(),
-            );
-        }
-
         if !["", "trace", "debug", "info", "warn", "error"].contains(&self.config.loglevel.as_str()) {
             return Err("invalid loglevel".into());
         }
@@ -197,12 +193,20 @@ impl Config {
                     return Err("invalid or duplicate role".into());
                 }
 
+                if self.config.management && realm.name == management::REALM && role.name == management::INTERNAL_ROLE {
+                    return Err(format!("role {} is reserved for the internal management session", role.name).into());
+                }
+
                 for permission in &role.permissions {
                     matching(&permission.matching)?;
                 }
             }
 
             realms.insert(realm.name.clone(), roles);
+        }
+
+        if self.config.management && !realms.contains_key(management::REALM) {
+            return Err(format!("config.management requires a {} realm", management::REALM).into());
         }
 
         for transport in &self.transports {
@@ -270,6 +274,10 @@ impl Config {
                     );
                 }
 
+                if self.config.management && item.realm == management::REALM && method == "anonymous" {
+                    return Err("the management realm requires authenticated credentials".into());
+                }
+
                 if !seen.insert((&item.realm, if method == "anonymous" { "" } else { &item.authid })) {
                     return Err("duplicate authenticator identity".into());
                 }
@@ -321,11 +329,12 @@ impl Config {
         }
     }
 
-    pub fn router(&self) -> Result<Router> {
+    pub fn router(&self) -> Result<(Router, Option<RealmConfig>)> {
         let router = Router::new();
+        let mut management_config = None;
 
         for realm in &self.realms {
-            let auth = self.authenticators.clone();
+            let auth = self.authenticators.for_realm(&realm.name);
             let mut roles = HashMap::new();
 
             for role in &realm.roles {
@@ -346,18 +355,22 @@ impl Config {
                 roles.insert(role.name.clone(), rules);
             }
 
-            router.add_realm(
-                &realm.name,
-                RealmConfig {
-                    authentication: Arc::new(move || Box::new(auth.clone())),
-                    roles,
-                    meta_api: realm.meta_api,
-                    ..RealmConfig::default()
-                },
-            )?;
+            let mut config = RealmConfig {
+                authentication: Arc::new(move || Box::new(auth.clone())),
+                roles,
+                meta_api: realm.meta_api,
+                ..RealmConfig::default()
+            };
+            if self.config.management && realm.name == management::REALM {
+                config.roles.insert(management::INTERNAL_ROLE.into(), vec![Rule::all()]);
+                config.disclose_caller = true;
+                management_config = Some(config);
+            } else {
+                router.add_realm(&realm.name, config)?;
+            }
         }
 
-        Ok(router)
+        Ok((router, management_config))
     }
 }
 
@@ -389,6 +402,16 @@ impl Credential {
 }
 
 impl Authenticators {
+    fn for_realm(&self, realm: &str) -> Self {
+        let credentials = |items: &[Credential]| items.iter().filter(|item| item.realm == realm).cloned().collect();
+        Self {
+            anonymous: credentials(&self.anonymous),
+            ticket: credentials(&self.ticket),
+            wampcra: credentials(&self.wampcra),
+            cryptosign: credentials(&self.cryptosign),
+        }
+    }
+
     fn entries(&self) -> [(&str, &Vec<Credential>); 4] {
         [
             ("anonymous", &self.anonymous),

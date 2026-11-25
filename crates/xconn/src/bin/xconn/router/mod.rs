@@ -5,6 +5,7 @@ mod listener;
 use clap::Subcommand;
 use config::{Config, Result};
 use std::path::PathBuf;
+use xconn::async_::management::Management;
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -55,7 +56,11 @@ pub async fn run(command: Command, file: PathBuf) -> Result<()> {
         return Ok(());
     }
 
-    let router = config.router()?;
+    let (router, management_config) = config.router()?;
+    let _management = match management_config {
+        Some(config) => Some(Management::start(router.clone(), Some(config)).await?),
+        None => None,
+    };
     let mut listeners = Vec::new();
 
     for transport in config.transports {

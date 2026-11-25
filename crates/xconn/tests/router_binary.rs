@@ -775,3 +775,185 @@ async fn webtransport_routes_rpc_streams_to_quic_using_the_published_certificate
     .await
     .unwrap();
 }
+
+fn management_config(files: &Files) -> PathBuf {
+    let path = files.config("websocket", "json");
+    let text = std::fs::read_to_string(&path)
+        .unwrap()
+        .replace("management: false", "management: true")
+        .replace(
+            "transports:",
+            r#"  - name: io.xconn.mgmt
+    roles:
+      - name: admin
+        permissions:
+          - uri: io.xconn.mgmt.
+            match: prefix
+            allow_call: true
+      - name: viewer
+        permissions:
+          - uri: io.xconn.mgmt.realm.list
+            match: exact
+            allow_call: true
+transports:"#,
+        );
+    std::fs::write(
+        &path,
+        format!(
+            "{text}  ticket:\n    - {{authid: admin, realm: io.xconn.mgmt, role: admin, ticket: admin-secret}}\n    - {{authid: viewer, realm: io.xconn.mgmt, role: viewer, ticket: viewer-secret}}\n"
+        ),
+    )
+    .unwrap();
+    path
+}
+
+#[test]
+fn management_configuration_rejects_anonymous_and_reserved_roles() {
+    let files = Files::new();
+    let path = management_config(&files);
+    let text = std::fs::read_to_string(&path).unwrap().replace("\r\n", "\n");
+    let validate = || {
+        std::process::Command::new(env!("CARGO_BIN_EXE_xconn"))
+            .args(["router", "validate", "--config"])
+            .arg(&path)
+            .output()
+            .unwrap()
+    };
+    assert!(validate().status.success());
+    std::fs::write(
+        &path,
+        text.replace("role: anonymous", "role: admin")
+            .replace("realm: realm\n", "realm: io.xconn.mgmt\n"),
+    )
+    .unwrap();
+    let rejected = validate();
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("requires authenticated credentials"));
+
+    std::fs::write(
+        &path,
+        text.replace("name: admin", "name: trusted")
+            .replace("role: admin", "role: trusted"),
+    )
+    .unwrap();
+    let rejected = validate();
+    assert!(!rejected.status.success());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("reserved for the internal management session"));
+}
+
+#[tokio::test]
+async fn executable_exposes_management_only_to_authorized_roles() {
+    use wampproto::authenticators::ticket::TicketAuthenticator;
+    use xconn::async_::management::{KILL_SESSION, LIST_REALMS, LIST_SESSIONS, REALM};
+
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let files = Files::new();
+        let path = management_config(&files);
+        let (mut child, address) = start(&path).await;
+        let url = format!("ws://{address}");
+        let ticket_client = |authid, ticket| {
+            Client::new(
+                Box::new(JSONSerializerSpec),
+                Box::new(TicketAuthenticator::new(authid, ticket, Default::default())),
+            )
+        };
+        assert!(client(Box::new(JSONSerializerSpec)).connect(&url, REALM).await.is_err());
+        assert!(ticket_client("admin", "wrong").connect(&url, REALM).await.is_err());
+
+        // The client proposes anonymous first. Only ticket is configured for this realm.
+        {
+            use futures_util::{SinkExt, StreamExt};
+            use wampproto::messages::{challenge::Challenge, welcome::Welcome};
+
+            let request = tungstenite::ClientRequestBuilder::new(url.parse().unwrap())
+                .with_sub_protocol("wamp.2.json");
+            let (mut socket, _) = tokio_tungstenite::connect_async(request).await.unwrap();
+            socket
+                .send(tungstenite::Message::Text(
+                    r#"[1,"io.xconn.mgmt",{"authid":"admin","authmethods":["anonymous","ticket"],"roles":{"caller":{}}}]"#
+                        .into(),
+                ))
+                .await
+                .unwrap();
+            let serializer = JSONSerializerSpec.serializer();
+            let reply = socket.next().await.unwrap().unwrap().into_data().to_vec();
+            let challenge = serializer.deserialize(reply).unwrap();
+            assert_eq!(challenge.as_any().downcast_ref::<Challenge>().unwrap().auth_method, "ticket");
+            socket
+                .send(tungstenite::Message::Text(r#"[5,"admin-secret",{}]"#.into()))
+                .await
+                .unwrap();
+            let reply = socket.next().await.unwrap().unwrap().into_data().to_vec();
+            assert!(serializer.deserialize(reply).unwrap().as_any().is::<Welcome>());
+            socket.close(None).await.unwrap();
+        }
+
+        let viewer = ticket_client("viewer", "viewer-secret")
+            .connect(&url, REALM)
+            .await
+            .unwrap();
+        let listed = viewer.execute_call(CallRequest::new(LIST_REALMS)).await.unwrap();
+        let realms = listed.args.unwrap();
+        let Value::List(realms) = &realms[0] else {
+            panic!("expected a realm list");
+        };
+        assert!(realms.contains(&Value::Str("realm".into())));
+        assert!(realms.contains(&Value::Str(REALM.into())));
+
+        let user = client(Box::new(JSONSerializerSpec))
+            .connect(&url, "realm")
+            .await
+            .unwrap();
+        let kill = || CallRequest::new(KILL_SESSION).arg("realm").arg(user.details().id());
+        let denied = viewer.execute_call(kill()).await.unwrap();
+        assert_eq!(denied.error.unwrap().uri, "wamp.error.authorization_failed");
+
+        let admin = ticket_client("admin", "admin-secret")
+            .connect(&url, REALM)
+            .await
+            .unwrap();
+        let listed = admin
+            .execute_call(CallRequest::new(LIST_SESSIONS).arg("realm"))
+            .await
+            .unwrap();
+        assert_eq!(listed.kwargs.unwrap()["total"], Value::Int(1));
+        let self_kill = CallRequest::new(KILL_SESSION).arg(REALM).arg(admin.details().id());
+        assert_eq!(
+            admin.execute_call(self_kill).await.unwrap().error.unwrap().uri,
+            "wamp.error.invalid_argument"
+        );
+        assert!(admin.execute_call(kill()).await.unwrap().error.is_none());
+        user.wait_disconnect().await;
+        child.kill().await.unwrap();
+    })
+    .await
+    .unwrap();
+}
+
+#[tokio::test]
+async fn management_procedures_are_absent_when_disabled() {
+    use wampproto::authenticators::ticket::TicketAuthenticator;
+    use xconn::async_::management::{LIST_REALMS, REALM};
+
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let files = Files::new();
+        let path = management_config(&files);
+        let text = std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("management: true", "management: false");
+        std::fs::write(&path, text).unwrap();
+        let (mut child, address) = start(&path).await;
+        let admin = Client::new(
+            Box::new(JSONSerializerSpec),
+            Box::new(TicketAuthenticator::new("admin", "admin-secret", Default::default())),
+        )
+        .connect(&format!("ws://{address}"), REALM)
+        .await
+        .unwrap();
+        let reply = admin.execute_call(CallRequest::new(LIST_REALMS)).await.unwrap();
+        assert_eq!(reply.error.unwrap().uri, "wamp.error.no_such_procedure");
+        child.kill().await.unwrap();
+    })
+    .await
+    .unwrap();
+}
