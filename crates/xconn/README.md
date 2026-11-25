@@ -134,6 +134,38 @@ return the same error, so use the helper only for calls that are safe to repeat.
 The timeout covers the entire operation, including the wait for a reply after
 the router dispatches the call.
 
+### Load realms from a WAMP service
+
+An optional `realm_source` loads a realm inventory from a WAMP service on a
+statically configured control realm. For example, a Deskconn deployment can
+use:
+
+```yaml
+realm_source:
+  control_realm: com.deskconn
+  role: 'xconnio:deskconn:router'
+  list: com.deskconn.realm.list
+  add: com.deskconn.realm.add
+  remove: com.deskconn.realm.remove
+```
+
+Set `disclose_caller: true` on the control realm. Give the source role
+permission to call `list` and register `add` and `remove`, and leave it
+without network credentials. Give the inventory service permission to
+register `list` and call `add` and `remove`.
+
+The list call takes no arguments and returns one positional argument
+containing a list of `{realm, authid}` records. Both update procedures take
+the realm and auth ID as positional arguments.
+
+XConn opens its listeners so the inventory service can connect, then waits up
+to 30 seconds for the initial inventory. It prints `Ready` after applying the
+inventory. Updates during the fetch take precedence over the snapshot. A
+pending removal applies only to a matching realm and auth ID.
+
+The router holds sourced realms in memory and currently rejects network joins
+to them.
+
 ### Router management
 
 The router executable can expose the library's management WAMP procedures.
