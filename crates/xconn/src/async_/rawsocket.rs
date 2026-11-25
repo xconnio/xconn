@@ -168,14 +168,23 @@ pub async fn server_handshake(mut stream: BoxStream) -> Result<(Box<dyn Peer>, S
         .read_exact(&mut raw)
         .await
         .map_err(|e| Error::new(e.to_string()))?;
-    server_handshake_header(stream, raw).await
+    server_handshake_header(stream, raw, &[]).await
 }
 
 pub(crate) async fn server_handshake_header(
     mut stream: BoxStream,
     raw: [u8; 4],
+    serializers: &[SerializerID],
 ) -> Result<(Box<dyn Peer>, SerializerID), Error> {
     let hs = rs::receive_handshake(&raw)?;
+    if !serializers.is_empty() && !serializers.iter().any(|id| *id as u8 == hs.serializer_id() as u8) {
+        stream
+            .write_all(&[rs::MAGIC, 0x10, 0, 0])
+            .await
+            .map_err(|e| Error::new(e.to_string()))?;
+        stream.shutdown().await.map_err(|e| Error::new(e.to_string()))?;
+        return Err(Error::new("serializer disabled"));
+    }
     let response = rs::send_handshake(&rs::Handshake::new(hs.serializer_id(), rs::DEFAULT_MAX_MSG_SIZE))?;
     stream
         .write_all(&response)

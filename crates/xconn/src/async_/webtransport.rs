@@ -12,6 +12,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     sync::{Mutex, mpsc, watch},
 };
+use wampproto::transports::rawsocket::SerializerID;
 pub use webtrans_quion as backend;
 pub type ClientConfig = backend::Client;
 
@@ -200,7 +201,7 @@ impl Connection {
 pub struct Listener {
     pub local_addr: SocketAddr,
     pub certificate: Vec<u8>,
-    raw: Mutex<mpsc::Receiver<AuthenticatedStream>>,
+    raw: Option<Mutex<mpsc::Receiver<AuthenticatedStream>>>,
     connections: Arc<StdMutex<Vec<backend::Session>>>,
     task: tokio::task::JoinHandle<()>,
 }
@@ -215,8 +216,34 @@ impl Listener {
     pub async fn bind(router: Router, addr: SocketAddr) -> Result<Self, Error> {
         let generated =
             rcgen::generate_simple_self_signed(vec!["localhost".into()]).map_err(|e| Error::new(e.to_string()))?;
-        let certificate = generated.cert.der().to_vec();
         let key = rustls::pki_types::PrivatePkcs8KeyDer::from(generated.key_pair.serialize_der());
+        Self::with_certificate(router, addr, vec![generated.cert.der().clone()], key.into(), None).await
+    }
+
+    pub async fn with_certificate(
+        router: Router,
+        addr: SocketAddr,
+        certificates: Vec<rustls::pki_types::CertificateDer<'static>>,
+        key: rustls::pki_types::PrivateKeyDer<'static>,
+        path: Option<String>,
+    ) -> Result<Self, Error> {
+        Self::with_certificate_and_serializers(router, addr, certificates, key, path, Vec::new()).await
+    }
+
+    /// Restrict the serializers accepted during WAMP stream negotiation.
+    /// An empty list allows all supported serializers.
+    pub async fn with_certificate_and_serializers(
+        router: Router,
+        addr: SocketAddr,
+        certificates: Vec<rustls::pki_types::CertificateDer<'static>>,
+        key: rustls::pki_types::PrivateKeyDer<'static>,
+        path: Option<String>,
+        serializers: Vec<SerializerID>,
+    ) -> Result<Self, Error> {
+        let certificate = certificates
+            .first()
+            .ok_or_else(|| Error::new("empty certificate chain"))?
+            .to_vec();
         let mut transport = backend::quion::TransportConfig::default();
         transport
             .set_reset_stream_at(true)
@@ -230,9 +257,9 @@ impl Listener {
             .with_addr(addr)
             .with_handshake_timeout(std::time::Duration::from_secs(10))
             .with_max_pending_handshakes(std::num::NonZeroUsize::new(256).unwrap())
-            .with_certificate(vec![generated.cert.der().clone()], key.into())
+            .with_certificate(certificates, key)
             .map_err(|e| Error::new(e.to_string()))?;
-        Self::with_server(router, server, certificate).await
+        Self::bind_with_server(router, server, certificate, path, serializers).await
     }
 
     pub async fn with_server(router: Router, server: backend::Server, certificate: Vec<u8>) -> Result<Self, Error> {
@@ -242,14 +269,25 @@ impl Listener {
     /// Restrict CONNECT requests to the configured path before accepting a session.
     pub async fn with_server_path(
         router: Router,
+        server: backend::Server,
+        certificate: Vec<u8>,
+        path: Option<String>,
+    ) -> Result<Self, Error> {
+        Self::bind_with_server(router, server, certificate, path, Vec::new()).await
+    }
+
+    async fn bind_with_server(
+        router: Router,
         mut server: backend::Server,
         certificate: Vec<u8>,
         path: Option<String>,
+        serializers: Vec<SerializerID>,
     ) -> Result<Self, Error> {
         let local_addr = server.local_addr().map_err(|e| Error::new(e.to_string()))?;
         let (tx, raw) = mpsc::channel(64);
         let connections = Arc::new(StdMutex::new(Vec::<backend::Session>::new()));
         let peers = connections.clone();
+        let serializers: Arc<[SerializerID]> = serializers.into();
         let task = tokio::spawn(async move {
             let mut handlers = tokio::task::JoinSet::new();
 
@@ -262,12 +300,14 @@ impl Listener {
                             None => break,
                         };
                         if path.as_ref().is_some_and(|path| request.url().path() != path) {
-                            // Dropping a request rejects it without exposing WAMP or raw streams.
-                            drop(request);
+                            handlers.spawn(async move {
+                                let _ = request.close(tungstenite::http::StatusCode::NOT_FOUND).await;
+                            });
                             continue;
                         }
                         let router = router.clone();
                         let raw = tx.clone();
+                        let serializers = serializers.clone();
                         let peers = peers.clone();
                         handlers.spawn(async move {
                             let Ok(connection) = request.ok().await else {
@@ -288,6 +328,7 @@ impl Listener {
                                         let Ok((send, recv)) = incoming else { break };
                                         let router = router.clone();
                                         let raw = raw.clone();
+                                        let serializers = serializers.clone();
                                         let auth = authenticated.clone();
                                         streams.spawn(async move {
                                             let _ = super::multiplex::serve_stream(
@@ -295,6 +336,7 @@ impl Listener {
                                                 Box::new(Stream { send, recv }),
                                                 auth,
                                                 raw,
+                                                &serializers,
                                             )
                                                 .await;
                                         });
@@ -311,14 +353,19 @@ impl Listener {
         Ok(Self {
             local_addr,
             certificate,
-            raw: Mutex::new(raw),
+            raw: Some(Mutex::new(raw)),
             connections,
             task,
         })
     }
 
+    /// Reject unassociated raw streams while continuing to accept WAMP and RPC streams.
+    pub fn disable_raw_streams(&mut self) {
+        self.raw = None;
+    }
+
     pub async fn accept_raw(&self) -> Option<AuthenticatedStream> {
-        self.raw.lock().await.recv().await
+        self.raw.as_ref()?.lock().await.recv().await
     }
 
     pub fn close(&self) {

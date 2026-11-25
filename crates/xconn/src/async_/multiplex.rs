@@ -8,7 +8,7 @@ use tokio::{
     io::{AsyncBufReadExt, AsyncReadExt, BufReader},
     sync::{mpsc, watch},
 };
-use wampproto::types::SessionDetails;
+use wampproto::{transports::rawsocket::SerializerID, types::SessionDetails};
 
 // Only QUIC and WebTransport expose unassociated raw streams.
 #[cfg_attr(not(any(feature = "quic", feature = "webtransport")), allow(dead_code))]
@@ -22,6 +22,7 @@ pub async fn serve_stream(
     stream: BoxStream,
     authenticated: watch::Sender<Option<SessionDetails>>,
     raw: mpsc::Sender<AuthenticatedStream>,
+    serializers: &[SerializerID],
 ) -> Result<(), Error> {
     let mut stream = BufReader::new(stream);
     let first = tokio::time::timeout(Duration::from_secs(10), stream.fill_buf())
@@ -50,7 +51,7 @@ pub async fn serve_stream(
         }
         let (peer, id) = tokio::time::timeout(
             Duration::from_secs(10),
-            server_handshake_header(Box::new(stream), header),
+            server_handshake_header(Box::new(stream), header, serializers),
         )
         .await
         .map_err(|_| Error::new("stream handshake timeout"))??;

@@ -190,7 +190,7 @@ pub async fn serve(router: Router, stream: BoxStream) -> Result<(), Error> {
                 let (authenticated, raw) = (authenticated.clone(), raw.clone());
                 streams.spawn(async move {
                     #[cfg(feature = "rpc-streams")]
-                    let _ = super::multiplex::serve_stream(router, stream, authenticated, raw).await;
+                    let _ = super::multiplex::serve_stream(router, stream, authenticated, raw, &[]).await;
                     #[cfg(not(feature = "rpc-streams"))]
                     serve_wamp_stream(router, stream).await;
                 });

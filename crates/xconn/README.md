@@ -88,15 +88,39 @@ transports:
   - type: quic
     listener: udp
     address: 127.0.0.1:8081
+    serializers: [cbor, msgpack]
     tls:
       certificate: cert.pem
       key: key.pem
 ```
 
-Use an IP socket address. QUIC negotiates a serializer per WAMP stream.
-QUIC requires a PEM certificate and private key. For local development, use a
+Use an IP socket address. Each WAMP stream proposes a serializer, and the
+listener rejects proposals outside its `serializers` list. Omitting the list
+allows JSON, CBOR, and MessagePack on QUIC and WebTransport. QUIC requires a
+PEM certificate and private key. For local development, use a
 self-signed certificate for the hostname you dial and trust that certificate
 in the client.
+
+WebTransport also uses a UDP listener and negotiates a serializer per WAMP
+stream. The default CONNECT path is `/wamp`, which can be changed with `path`.
+
+```yaml
+transports:
+  - type: webtransport
+    listener: udp
+    address: 127.0.0.1:8082
+    serializers: [cbor]
+    path: /wamp
+    cert_hash_address: 127.0.0.1:8083
+```
+
+With no `tls` configuration, WebTransport uses a short-lived self-signed
+certificate generated on startup. The optional `cert_hash_address` serves
+`GET /wt-cert-hash` over HTTP with a base64 SHA-256 fingerprint in the JSON
+`hash` field. Serve this endpoint to browsers through a trusted HTTPS reverse
+proxy so they can use the fingerprint with `serverCertificateHashes`. Restart
+the router before its generated certificate expires. For a CA-issued
+certificate, supply `tls` as in the QUIC example and omit `cert_hash_address`.
 
 For Bash completion with a Cargo-installed CLI, add
 `source <(xconn completions bash)` to your `~/.bashrc`.
