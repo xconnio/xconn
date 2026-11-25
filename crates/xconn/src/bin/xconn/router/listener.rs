@@ -13,19 +13,72 @@ use tokio::{
 use tokio_rustls::TlsAcceptor;
 use wampproto::transports::rawsocket::{self as rs, SerializerID};
 use xconn::async_::{
+    quic,
     rawsocket::{BoxStream, RawSocketPeer},
     router::{Router, serializer},
     websocket::WebSocketPeer,
 };
 
-pub struct Listener {
-    pub address: String,
+pub enum Listener {
+    Stream(StreamListener),
+    Quic(quic::Listener),
+}
+
+impl Listener {
+    pub async fn bind(router: Router, config: Transport) -> Result<Self> {
+        if config.kind == "quic" {
+            let tls = config.tls.as_ref().ok_or("QUIC requires a TLS certificate and key")?;
+            let (chain, key) = tls_identity(tls)?;
+            let mut listener = quic::Listener::with_certificate(
+                router,
+                config.address.parse()?,
+                chain.into_iter().map(|cert| cert.to_vec()).collect(),
+                key.secret_der().to_vec(),
+            )
+            .await?;
+            listener.disable_raw_streams();
+            return Ok(Self::Quic(listener));
+        }
+        Ok(Self::Stream(StreamListener::bind(router, config).await?))
+    }
+
+    pub fn address(&self) -> String {
+        match self {
+            Self::Stream(listener) => listener.address.clone(),
+            Self::Quic(listener) => listener.local_addr.to_string(),
+        }
+    }
+
+    pub fn stop(&self) {
+        if let Self::Stream(listener) = self {
+            listener.stop.send_replace(true);
+        }
+    }
+
+    pub async fn finish(self) {
+        match self {
+            Self::Stream(mut listener) => {
+                if let Some(task) = listener.task.take() {
+                    let _ = task.await;
+                }
+            }
+            Self::Quic(listener) => {
+                // Keep the endpoint alive while WAMP GOODBYE is written and delivered.
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                drop(listener);
+            }
+        }
+    }
+}
+
+pub struct StreamListener {
+    address: String,
     stop: watch::Sender<bool>,
     task: Option<JoinHandle<()>>,
     unix_path: Option<PathBuf>,
 }
 
-impl Drop for Listener {
+impl Drop for StreamListener {
     fn drop(&mut self) {
         self.stop.send_replace(true);
 
@@ -63,11 +116,21 @@ impl Socket {
     }
 }
 
-pub fn tls_config(tls: &Tls) -> Result<Arc<rustls::ServerConfig>> {
+fn tls_identity(
+    tls: &Tls,
+) -> Result<(
+    Vec<rustls::pki_types::CertificateDer<'static>>,
+    rustls::pki_types::PrivateKeyDer<'static>,
+)> {
     let certificates = rustls_pemfile::certs(&mut std::io::BufReader::new(std::fs::File::open(&tls.certificate)?))
         .collect::<std::io::Result<Vec<_>>>()?;
     let key = rustls_pemfile::private_key(&mut std::io::BufReader::new(std::fs::File::open(&tls.key)?))?
         .ok_or("TLS private key missing")?;
+    Ok((certificates, key))
+}
+
+pub fn tls_config(tls: &Tls) -> Result<Arc<rustls::ServerConfig>> {
+    let (certificates, key) = tls_identity(tls)?;
     Ok(Arc::new(
         rustls::ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
             .with_safe_default_protocol_versions()?
@@ -76,8 +139,8 @@ pub fn tls_config(tls: &Tls) -> Result<Arc<rustls::ServerConfig>> {
     ))
 }
 
-impl Listener {
-    pub async fn bind(router: Router, config: Transport) -> Result<Self> {
+impl StreamListener {
+    async fn bind(router: Router, config: Transport) -> Result<Self> {
         // Parse credentials before reserving a socket, so startup errors unwind cleanly.
         let tls = config.tls.as_ref().map(tls_config).transpose()?.map(TlsAcceptor::from);
         let (socket, address, unix_path) = match config.listener.as_str() {
@@ -162,16 +225,6 @@ impl Listener {
             task: Some(task),
             unix_path,
         })
-    }
-
-    pub fn stop(&self) {
-        self.stop.send_replace(true);
-    }
-
-    pub async fn finish(&mut self) {
-        if let Some(task) = self.task.take() {
-            let _ = task.await;
-        }
     }
 }
 

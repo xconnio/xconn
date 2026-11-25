@@ -497,3 +497,149 @@ async fn websocket_client_uses_native_certificate_roots() {
     assert_eq!(result.args, Some(vec![Value::Str("trusted".into())]));
     session.leave().await.unwrap();
 }
+
+async fn assert_rpc_stream(caller: &xconn::async_::session::Session, callee: &xconn::async_::session::Session) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let provider = callee.clone();
+    let registered = callee
+        .register_context("stream", Default::default(), move |_| {
+            let provider = provider.clone();
+            async move {
+                let (reference, mut stream) = provider.offer_stream().await.unwrap();
+                tokio::spawn(async move {
+                    stream.write_all(b"router stream").await.unwrap();
+                    stream.shutdown().await.unwrap();
+                    tokio::io::copy(&mut stream, &mut tokio::io::sink()).await.unwrap();
+                });
+                RpcResult::args(vec![reference])
+            }
+        })
+        .await
+        .unwrap();
+    assert!(registered.error.is_none());
+    let result = caller.execute_call(CallRequest::new("stream")).await.unwrap();
+    let mut stream = caller.open_stream_argument(&result.args.unwrap()[0]).await.unwrap();
+    let mut received = Vec::new();
+    stream.read_to_end(&mut received).await.unwrap();
+    assert_eq!(received, b"router stream");
+}
+
+async fn assert_unassociated_stream_rejected(mut stream: xconn::async_::rawsocket::BoxStream) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    stream.write_all(b"unassociated").await.unwrap();
+    let mut byte = [0];
+    assert!(!matches!(
+        tokio::time::timeout(Duration::from_secs(1), stream.read(&mut byte))
+            .await
+            .expect("unassociated stream was not closed"),
+        Ok(1)
+    ));
+}
+
+#[cfg(unix)]
+async fn assert_udp_shutdown(mut child: tokio::process::Child, stream: xconn::async_::rawsocket::BoxStream) {
+    use wampproto::messages::goodbye::Goodbye;
+    use xconn::async_::{joiner::join, rawsocket::client_handshake};
+
+    let peer = client_handshake(stream, CBORSerializerSpec.serializer_id())
+        .await
+        .unwrap();
+    let serializer = CBORSerializerSpec.serializer();
+    let (peer, _) = join(
+        peer,
+        "realm",
+        serializer.clone(),
+        Box::new(AnonymousAuthenticator::default()),
+    )
+    .await
+    .unwrap();
+    // A completed RPC confirms the router attached the session before shutdown.
+    peer.write(
+        serializer
+            .serialize(&wampproto::messages::call::Call {
+                request_id: 1,
+                options: Default::default(),
+                procedure: "missing".into(),
+                args: None,
+                kwargs: None,
+            })
+            .unwrap(),
+    )
+    .await
+    .unwrap();
+    peer.read().await.unwrap();
+    assert!(
+        std::process::Command::new("kill")
+            .args(["-TERM", &child.id().unwrap().to_string()])
+            .status()
+            .unwrap()
+            .success()
+    );
+    let message = serializer.deserialize(peer.read().await.unwrap()).unwrap();
+    let goodbye = message.as_any().downcast_ref::<Goodbye>().unwrap();
+    assert_eq!(goodbye.reason, "wamp.close.system_shutdown");
+    assert!(child.wait().await.unwrap().success());
+}
+
+#[tokio::test]
+async fn quic_listener_routes_rpc_streams() {
+    use xconn::async_::quic::{ALPN, Connection};
+
+    tokio::time::timeout(Duration::from_secs(15), async {
+        let files = Files::new();
+        let path = files.config("quic", "json");
+        let generated = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        std::fs::write(files.0.join("cert.pem"), generated.cert.pem()).unwrap();
+        std::fs::write(files.0.join("key.pem"), generated.key_pair.serialize_pem()).unwrap();
+        let text = std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("listener: tcp", "listener: udp")
+            .replace("serializers: [json]", "tls: {certificate: cert.pem, key: key.pem}");
+        std::fs::write(&path, text).unwrap();
+        let (child, address) = start(&path).await;
+        let address = address.parse().unwrap();
+        let mut roots = rustls::RootCertStore::empty();
+        roots.add(generated.cert.der().clone()).unwrap();
+        let mut tls =
+            rustls::ClientConfig::builder_with_provider(std::sync::Arc::new(rustls::crypto::ring::default_provider()))
+                .with_safe_default_protocol_versions()
+                .unwrap()
+                .with_root_certificates(roots)
+                .with_no_client_auth();
+        tls.alpn_protocols = vec![ALPN.to_vec()];
+        let config = quinn::ClientConfig::new(std::sync::Arc::new(
+            quinn::crypto::rustls::QuicClientConfig::try_from(tls).unwrap(),
+        ));
+        let a = Connection::connect(address, "localhost", config.clone()).await.unwrap();
+        let b = Connection::connect(address, "localhost", config).await.unwrap();
+        let caller = a
+            .open_session(
+                "realm",
+                Box::new(CBORSerializerSpec),
+                Box::new(AnonymousAuthenticator::default()),
+            )
+            .await
+            .unwrap();
+        let callee = b
+            .open_session(
+                "realm",
+                Box::new(CBORSerializerSpec),
+                Box::new(AnonymousAuthenticator::default()),
+            )
+            .await
+            .unwrap();
+        assert_rpc_stream(&caller, &callee).await;
+        assert_unassociated_stream_rejected(Box::new(a.open_raw().await.unwrap())).await;
+        #[cfg(unix)]
+        assert_udp_shutdown(child, Box::new(a.open_raw().await.unwrap())).await;
+        #[cfg(not(unix))]
+        {
+            let mut child = child;
+            child.kill().await.unwrap();
+        }
+    })
+    .await
+    .unwrap();
+}

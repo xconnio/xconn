@@ -81,6 +81,23 @@ commands to select another file.
 To use an existing router configuration, run
 `xconn router start --config .nxt/config.yaml`.
 
+Add a QUIC listener for WAMP and RPC streams over UDP:
+
+```yaml
+transports:
+  - type: quic
+    listener: udp
+    address: 127.0.0.1:8081
+    tls:
+      certificate: cert.pem
+      key: key.pem
+```
+
+Use an IP socket address. QUIC negotiates a serializer per WAMP stream.
+QUIC requires a PEM certificate and private key. For local development, use a
+self-signed certificate for the hostname you dial and trust that certificate
+in the client.
+
 For Bash completion with a Cargo-installed CLI, add
 `source <(xconn completions bash)` to your `~/.bashrc`.
 

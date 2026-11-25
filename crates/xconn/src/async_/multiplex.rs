@@ -56,6 +56,9 @@ pub async fn serve_stream(
         .map_err(|_| Error::new("stream handshake timeout"))??;
         router.accept_notified(peer, serializer(id), authenticated).await
     } else {
+        if raw.is_closed() {
+            return Err(Error::new("raw stream receiver closed"));
+        }
         let mut auth = authenticated.subscribe();
         let details = tokio::time::timeout(Duration::from_secs(5), auth.wait_for(|v| v.is_some()))
             .await
