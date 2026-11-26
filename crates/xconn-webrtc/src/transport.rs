@@ -84,9 +84,9 @@ impl DataChannel {
     async fn attach(channel: Arc<dyn NativeChannel>) -> Result<Arc<Self>, Error> {
         let label = channel.label().await?;
         let protocol = channel.protocol().await?;
-        let reliable_ordered = channel.ordered().await?
-            && channel.max_retransmits().await?.is_none()
-            && channel.max_packet_life_time().await?.is_none();
+        let partial_reliability =
+            channel.max_retransmits().await?.is_some() || channel.max_packet_life_time().await?.is_some();
+        let reliable_ordered = channel.ordered().await? && !partial_reliability;
         let (tx, incoming) = mpsc::channel(64);
         let open = watch::channel(channel.ready_state().await? == RTCDataChannelState::Open).0;
         let closed = watch::channel(false).0;
@@ -156,7 +156,7 @@ impl DataChannel {
                             data: message.data.freeze(),
                             is_string: message.is_string,
                         };
-                        if backpressure {
+                        if backpressure || partial_reliability {
                             tokio::select! {
                                 _ = closing.wait_for(|closed| *closed) => break,
                                 result = tx.send(packet) => if result.is_err() { break; },
