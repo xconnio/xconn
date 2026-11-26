@@ -796,6 +796,18 @@ async fn webtransport_routes_rpc_streams_to_quic_using_the_published_certificate
         let endpoint = url::Url::parse(&listeners[0].1).unwrap();
         assert_eq!(endpoint.scheme(), "https");
         assert_eq!(endpoint.path(), "/terminal");
+        let untrusted = tokio::process::Command::new(env!("CARGO_BIN_EXE_xconn"))
+            .args(["call", "missing", "--url", endpoint.as_str(), "--realm", "realm"])
+            .env("SSL_CERT_FILE", files.0.join("cert.pem"))
+            .output()
+            .await
+            .unwrap();
+        assert_eq!(untrusted.status.code(), Some(1));
+        let error = String::from_utf8_lossy(&untrusted.stderr);
+        assert!(
+            error.contains("is not trusted") || error.contains("Certificate verification failed"),
+            "{error}"
+        );
         let hash_url = url::Url::parse(&listeners[1].1).unwrap();
         let request = |path: &'static str| {
             let addr = (hash_url.host_str().unwrap().to_owned(), hash_url.port().unwrap());

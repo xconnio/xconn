@@ -1,3 +1,4 @@
+mod certificate_check;
 mod transport;
 
 use clap::Args;
