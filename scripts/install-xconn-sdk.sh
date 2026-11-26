@@ -8,7 +8,7 @@ fail() {
   exit 1
 }
 
-version=0.6.6
+version=0.6.7
 case "${1:-}" in
   '')
     ;;
