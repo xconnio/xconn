@@ -142,9 +142,19 @@ pub async fn run(command: Command, file: Option<PathBuf>) -> Result<()> {
         listener.stop();
     }
 
+    let has_connected_clients = router.realm_names().iter().any(|realm| {
+        router
+            .sessions(realm)
+            .is_ok_and(|sessions| sessions.iter().any(|session| session.auth_method != "internal"))
+    });
     router.close();
 
-    futures_util::future::join_all(listeners.into_iter().map(listener::Listener::finish)).await;
+    futures_util::future::join_all(
+        listeners
+            .into_iter()
+            .map(|listener| listener.finish(has_connected_clients)),
+    )
+    .await;
 
     tracing::info!(target: logging::LIFECYCLE, "Router stopped");
     result

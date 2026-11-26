@@ -123,18 +123,19 @@ impl Listener {
         }
     }
 
-    pub async fn finish(self) {
+    pub async fn finish(self, drain_clients: bool) {
         match self {
             Self::Stream(mut listener) => {
                 if let Some(task) = listener.task.take() {
                     let _ = task.await;
                 }
             }
-            listener => {
+            listener if drain_clients => {
                 // Keep the endpoint alive while WAMP GOODBYE is written and delivered.
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 drop(listener);
             }
+            _ => {}
         }
     }
 }
