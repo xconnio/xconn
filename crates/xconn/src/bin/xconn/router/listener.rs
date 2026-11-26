@@ -30,7 +30,7 @@ pub enum Listener {
 }
 
 impl Listener {
-    pub async fn bind(router: Router, config: Transport) -> Result<Self> {
+    pub async fn bind(router: Router, config: &Transport) -> Result<Self> {
         if config.kind == "quic" {
             let tls = config.tls.as_ref().ok_or("QUIC requires a TLS certificate and key")?;
             let (chain, key) = tls_identity(tls)?;
@@ -39,7 +39,7 @@ impl Listener {
                 config.address.parse()?,
                 chain.into_iter().map(|cert| cert.to_vec()).collect(),
                 key.secret_der().to_vec(),
-                codecs(&config),
+                codecs(config),
             )
             .await?;
             listener.disable_raw_streams();
@@ -50,13 +50,13 @@ impl Listener {
                 Some(tls) => tls_identity(tls)?,
                 None => self_signed_webtransport_identity()?,
             };
-            let serializers = codecs(&config);
+            let serializers = codecs(config);
             let mut listener = webtransport::Listener::with_certificate_and_serializers(
                 router,
                 config.address.parse()?,
                 chain,
                 key,
-                Some(config.path.unwrap_or_else(|| "/wamp".into())),
+                Some(config.path.clone().unwrap_or_else(|| "/wamp".into())),
                 serializers,
             )
             .await?;
@@ -70,7 +70,31 @@ impl Listener {
         Ok(Self::Stream(StreamListener::bind(router, config).await?))
     }
 
-    pub fn address(&self) -> String {
+    pub fn endpoints(&self, config: &Transport) -> (String, Option<String>) {
+        let address = self.address();
+        let (websocket, rawsocket) = match (config.listener.as_str(), config.tls.is_some()) {
+            ("unix", false) => ("unix+ws", "unix"),
+            ("unix", true) => return (address, None),
+            (_, false) => ("ws", "rs"),
+            (_, true) => ("wss", "rss"),
+        };
+
+        match config.kind.as_str() {
+            "webtransport" => (
+                format!("https://{address}{}", config.path.as_deref().unwrap_or("/wamp")),
+                None,
+            ),
+            "quic" => (format!("quic://{address}"), None),
+            "rawsocket" => (format!("{rawsocket}://{address}"), None),
+            "universal" => (
+                format!("{websocket}://{address}"),
+                Some(format!("{rawsocket}://{address}")),
+            ),
+            _ => (format!("{websocket}://{address}"), None),
+        }
+    }
+
+    fn address(&self) -> String {
         match self {
             Self::Stream(listener) => listener.address.clone(),
             Self::Quic(listener) => listener.local_addr.to_string(),
@@ -194,7 +218,7 @@ pub fn tls_config(tls: &Tls) -> Result<Arc<rustls::ServerConfig>> {
 }
 
 impl StreamListener {
-    async fn bind(router: Router, config: Transport) -> Result<Self> {
+    async fn bind(router: Router, config: &Transport) -> Result<Self> {
         // Parse credentials before reserving a socket, so startup errors unwind cleanly.
         let tls = config.tls.as_ref().map(tls_config).transpose()?.map(TlsAcceptor::from);
         let (socket, address, unix_path) = match config.listener.as_str() {
@@ -216,6 +240,7 @@ impl StreamListener {
             _ => return Err("unsupported listener".into()),
         };
         let (stop, mut stopped) = watch::channel(false);
+        let config = config.clone();
         let task = tokio::spawn(async move {
             let mut sessions = JoinSet::new();
             let capacity = Arc::new(tokio::sync::Semaphore::new(1024));

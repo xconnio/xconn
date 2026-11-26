@@ -46,44 +46,69 @@ impl Drop for Files {
 
 async fn start(file: &std::path::Path) -> (tokio::process::Child, String) {
     let (child, listeners) = start_listeners(file).await;
-    (child, listeners.into_iter().next().unwrap().1)
+    let (_, endpoint) = listeners.into_iter().next().unwrap();
+    let (_, address) = endpoint.split_once("://").unwrap();
+    (child, address.into())
 }
 
-fn spawn_router(
-    file: &std::path::Path,
-) -> (
-    tokio::process::Child,
-    tokio::io::Lines<BufReader<tokio::process::ChildStdout>>,
-) {
+type RouterLogs = tokio::io::Lines<BufReader<tokio::process::ChildStderr>>;
+
+fn spawn_router(file: &std::path::Path) -> (tokio::process::Child, RouterLogs) {
     let mut command = tokio::process::Command::new(env!("CARGO_BIN_EXE_xconn"));
     command.args(["router", "start", "--config"]).arg(file);
     let mut child = command
-        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
         .kill_on_drop(true)
         .spawn()
         .unwrap();
-    let lines = BufReader::new(child.stdout.take().unwrap()).lines();
+    let lines = BufReader::new(child.stderr.take().unwrap()).lines();
     (child, lines)
+}
+
+fn listener_address(line: &str) -> Option<(&str, &str)> {
+    if let Some((_, endpoint)) = line.split_once(" INFO Serving WebTransport certificate fingerprint at ") {
+        return Some(("cert-hash", endpoint));
+    }
+    let (_, listener) = line.split_once(" INFO Listening on ")?;
+    let (endpoint, transport) = listener.split_once(" (")?;
+    let (transport, _) = transport.split_once(')')?;
+    Some((transport, endpoint))
+}
+
+async fn next_router_log(logs: &mut RouterLogs) -> String {
+    tokio::time::timeout(Duration::from_secs(10), logs.next_line())
+        .await
+        .expect("timed out waiting for router startup")
+        .unwrap()
+        .expect("router exited before becoming ready")
+}
+
+async fn wait_for_router_ready(logs: &mut RouterLogs, file: &std::path::Path) {
+    loop {
+        let line = next_router_log(logs).await;
+        if line.contains(" INFO Router ready (config ") {
+            assert!(
+                line.ends_with(&format!(" INFO Router ready (config {})", file.display())),
+                "{line}"
+            );
+            break;
+        }
+    }
 }
 
 async fn start_listeners(file: &std::path::Path) -> (tokio::process::Child, Vec<(String, String)>) {
     let (child, mut lines) = spawn_router(file);
     let mut listeners = Vec::new();
     loop {
-        let line = tokio::time::timeout(Duration::from_secs(10), lines.next_line())
-            .await
-            .unwrap()
-            .unwrap()
-            .expect("binary exited before becoming ready");
-        if line == "Ready" {
+        let line = next_router_log(&mut lines).await;
+        if line.contains(" INFO Router ready (config ") {
             break;
         }
-        let (kind, address) = line
-            .strip_prefix("Listening ")
-            .and_then(|listener| listener.split_once(' '))
-            .unwrap_or_else(|| panic!("unexpected router output: {line}"));
-        listeners.push((kind.into(), address.into()));
+        if let Some((kind, address)) = listener_address(&line) {
+            listeners.push((kind.into(), address.into()));
+        }
     }
+    tokio::spawn(async move { while let Ok(Some(_)) = lines.next_line().await {} });
     (child, listeners)
 }
 
@@ -764,10 +789,12 @@ async fn webtransport_routes_rpc_streams_to_quic_using_the_published_certificate
         std::fs::write(&path, text).unwrap();
         let (child, listeners) = start_listeners(&path).await;
         assert_eq!(listeners.len(), 3);
-        assert_eq!(listeners[0].0, "webtransport");
+        assert_eq!(listeners[0].0, "WebTransport");
         assert_eq!(listeners[1].0, "cert-hash");
-        assert_eq!(listeners[2].0, "quic");
-        let address = &listeners[0].1;
+        assert_eq!(listeners[2].0, "QUIC");
+        let endpoint = url::Url::parse(&listeners[0].1).unwrap();
+        assert_eq!(endpoint.scheme(), "https");
+        assert_eq!(endpoint.path(), "/terminal");
         let hash_url = url::Url::parse(&listeners[1].1).unwrap();
         let request = |path: &'static str| {
             let addr = (hash_url.host_str().unwrap().to_owned(), hash_url.port().unwrap());
@@ -802,13 +829,13 @@ async fn webtransport_routes_rpc_streams_to_quic_using_the_published_certificate
             .with_server_certificate_hashes(vec![hash])
             .unwrap();
         assert!(
-            Connection::connect(&format!("https://{address}/wrong"), config.clone())
+            Connection::connect(endpoint.join("/wrong").unwrap().as_str(), config.clone())
                 .await
                 .is_err()
         );
-        let url = format!("https://{address}/terminal");
-        let a = Connection::connect(&url, config).await.unwrap();
-        let b = xconn::async_::quic::Connection::connect(listeners[2].1.parse().unwrap(), "localhost", quic_config)
+        let a = Connection::connect(endpoint.as_str(), config).await.unwrap();
+        let quic_address = listeners[2].1.strip_prefix("quic://").unwrap().parse().unwrap();
+        let b = xconn::async_::quic::Connection::connect(quic_address, "localhost", quic_config)
             .await
             .unwrap();
         let caller = a
@@ -1238,8 +1265,11 @@ authenticators:"#,
         std::fs::write(&path, config).unwrap();
 
         let (mut child, mut lines) = spawn_router(&path);
-        let address = lines.next_line().await.unwrap().unwrap();
-        let url = format!("ws://{}", address.strip_prefix("Listening websocket ").unwrap());
+        let line = next_router_log(&mut lines).await;
+        let (kind, url) = listener_address(&line).unwrap();
+        assert_eq!(kind, "WebSocket");
+        assert!(url.starts_with("ws://"), "{url}");
+        let url = url.to_owned();
         let ticket_client = |authid, ticket| {
             Client::new(
                 Box::new(JSONSerializerSpec),
@@ -1304,7 +1334,7 @@ authenticators:"#,
                 .is_none()
         );
         release.notify_one();
-        assert_eq!(lines.next_line().await.unwrap().as_deref(), Some("Ready"));
+        wait_for_router_ready(&mut lines, &path).await;
 
         let admin = ticket_client("admin", "admin-secret")
             .connect(&url, REALM)
@@ -1406,8 +1436,11 @@ authenticators:
         std::fs::write(&path, config.replace("PROVIDER_KEY", &provider_key)).unwrap();
 
         let (mut child, mut lines) = spawn_router(&path);
-        let address = lines.next_line().await.unwrap().unwrap();
-        let url = format!("ws://{}", address.strip_prefix("Listening websocket ").unwrap());
+        let line = next_router_log(&mut lines).await;
+        let (kind, url) = listener_address(&line).unwrap();
+        assert_eq!(kind, "WebSocket");
+        assert!(url.starts_with("ws://"), "{url}");
+        let url = url.to_owned();
         let client =
             |authenticator: Box<dyn ClientAuthenticator>| Client::new(Box::new(JSONSerializerSpec), authenticator);
         // A static identity that offers multiple methods must be challenged with its configured method.
@@ -1500,7 +1533,7 @@ authenticators:
             .await
             .unwrap();
         assert!(registration.error.is_none());
-        assert_eq!(lines.next_line().await.unwrap().as_deref(), Some("Ready"));
+        wait_for_router_ready(&mut lines, &path).await;
 
         assert!(client(crypto("provider", "22")).connect(&url, "control").await.is_err());
         assert!(client(crypto("intruder", "33")).connect(&url, "control").await.is_err());

@@ -125,7 +125,10 @@ files exist, use `--config <path>` to choose one. Relative TLS paths are
 resolved from the config file's directory.
 
 `validate` checks the YAML and TLS files without opening listeners. `start`
-runs in the foreground.
+runs in the foreground and logs to stderr. At `info` level, the logs show
+listener URLs, realms and roles, the config path, and shutdown. Set
+`config.loglevel` in the YAML or override it with
+`xconn router start --log-level debug`.
 
 To use an existing router configuration, run
 `xconn router start --config .nxt/config.yaml`.

@@ -17,6 +17,8 @@ use xconn::{
     },
 };
 
+pub(super) const LOG_LEVELS: [&str; 5] = ["trace", "debug", "info", "warn", "error"];
+
 pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 #[derive(Deserialize)]
@@ -237,8 +239,8 @@ impl Config {
             return Err("only configuration version '1' is supported".into());
         }
 
-        if !["", "trace", "debug", "info", "warn", "error"].contains(&self.config.loglevel.as_str()) {
-            return Err("invalid loglevel".into());
+        if !self.config.loglevel.is_empty() && !LOG_LEVELS.contains(&self.config.loglevel.as_str()) {
+            return Err(format!("Invalid config.loglevel. Expected one of {}.", LOG_LEVELS.join(", ")).into());
         }
 
         if self.realms.is_empty() || self.transports.is_empty() {
@@ -393,12 +395,24 @@ impl Config {
     }
 
     pub fn log_level(&self) -> tracing::Level {
-        match self.config.loglevel.as_str() {
-            "trace" => tracing::Level::TRACE,
-            "debug" => tracing::Level::DEBUG,
-            "warn" => tracing::Level::WARN,
-            "error" => tracing::Level::ERROR,
-            _ => tracing::Level::INFO,
+        self.config.loglevel.parse().unwrap_or(tracing::Level::INFO)
+    }
+
+    pub fn log_realms(&self) {
+        for realm in &self.realms {
+            let roles: Vec<_> = realm.roles.iter().map(|role| role.name.as_str()).collect();
+            let names = if roles.is_empty() {
+                "none".to_owned()
+            } else {
+                roles.join(", ")
+            };
+            tracing::info!(
+                target: super::logging::LIFECYCLE,
+                realm = %realm.name,
+                roles = ?roles,
+                "Realm {} (roles: {names})",
+                realm.name
+            );
         }
     }
 
