@@ -162,13 +162,20 @@ pub async fn client_handshake(mut stream: BoxStream, serializer: SerializerID) -
     ))
 }
 
-pub async fn server_handshake(mut stream: BoxStream) -> Result<(Box<dyn Peer>, SerializerID), Error> {
+pub async fn server_handshake(stream: BoxStream) -> Result<(Box<dyn Peer>, SerializerID), Error> {
+    server_handshake_with_serializers(stream, &[]).await
+}
+
+pub(crate) async fn server_handshake_with_serializers(
+    mut stream: BoxStream,
+    serializers: &[SerializerID],
+) -> Result<(Box<dyn Peer>, SerializerID), Error> {
     let mut raw = [0; 4];
     stream
         .read_exact(&mut raw)
         .await
         .map_err(|e| Error::new(e.to_string()))?;
-    server_handshake_header(stream, raw, &[]).await
+    server_handshake_header(stream, raw, serializers).await
 }
 
 pub(crate) async fn server_handshake_header(

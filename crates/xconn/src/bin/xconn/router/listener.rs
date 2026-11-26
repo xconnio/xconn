@@ -85,6 +85,14 @@ impl Listener {
                 None,
             ),
             "quic" => (format!("quic://{address}"), None),
+            "yamux" => {
+                let scheme = match (config.listener.as_str(), config.tls.is_some()) {
+                    ("unix", _) => "unix+yamux",
+                    (_, true) => "yamuxs",
+                    (_, false) => "yamux",
+                };
+                (format!("{scheme}://{address}"), None)
+            }
             "rawsocket" => (format!("{rawsocket}://{address}"), None),
             "universal" => (
                 format!("{websocket}://{address}"),
@@ -129,6 +137,11 @@ impl Listener {
             }
         }
     }
+}
+
+enum Established {
+    Yamux(BoxStream),
+    Session(Box<dyn xconn::async_::peer::Peer>, SerializerID),
 }
 
 pub struct StreamListener {
@@ -274,11 +287,20 @@ impl StreamListener {
                                 } else {
                                     stream
                                 };
-                                negotiate(stream, &config).await
+                                let established = if config.kind == "yamux" {
+                                    Established::Yamux(stream)
+                                } else {
+                                    let (peer, codec) = negotiate(stream, &config).await?;
+                                    Established::Session(peer, codec)
+                                };
+                                Result::Ok(established)
                             };
 
                             match tokio::time::timeout(Duration::from_secs(10), establish).await {
-                                Ok(Ok((peer, codec))) => {
+                                Ok(Ok(Established::Yamux(stream))) => {
+                                    let _ = xconn::async_::yamux::serve_with_serializers(router, stream, &codecs(&config)).await;
+                                }
+                                Ok(Ok(Established::Session(peer, codec))) => {
                                     let _ = router.accept(peer, serializer(codec)).await;
                                 }
                                 Ok(Err(error)) => tracing::debug!(%error,"connection handshake rejected"),
