@@ -85,6 +85,11 @@ xconn call example.echo --payload '{"args":["42"],"kwargs":{"ready":true}}'
 to create `my-key` and `my-key.pub`. Configure the router with the public key,
 then pass `--authid <ID> --private-key-file my-key` to a client command.
 
+The client uses system certificate trust with `wss://`, `rss://`,
+`yamuxs://`, `quic://`, and WebTransport (`https://`). Use `--ca-cert <PEM>`
+to trust an additional certificate. For WebTransport, you can instead verify a
+certificate using its base64-encoded SHA-256 fingerprint with `--cert-hash`.
+
 ### Scripting
 
 `call`, `register`, and `subscribe` write JSON objects to stdout. Objects may
