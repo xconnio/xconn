@@ -1,6 +1,7 @@
+use bytes::Bytes;
 use std::time::Duration;
 use xconn::Result as RpcResult;
-use xconn_webrtc::{Connection, MTU};
+use xconn_webrtc::{Connection, MTU, webrtc::data_channel::RTCDataChannelInit};
 
 async fn pair() -> (
     Connection,
@@ -18,6 +19,56 @@ async fn pair() -> (
     local.wait_open(Duration::from_secs(10)).await.unwrap();
     remote.wait_open(Duration::from_secs(10)).await.unwrap();
     (a, b, local, remote)
+}
+
+#[tokio::test]
+async fn partially_reliable_channel_survives_a_slow_reader() {
+    tokio::time::timeout(Duration::from_secs(15), async {
+        let sender = Connection::new(vec![]).await.unwrap();
+        let receiver = Connection::new(vec![]).await.unwrap();
+        let local = sender
+            .open_raw_channel(
+                "vpn-data",
+                RTCDataChannelInit {
+                    ordered: false,
+                    max_retransmits: Some(0),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        let answer = receiver.answer(sender.offer().await.unwrap()).await.unwrap();
+        sender.set_remote(answer).await.unwrap();
+        let remote = receiver.accept_channel().await.unwrap();
+        local.wait_open(Duration::from_secs(5)).await.unwrap();
+
+        let writer = tokio::spawn(async move {
+            let packet = Bytes::from_static(&[42; 1200]);
+            // Send enough data to fill the queue while the receiver is idle.
+            for _ in 0..2_000 {
+                local.send_packet(packet.clone()).await.unwrap();
+            }
+            local
+        });
+        assert!(
+            tokio::time::timeout(Duration::from_secs(2), remote.closed())
+                .await
+                .is_err()
+        );
+        let probe = Bytes::from_static(b"after the queue drains");
+        let (sent, ()) = tokio::join!(
+            async {
+                let local = writer.await.unwrap();
+                local.send_packet(probe.clone()).await
+            },
+            async { while remote.read_packet().await.unwrap() != probe {} }
+        );
+        sent.unwrap();
+        sender.close().await.unwrap();
+        receiver.close().await.unwrap();
+    })
+    .await
+    .unwrap();
 }
 
 #[tokio::test]
