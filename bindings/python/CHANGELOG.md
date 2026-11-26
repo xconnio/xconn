@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.8
+
+- Keep partially reliable WebRTC channels open when the receive queue fills.
+
 ## 0.6.7
 
 ## 0.6.6
