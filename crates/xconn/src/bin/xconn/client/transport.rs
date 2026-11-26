@@ -1,10 +1,15 @@
-use super::Result;
+use super::{Result, certificate_check::CertificateCheck};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use clap::Args;
 use futures_util::{StreamExt, stream::FuturesUnordered};
-use rustls::{ClientConfig, RootCertStore, pki_types::ServerName};
-use std::{io::BufReader, path::PathBuf, sync::Arc, time::Duration};
-use url::Url;
+use rustls::{CertificateError, ClientConfig, RootCertStore, client::WebPkiServerVerifier, pki_types::ServerName};
+use std::{
+    io::{BufReader, ErrorKind},
+    path::PathBuf,
+    sync::Arc,
+    time::Duration,
+};
+use url::{Position, Url};
 use xconn::{
     SerializerSpec,
     async_::{
@@ -46,14 +51,17 @@ impl Trust {
         }
 
         let tls = (secure && self.cert_hash.is_none())
-            .then(|| self.tls_config())
+            .then(|| self.checked_tls())
             .transpose()?;
-        tokio::time::timeout(
+        let check = tls.as_ref().map(|(_, check)| check.clone());
+        let result = tokio::time::timeout(
             Duration::from_secs(20),
             self.connect_inner(&url, realm, serializer, authenticator, tls),
         )
         .await
-        .map_err(|_| "connection handshake timed out")?
+        .unwrap_or_else(|_| Err("connection handshake timed out".into()));
+
+        result.map_err(|error| connection_error(&url, error, check.and_then(|check| check.take_error())))
     }
 
     async fn connect_inner(
@@ -62,7 +70,7 @@ impl Trust {
         realm: &str,
         serializer: Box<dyn SerializerSpec>,
         authenticator: Box<dyn ClientAuthenticator>,
-        tls: Option<ClientConfig>,
+        tls: Option<(ClientConfig, Arc<CertificateCheck>)>,
     ) -> Result<Session> {
         if let Some(hash) = &self.cert_hash {
             let hash = STANDARD.decode(hash)?;
@@ -74,7 +82,7 @@ impl Trust {
             return Ok(connection.open_session(realm, serializer, authenticator).await?);
         }
 
-        let Some(tls) = tls else {
+        let Some((tls, check)) = tls else {
             return Ok(Client::new(serializer, authenticator)
                 .connect_with_timeout(url.as_str(), realm, None)
                 .await?);
@@ -83,11 +91,18 @@ impl Trust {
         match url.scheme() {
             "quic" => {
                 let connection = connect_quic(url, tls).await?;
+                check.take_error();
                 Ok(connection.open_session(realm, serializer, authenticator).await?)
             }
             "https" => {
-                let connection = webtransport::Connection::connect_with_tls(url.as_str(), tls).await?;
-                Ok(connection
+                let result = webtransport::Connection::connect_with_tls(url.as_str(), tls).await;
+                // The backend may report a certificate failure as a framing error.
+                // A successful handshake or an HTTP error takes precedence over another address's certificate failure.
+                if !matches!(&result, Err(error) if error.message == "transport error: FrameEncodingError" || error.message == "connection timed out")
+                {
+                    check.take_error();
+                }
+                Ok(result?
                     .connection
                     .open_session(realm, serializer, authenticator)
                     .await?)
@@ -110,7 +125,7 @@ impl Trust {
         }
     }
 
-    fn tls_config(&self) -> Result<ClientConfig> {
+    fn checked_tls(&self) -> Result<(ClientConfig, Arc<CertificateCheck>)> {
         let mut roots = RootCertStore::empty();
         roots.add_parsable_certificates(rustls_native_certs::load_native_certs().certs);
         if let Some(path) = &self.ca_cert {
@@ -123,12 +138,43 @@ impl Trust {
                 roots.add(certificate?)?;
             }
         }
-        Ok(
-            ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
-                .with_safe_default_protocol_versions()?
-                .with_root_certificates(roots)
-                .with_no_client_auth(),
-        )
+        if roots.is_empty() {
+            return Err("No trusted certificates are available. Use --ca-cert to supply a trusted certificate.".into());
+        }
+        let provider = Arc::new(rustls::crypto::ring::default_provider());
+        let verifier = WebPkiServerVerifier::builder_with_provider(Arc::new(roots), provider.clone()).build()?;
+        let check = Arc::new(CertificateCheck::new(verifier));
+        let tls = ClientConfig::builder_with_provider(provider)
+            .with_safe_default_protocol_versions()?
+            .dangerous()
+            .with_custom_certificate_verifier(check.clone())
+            .with_no_client_auth();
+        Ok((tls, check))
+    }
+}
+
+fn connection_error(
+    url: &Url,
+    error: Box<dyn std::error::Error>,
+    certificate_error: Option<rustls::Error>,
+) -> Box<dyn std::error::Error> {
+    let address = &url[Position::BeforeHost..Position::AfterPort];
+    match certificate_error {
+        Some(rustls::Error::InvalidCertificate(CertificateError::UnknownIssuer)) => {
+            format!("The certificate for {address} is not trusted. Use --ca-cert <PEM> to trust the issuing certificate or the self-signed server certificate.").into()
+        }
+        Some(error) => format!("Certificate verification failed for {address}: {error}").into(),
+        None => {
+            let endpoint = format!("{}://{address}{}", url.scheme(), url.path());
+            let detail = error.to_string();
+            let detail = detail.strip_prefix("failed to connect: ").unwrap_or(&detail);
+            let detail = detail.strip_prefix("IO error: ").unwrap_or(detail);
+            let refused = error.downcast_ref::<std::io::Error>().is_some_and(|error| error.kind() == ErrorKind::ConnectionRefused)
+                || detail.starts_with("Connection refused (os error ")
+                || detail.starts_with("No connection could be made because the target machine actively refused it.");
+            let reason = if refused { "connection refused" } else { detail };
+            format!("Could not connect to {endpoint}: {reason}").into()
+        }
     }
 }
 
