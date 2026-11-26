@@ -112,10 +112,20 @@ xconn router validate
 xconn router start
 ```
 
-`init` creates `xconn.yaml` in the current directory and refuses to overwrite
-it. `validate` checks the configuration and TLS files without opening listeners.
-`start` runs in the foreground. Use `--config <path>` with any of the three
-commands to select another file.
+`init` creates `xconn/xconn.yaml`, the hex-encoded cryptosign keys
+`router.key` and `router.pub`, and a local TLS certificate and key
+(`tls-cert.pem` and `tls-key.pem`). The starter listeners use plaintext.
+To enable TLS, reference the generated PEM files in a listener's `tls` block.
+The certificate is valid for one year and covers `localhost`, `127.0.0.1`, and
+`::1`. `init` refuses to overwrite existing files.
+
+`start` and `validate` look for `xconn/xconn.yaml` and `xconn.yaml` relative
+to the current directory, so they also work from inside `xconn/`. If both
+files exist, use `--config <path>` to choose one. Relative TLS paths are
+resolved from the config file's directory.
+
+`validate` checks the YAML and TLS files without opening listeners. `start`
+runs in the foreground.
 
 To use an existing router configuration, run
 `xconn router start --config .nxt/config.yaml`.
@@ -129,16 +139,14 @@ transports:
     address: 127.0.0.1:8081
     serializers: [cbor, msgpack]
     tls:
-      certificate: cert.pem
-      key: key.pem
+      certificate: tls-cert.pem
+      key: tls-key.pem
 ```
 
-Use an IP socket address. Each WAMP stream proposes a serializer, and the
-listener rejects proposals outside its `serializers` list. Omitting the list
-allows JSON, CBOR, and MessagePack on QUIC and WebTransport. QUIC requires a
-PEM certificate and private key. For local development, use a
-self-signed certificate for the hostname you dial and trust that certificate
-in the client.
+Use an IP socket address and a PEM certificate and key. For local
+development, use the files from `router init` and pass
+`--ca-cert xconn/tls-cert.pem` to the client. Omitting `serializers` allows JSON,
+CBOR, and MessagePack on QUIC and WebTransport.
 
 WebTransport also uses a UDP listener and negotiates a serializer per WAMP
 stream. The default CONNECT path is `/wamp`, which can be changed with `path`.

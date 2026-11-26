@@ -1,7 +1,9 @@
 version: '1'
+
 config:
   loglevel: info
   management: false
+
 realms:
   - name: realm1
     roles:
@@ -13,15 +15,24 @@ realms:
             allow_register: true
             allow_publish: true
             allow_subscribe: true
+
 transports:
   - type: websocket
     listener: tcp
     address: 127.0.0.1:8080
-    serializers: [json, cbor, msgpack]
+    serializers:
+      - json
+      - cbor
+      - msgpack
+
   - type: rawsocket
     listener: tcp
     address: 127.0.0.1:8082
-    serializers: [json, cbor, msgpack]
+    serializers:
+      - json
+      - cbor
+      - msgpack
+
 authenticators:
   anonymous:
     - authid: anonymous
