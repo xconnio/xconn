@@ -1,3 +1,5 @@
+mod transport;
+
 use clap::Args;
 use futures_util::{StreamExt, stream};
 use serde::{Deserialize, Serialize};
@@ -10,7 +12,7 @@ use tokio::{
     signal,
     sync::{mpsc, watch},
 };
-use xconn::async_::{Result as RpcResult, client::Client, session::Session};
+use xconn::async_::{Result as RpcResult, session::Session};
 use xconn::wampproto::authenticators::{
     anonymous::AnonymousAuthenticator, authenticator::ClientAuthenticator, cryptosign::CryptoSignAuthenticator,
     ticket::TicketAuthenticator, wampcra::WAMPCRAAuthenticator,
@@ -24,6 +26,8 @@ pub struct Connection {
     /// Router URL.
     #[arg(long, default_value = "ws://localhost:8080/ws")]
     url: String,
+    #[command(flatten)]
+    trust: transport::Trust,
     /// Realm to join.
     #[arg(long, default_value = "realm1")]
     realm: String,
@@ -77,9 +81,9 @@ impl Connection {
             Box::new(AnonymousAuthenticator::new(authid, extra))
         };
 
-        Ok(Client::new(serializer, authenticator)
-            .connect(&self.url, &self.realm)
-            .await?)
+        self.trust
+            .connect(&self.url, &self.realm, serializer, authenticator)
+            .await
     }
 }
 

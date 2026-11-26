@@ -64,16 +64,39 @@ impl WebSocketJoiner {
             .await;
         }
 
-        let uri = uri.parse().map_err(|e| Error::new(format!("invalid URI: {e}")))?;
-        let request = ClientRequestBuilder::new(uri).with_sub_protocol(self.serializer.subprotocol());
-        let config = Some(WebSocketConfig::default());
-
         #[cfg(target_os = "ios")]
         let connector = Some(tokio_tungstenite::Connector::Rustls(std::sync::Arc::new(
             crate::common::tls::client_config()?,
         )));
         #[cfg(not(target_os = "ios"))]
         let connector = None;
+
+        self.join_tcp(uri, realm, connector).await
+    }
+
+    /// Join a secure WebSocket endpoint with an explicit TLS configuration.
+    pub async fn join_with_tls(
+        &self,
+        uri: &str,
+        realm: &str,
+        tls: rustls::ClientConfig,
+    ) -> Result<(Box<dyn Peer>, SessionDetails), Error> {
+        if !uri.starts_with("wss://") {
+            return Err(Error::new("WebSocket TLS configuration requires a wss:// URL"));
+        }
+        let connector = tokio_tungstenite::Connector::Rustls(std::sync::Arc::new(tls));
+        self.join_tcp(uri, realm, Some(connector)).await
+    }
+
+    async fn join_tcp(
+        &self,
+        uri: &str,
+        realm: &str,
+        connector: Option<tokio_tungstenite::Connector>,
+    ) -> Result<(Box<dyn Peer>, SessionDetails), Error> {
+        let uri = uri.parse().map_err(|e| Error::new(format!("invalid URI: {e}")))?;
+        let request = ClientRequestBuilder::new(uri).with_sub_protocol(self.serializer.subprotocol());
+        let config = Some(WebSocketConfig::default());
 
         // disable_nagle: WAMP messages are small; Nagle would hold back every pipelined request.
         let (ws, response) = connect_async_tls_with_config(request, config, true, connector)
