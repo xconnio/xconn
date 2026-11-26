@@ -34,3 +34,12 @@ rust:
   - '{bindings/python/**/*.rs,bindings/python/**/Cargo.toml,bindings/js/wasm/**}'
   - '!**/*.md'
   - '!**/LICENSE'
+
+ios_sdk:
+  - "{.github/workflows/ios-sdk.yaml,ci/{build-ios-sdk,test-ios-sdk}.sh,\
+    ci/fixtures/ios_native_*.dart,scripts/package-native.py,bindings/ffi/{include,src}/**,\
+    bindings/dart/{hook/**,pubspec.yaml,pubspec.lock,lib/src/{native,native_sdk,native_transport}.dart}}"
+
+windows_sdk:
+  - "{.github/workflows/windows-sdk.yaml,ci/{check-native-release,test-native-sdk,test-windows-sdk}.sh,\
+    scripts/package-native.py,bindings/ffi/{include,src}/**,bindings/go/internal/native/**}"
