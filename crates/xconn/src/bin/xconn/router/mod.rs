@@ -83,6 +83,7 @@ pub async fn run(command: Command, file: Option<PathBuf>) -> Result<()> {
                     "rawsocket" => "RawSocket",
                     "quic" => "QUIC",
                     "webtransport" => "WebTransport",
+                    "yamux" => "Yamux",
                     _ => "Universal",
                 };
                 let message = match &rawsocket_endpoint {

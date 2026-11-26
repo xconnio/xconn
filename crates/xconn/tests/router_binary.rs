@@ -119,13 +119,14 @@ fn client(spec: Box<dyn SerializerSpec>) -> Client {
 #[tokio::test]
 async fn executable_routes_and_enforces_serializer_policy() {
     tokio::time::timeout(Duration::from_secs(20), async {
-        for kind in ["websocket", "rawsocket", "universal"] {
+        for kind in ["websocket", "rawsocket", "universal", "yamux"] {
             let files = Files::new();
             let path = files.config(kind, "json");
             let (mut child, address) = start(&path).await;
             for scheme in match kind {
                 "websocket" => vec!["ws"],
                 "rawsocket" => vec!["rs"],
+                "yamux" => vec!["yamux"],
                 _ => vec!["ws", "rs"],
             } {
                 let uri = format!("{scheme}://{address}");

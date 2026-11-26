@@ -373,7 +373,7 @@ impl Config {
                     }
                     continue;
                 }
-                "websocket" | "rawsocket" | "universal" => {}
+                "websocket" | "rawsocket" | "universal" | "yamux" => {}
                 _ => return Err(format!("unsupported transport: {}", transport.kind).into()),
             }
 
@@ -386,7 +386,11 @@ impl Config {
                 return Err("Unix listeners require a Unix platform".into());
             }
 
-            if transport.serializers.is_none() {
+            if transport.kind == "yamux" && transport.listener == "unix" && transport.tls.is_some() {
+                return Err("yamux TLS requires a TCP listener".into());
+            }
+
+            if transport.kind != "yamux" && transport.serializers.is_none() {
                 return Err("serializers are required for stream listeners".into());
             }
         }

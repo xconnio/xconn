@@ -149,7 +149,7 @@ transports:
 Use an IP socket address and a PEM certificate and key. For local
 development, use the files from `router init` and pass
 `--ca-cert xconn/tls-cert.pem` to the client. Omitting `serializers` allows JSON,
-CBOR, and MessagePack on QUIC and WebTransport.
+CBOR, and MessagePack on QUIC, WebTransport, and Yamux.
 
 WebTransport also uses a UDP listener and negotiates a serializer per WAMP
 stream. The default CONNECT path is `/wamp`, which can be changed with `path`.
@@ -171,6 +171,17 @@ certificate generated on startup. The optional `cert_hash_address` serves
 proxy so they can use the fingerprint with `serverCertificateHashes`. Restart
 the router before its generated certificate expires. For a CA-issued
 certificate, supply `tls` as in the QUIC example and omit `cert_hash_address`.
+
+Add a Yamux listener for multiplexed sessions over TCP or a Unix socket.
+Use `yamux://` for TCP, `yamuxs://` for TCP with TLS, or `unix+yamux://`
+for a Unix socket.
+
+```yaml
+transports:
+  - type: yamux
+    listener: tcp
+    address: 127.0.0.1:8084
+```
 
 For Bash completion with a Cargo-installed CLI, add
 `source <(xconn completions bash)` to your `~/.bashrc`.
