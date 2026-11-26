@@ -694,7 +694,7 @@ mod tests {
             sample.replace("realm: realm1", "realm: absent"),
             sample.replace("role: anonymous", "role: absent"),
             sample.replace("type: websocket", "type: nonsense"),
-            sample.replace("serializers: [json, cbor, msgpack]", "serializers: [protobuf]"),
+            sample.replace("- msgpack", "- protobuf"),
             sample.replace("match: prefix", "match: nonsense"),
         ];
 

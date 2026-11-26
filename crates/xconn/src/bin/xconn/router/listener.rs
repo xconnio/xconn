@@ -158,16 +158,21 @@ type TlsIdentity = (
 );
 
 fn self_signed_webtransport_identity() -> Result<TlsIdentity> {
+    let (cert, key) = generate_loopback_tls_identity(time::Duration::days(13))?;
+    let key = rustls::pki_types::PrivatePkcs8KeyDer::from(key.serialize_der());
+    Ok((vec![cert.der().clone()], key.into()))
+}
+
+pub(super) fn generate_loopback_tls_identity(validity: time::Duration) -> Result<(rcgen::Certificate, rcgen::KeyPair)> {
     let key = rcgen::KeyPair::generate_for(&rcgen::PKCS_ECDSA_P256_SHA256)?;
     let mut params = rcgen::CertificateParams::new(vec!["localhost".into(), "127.0.0.1".into(), "::1".into()])?;
     let now = time::OffsetDateTime::now_utc();
     params.not_before = now - time::Duration::minutes(1);
-    params.not_after = now + time::Duration::days(13);
+    params.not_after = now + validity;
     params.key_usages = vec![rcgen::KeyUsagePurpose::DigitalSignature];
     params.extended_key_usages = vec![rcgen::ExtendedKeyUsagePurpose::ServerAuth];
     let cert = params.self_signed(&key)?;
-    let key = rustls::pki_types::PrivatePkcs8KeyDer::from(key.serialize_der());
-    Ok((vec![cert.der().clone()], key.into()))
+    Ok((cert, key))
 }
 
 fn tls_identity(tls: &Tls) -> Result<TlsIdentity> {

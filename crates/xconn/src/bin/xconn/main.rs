@@ -84,8 +84,8 @@ enum Command {
     /// Configure and run the XConn router.
     Router {
         /// Path to the router configuration file.
-        #[arg(short, long, global = true, default_value = "xconn.yaml")]
-        config: PathBuf,
+        #[arg(short, long, global = true)]
+        config: Option<PathBuf>,
         #[command(subcommand)]
         command: router::Command,
     },

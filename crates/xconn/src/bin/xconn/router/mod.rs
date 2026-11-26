@@ -1,17 +1,18 @@
 mod cert_hash;
 mod config;
+mod init;
 mod listener;
 mod realm_source;
 mod rpc_authentication;
 
 use clap::Subcommand;
 use config::{Config, Result};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use xconn::async_::management::Management;
 
 #[derive(Subcommand)]
 pub enum Command {
-    /// Write a starter configuration.
+    /// Create a starter config, cryptosign keys, and TLS files.
     Init,
     /// Validate the configuration without opening listeners.
     Validate,
@@ -20,25 +21,15 @@ pub enum Command {
 }
 
 #[tokio::main]
-pub async fn run(command: Command, file: PathBuf) -> Result<()> {
-    if matches!(command, Command::Init) {
-        if let Some(parent) = file.parent().filter(|p| !p.as_os_str().is_empty()) {
-            std::fs::create_dir_all(parent)?;
-        }
+pub async fn run(command: Command, file: Option<PathBuf>) -> Result<()> {
+    let initializing = matches!(command, Command::Init);
+    let file = match file {
+        Some(path) => path,
+        None => default_config(initializing)?.to_owned(),
+    };
 
-        let mut options = std::fs::OpenOptions::new();
-        options.write(true).create_new(true);
-
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-
-        use std::io::Write;
-        options.open(&file)?.write_all(include_bytes!("config.yaml"))?;
-        println!("Created {}", file.display());
-        return Ok(());
+    if initializing {
+        return init::run(&file);
     }
 
     let config = Config::load(&file)?;
@@ -122,6 +113,25 @@ pub async fn run(command: Command, file: PathBuf) -> Result<()> {
 
     eprintln!("Stopped");
     result
+}
+
+fn default_config(initializing: bool) -> Result<&'static Path> {
+    let nested = Path::new("xconn/xconn.yaml");
+    let local = Path::new("xconn.yaml");
+
+    let nested_exists = match nested.try_exists() {
+        Err(error) if error.kind() == std::io::ErrorKind::NotADirectory => false,
+        result => result?,
+    };
+    match (nested_exists, local.try_exists()?) {
+        (true, true) => Err("Both xconn/xconn.yaml and xconn.yaml exist. Use --config to choose one.".into()),
+        (true, false) => Ok(nested),
+        (false, true) => Ok(local),
+        (false, false) if initializing => Ok(nested),
+        (false, false) => Err(
+            "No configuration found at xconn/xconn.yaml or xconn.yaml. Run xconn router init or pass --config.".into(),
+        ),
+    }
 }
 
 fn shutdown_signal() -> Result<impl std::future::Future<Output = Result<()>>> {

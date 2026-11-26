@@ -166,7 +166,71 @@ fn init_never_overwrites_and_validate_rejects_unknown_settings() {
     assert!(run("init").status.success());
     assert!(!run("init").status.success());
     assert!(run("validate").status.success());
-    let path = files.0.join("xconn.yaml");
+    let path = files.0.join("xconn/xconn.yaml");
+    let instance = path.parent().unwrap();
+    for name in ["router.key", "router.pub"] {
+        let key = std::fs::read_to_string(instance.join(name)).unwrap();
+        assert_eq!(key.trim_end().len(), 64);
+        assert!(key.trim_end().bytes().all(|byte| byte.is_ascii_hexdigit()));
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(instance.join("router.key"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+
+    let certificate = instance.join("tls-cert.pem");
+    let tls_key = instance.join("tls-key.pem");
+    let original_certificate = std::fs::read_to_string(&certificate).unwrap();
+    assert!(original_certificate.starts_with("-----BEGIN CERTIFICATE-----"));
+    assert!(
+        std::fs::read_to_string(&tls_key)
+            .unwrap()
+            .starts_with("-----BEGIN PRIVATE KEY-----")
+    );
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(std::fs::metadata(&tls_key).unwrap().permissions().mode() & 0o777, 0o600);
+    }
+
+    for name in ["xconn.yaml", "router.key", "router.pub", "tls-key.pem"] {
+        std::fs::remove_file(instance.join(name)).unwrap();
+    }
+    assert!(!run("init").status.success());
+    assert!(!path.exists());
+    assert!(!instance.join("router.key").exists());
+    assert!(!instance.join("router.pub").exists());
+    assert!(!tls_key.exists());
+    assert_eq!(std::fs::read_to_string(&certificate).unwrap(), original_certificate);
+    std::fs::remove_file(certificate).unwrap();
+    assert!(run("init").status.success());
+
+    std::fs::write(instance.join("xconn"), "").unwrap();
+    let inside = std::process::Command::new(bin)
+        .args(["router", "validate"])
+        .current_dir(instance)
+        .output()
+        .unwrap();
+    assert!(inside.status.success());
+
+    let local = files.0.join("xconn.yaml");
+    std::fs::copy(&path, &local).unwrap();
+    let ambiguous = run("validate");
+    assert!(!ambiguous.status.success());
+    assert!(String::from_utf8_lossy(&ambiguous.stderr).contains("Use --config to choose one."));
+    let explicit = std::process::Command::new(bin)
+        .args(["router", "validate", "--config", "xconn.yaml"])
+        .current_dir(&files.0)
+        .output()
+        .unwrap();
+    assert!(explicit.status.success());
+    std::fs::remove_file(local).unwrap();
+
     let mut text = std::fs::read_to_string(&path).unwrap();
     text.push_str("typo: true\n");
     std::fs::write(path, text).unwrap();
@@ -189,7 +253,7 @@ async fn xconn_router_initializes_validates_and_starts() {
     assert!(!run(&["init"]).status.success());
     assert!(run(&["validate"]).status.success());
 
-    let path = files.0.join("xconn.yaml");
+    let path = files.0.join("xconn/xconn.yaml");
     let text = std::fs::read_to_string(&path)
         .unwrap()
         .replace("127.0.0.1:8080", "127.0.0.1:0")
