@@ -4,9 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: '23 3 * * *'
+  workflow_dispatch:
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -27,6 +30,8 @@ jobs:
       dart: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.dart == 'true' }}
       browser: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.browser == 'true' }}
       rust: ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.rust == 'true' }}
+      ios-sdk: ${{ steps.select.outputs.ios_sdk }}
+      windows-sdk: ${{ steps.select.outputs.windows_sdk }}
       interop: ${{ steps.select.outputs.shared }}
       native: >-
         ${{ steps.select.outputs.shared == 'true' || steps.select.outputs.go == 'true' ||
@@ -38,6 +43,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
+        if: github.event_name == 'pull_request' || github.event_name == 'push'
         id: select
         with:
           base: main
@@ -47,9 +53,15 @@ jobs:
   check:
     name: Rust (${{ matrix.os }})
     needs: changes
-    if: needs.changes.outputs.rust == 'true'
+    if: needs.changes.outputs.rust == 'true' || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    env:
+      # Keep full native checks on release preparation PRs and scheduled or manual runs.
+      FULL_NATIVE: >-
+        ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' ||
+            (github.event.pull_request.head.repo.full_name == github.repository &&
+             startsWith(github.head_ref, 'release/v')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -58,7 +70,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
         with:
-          components: ${{ runner.os == 'Linux' && 'rustfmt,clippy' || 'clippy' }}
+          components: ${{ runner.os == 'Linux' && 'rustfmt,clippy' || (env.FULL_NATIVE == 'true' && 'clippy' || '') }}
           targets: ${{ runner.os == 'Linux' && 'wasm32-unknown-unknown' || '' }}
       - uses: Swatinem/rust-cache@v2
         with:
@@ -67,9 +79,14 @@ jobs:
         run: cargo fmt --all -- --check
       - if: runner.os == 'Linux'
         run: python3 -m unittest discover -s tests/packaging
-      - run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
-      - run: cargo test --locked --workspace --all-features
-      - run: cargo check --locked -p xconn-webrtc --no-default-features
+      - if: runner.os == 'Linux' || env.FULL_NATIVE == 'true'
+        run: cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
+      - if: runner.os == 'Linux' || env.FULL_NATIVE == 'true'
+        run: cargo test --locked --workspace --all-features
+      - if: runner.os != 'Linux' && env.FULL_NATIVE != 'true'
+        run: cargo test --locked -p xconn -p xconn-webrtc --all-features --test multiplex --test connection
+      - if: runner.os == 'Linux' || env.FULL_NATIVE == 'true'
+        run: cargo check --locked -p xconn-webrtc --no-default-features
       - if: runner.os == 'Linux'
         run: cargo check --locked -p xconn --no-default-features
       - if: runner.os == 'Linux'
@@ -82,9 +99,12 @@ jobs:
         run: cargo check --locked -p xconn --no-default-features --features yamux,rpc-streams
       - if: runner.os == 'Linux'
         run: cargo check --locked -p xconn --no-default-features --features crypto
-      - run: cargo check --locked -p xconn --no-default-features --features async
-      - run: cargo check --locked -p xconn --no-default-features --features sync
-      - run: cargo check --locked -p xconn --no-default-features --features router --bin xconn
+      - if: runner.os == 'Linux' || env.FULL_NATIVE == 'true'
+        run: cargo check --locked -p xconn --no-default-features --features async
+      - if: runner.os == 'Linux' || env.FULL_NATIVE == 'true'
+        run: cargo check --locked -p xconn --no-default-features --features sync
+      - if: runner.os == 'Linux' || env.FULL_NATIVE == 'true'
+        run: cargo check --locked -p xconn --no-default-features --features router --bin xconn
       - if: runner.os == 'Linux'
         run: cargo package --locked -p wampproto
       - if: runner.os == 'Linux'
@@ -97,8 +117,10 @@ jobs:
 
   ios:
     needs: changes
-    if: needs.changes.outputs.dart == 'true'
+    if: needs.changes.outputs.ios-sdk == 'true'
     uses: ./.github/workflows/ios-sdk.yaml
+    with:
+      device_only: true
 
   reference:
     name: Independent Go interoperability
@@ -198,7 +220,7 @@ jobs:
 
   windows-sdk:
     needs: changes
-    if: needs.changes.outputs.go == 'true'
+    if: needs.changes.outputs.windows-sdk == 'true'
     uses: ./.github/workflows/windows-sdk.yaml
 
   go:
