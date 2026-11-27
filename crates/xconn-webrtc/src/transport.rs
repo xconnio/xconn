@@ -456,6 +456,10 @@ impl PeerConnectionEventHandler for ConnectionEvents {
             RTCPeerConnectionState::Connected => {
                 self.connected.send_replace(true);
             }
+            // ICE lost its path. It may recover, or fail after its failed timeout.
+            RTCPeerConnectionState::Disconnected => {
+                self.connected.send_replace(false);
+            }
             RTCPeerConnectionState::Failed => {
                 self.closed.send_replace(true);
                 if let Some(peer) = self.peer.get().and_then(std::sync::Weak::upgrade) {
@@ -549,6 +553,11 @@ impl Connection {
                 result = connected.wait_for(|value| *value) => result.map(|_| ()).map_err(|_| Error("connection closed".into())),
             }
         }).await.map_err(|_| Error("WebRTC connection timeout".into()))?
+    }
+
+    /// Whether ICE has a working path now: false before connecting and while disconnected.
+    pub fn is_connected(&self) -> bool {
+        *self.connected.borrow() && !*self.closed.borrow()
     }
 
     /// Wait until this connection fails or is closed.
@@ -686,5 +695,35 @@ mod tests {
         assert!(assembler.feed(&[0, 1, 2, 3]).is_err());
         assert!(assembler.feed(&[2, 1]).is_err());
         assert_eq!(assembler.feed(&[1, 7]).unwrap(), Some(vec![7]));
+    }
+
+    // While ICE is disconnected the connection isn't usable, and it is again once ICE recovers.
+    #[tokio::test]
+    async fn disconnected_ice_is_not_connected_until_it_recovers() {
+        let connection = Connection::new(Vec::new()).await.unwrap();
+        let events = ConnectionEvents {
+            peer: std::sync::OnceLock::new(),
+            incoming: mpsc::channel(1).0,
+            candidates: mpsc::unbounded_channel().0,
+            closed: connection.closed.clone(),
+            connected: connection.connected.clone(),
+            gathered: connection.gathered.clone(),
+        };
+        assert!(!connection.is_connected());
+        events
+            .on_connection_state_change(RTCPeerConnectionState::Connected)
+            .await;
+        assert!(connection.is_connected());
+        events
+            .on_connection_state_change(RTCPeerConnectionState::Disconnected)
+            .await;
+        assert!(!connection.is_connected());
+        events
+            .on_connection_state_change(RTCPeerConnectionState::Connected)
+            .await;
+        assert!(connection.is_connected());
+        events.on_connection_state_change(RTCPeerConnectionState::Closed).await;
+        assert!(!connection.is_connected());
+        connection.close().await.unwrap();
     }
 }

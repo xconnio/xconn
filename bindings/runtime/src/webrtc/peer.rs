@@ -154,6 +154,10 @@ impl xconn::async_::services::peer::DirectConnection for ManagedDirect {
         &self.session.session
     }
 
+    fn usable(&self) -> bool {
+        xconn::async_::services::peer::DirectConnection::usable(&self.session)
+    }
+
     async fn close(&self) {
         let _ = self.session.connection.close().await;
     }

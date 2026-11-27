@@ -16,6 +16,12 @@ use tokio::{
 pub trait DirectConnection: Send + Sync + 'static {
     fn session(&self) -> &Session;
 
+    /// Whether new calls may use this connection. A transport that can tell its path is
+    /// interrupted before the session ends reports it here, so new calls use the hub meanwhile.
+    fn usable(&self) -> bool {
+        self.session().connected()
+    }
+
     async fn close(&self);
 }
 
@@ -155,7 +161,7 @@ impl<C: DirectConnection> Peer<C> {
             .lock()
             .unwrap()
             .as_ref()
-            .filter(|connection| connection.session().connected())
+            .filter(|connection| connection.usable())
             .cloned()
     }
 
@@ -318,6 +324,82 @@ mod tests {
         assert!(peer.session().is_err());
         assert!(hub.connected());
         assert_eq!(closed.load(Ordering::SeqCst), 2);
+        hub.close().await.unwrap();
+        hub_backend.close().await.unwrap();
+        direct_backend.close().await.unwrap();
+        hub_router.close();
+        direct_router.close();
+    }
+
+    // A direct session whose path is interrupted while it stays open, as WebRTC's is while ICE
+    // is disconnected.
+    struct Interruptible {
+        session: Session,
+        usable: Arc<std::sync::atomic::AtomicBool>,
+        closed: Arc<AtomicUsize>,
+    }
+
+    #[async_trait::async_trait]
+    impl DirectConnection for Interruptible {
+        fn session(&self) -> &Session {
+            &self.session
+        }
+
+        fn usable(&self) -> bool {
+            self.usable.load(Ordering::SeqCst) && self.session.connected()
+        }
+
+        async fn close(&self) {
+            self.closed.fetch_add(1, Ordering::SeqCst);
+            let _ = self.session.close().await;
+        }
+    }
+
+    #[tokio::test]
+    async fn interrupted_direct_uses_the_hub_until_it_recovers() {
+        let hub_router = Router::new();
+        let hub_backend = routed(&hub_router, "hub").await;
+        let direct_router = Router::new();
+        let direct_backend = routed(&direct_router, "direct").await;
+        let hub = joined(&hub_router).await;
+        let direct = joined(&direct_router).await;
+        let usable = Arc::new(std::sync::atomic::AtomicBool::new(true));
+        let closed = Arc::new(AtomicUsize::new(0));
+        let (session, flag, counter) = (direct.clone(), usable.clone(), closed.clone());
+        let peer = Peer::start(
+            hub.clone(),
+            Arc::new(move || {
+                let (session, usable, closed) = (session.clone(), flag.clone(), counter.clone());
+                Box::pin(async move {
+                    Ok(Interruptible {
+                        session,
+                        usable,
+                        closed,
+                    })
+                })
+            }),
+            RetryPolicy::default(),
+        )
+        .unwrap();
+        let path = || async { peer.session().unwrap().call("app.path").execute().await.unwrap().args };
+        until(|| peer.direct().is_some()).await;
+        assert_eq!(path().await, Some(vec!["direct".into()]));
+
+        usable.store(false, Ordering::SeqCst);
+        assert_eq!(peer.status().path, ConnectionPath::Routed);
+        assert_eq!(
+            path().await,
+            Some(vec!["hub".into()]),
+            "new calls don't wait on an interrupted path"
+        );
+        assert!(direct.connected(), "the direct session is kept, to recover");
+
+        usable.store(true, Ordering::SeqCst);
+        assert_eq!(peer.status().path, ConnectionPath::Direct);
+        assert_eq!(path().await, Some(vec!["direct".into()]));
+        assert_eq!(closed.load(Ordering::SeqCst), 0, "nothing was closed or made again");
+
+        peer.close().await;
         hub.close().await.unwrap();
         hub_backend.close().await.unwrap();
         direct_backend.close().await.unwrap();

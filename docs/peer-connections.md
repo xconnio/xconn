@@ -79,7 +79,9 @@ that selected session. Byte-stream arguments retain the existing restriction to
   does not close the session or stop automatic recovery. `Session.Done` closes on
   hub disconnection or explicit closure, not on recoverable direct-path failure.
 - New calls prefer a healthy direct session and otherwise use the hub immediately.
-  Negotiation never blocks ordinary routed calls.
+  Negotiation never blocks ordinary routed calls. While WebRTC reports its path
+  disconnected, about five seconds after traffic stops, new calls use the hub; the
+  direct session is kept and used again if ICE recovers, or replaced once it fails.
 - Failed attempts retry with exponential backoff, initially one second, capped at
   30 seconds. `RetryInterval` changes the initial delay. `ConnectTimeout` bounds
   discovery plus connection establishment (20 seconds by default). An established
