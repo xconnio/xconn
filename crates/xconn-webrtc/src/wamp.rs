@@ -29,6 +29,10 @@ impl xconn::async_::services::peer::DirectConnection for WebRTCSession {
         &self.session
     }
 
+    fn usable(&self) -> bool {
+        self.session.connected() && self.connection.is_connected()
+    }
+
     async fn close(&self) {
         let _ = self.close().await;
         let _ = self.connection.close().await;
