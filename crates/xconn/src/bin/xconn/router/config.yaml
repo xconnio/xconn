@@ -27,11 +27,18 @@ transports:
 
   - type: rawsocket
     listener: tcp
-    address: 127.0.0.1:8082
+    address: 127.0.0.1:8081
     serializers:
       - json
       - cbor
       - msgpack
+
+  - type: quic
+    listener: udp
+    address: 127.0.0.1:8082
+    tls:
+      certificate: tls-cert.pem
+      key: tls-key.pem
 
 authenticators:
   anonymous:

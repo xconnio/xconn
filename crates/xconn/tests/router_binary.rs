@@ -250,7 +250,7 @@ fn init_never_overwrites_and_validate_rejects_unknown_settings() {
     assert!(!ambiguous.status.success());
     assert!(String::from_utf8_lossy(&ambiguous.stderr).contains("Use --config to choose one."));
     let explicit = std::process::Command::new(bin)
-        .args(["router", "validate", "--config", "xconn.yaml"])
+        .args(["router", "validate", "--config", "xconn/xconn.yaml"])
         .current_dir(&files.0)
         .output()
         .unwrap();
@@ -280,14 +280,16 @@ async fn xconn_router_initializes_validates_and_starts() {
     assert!(run(&["validate"]).status.success());
 
     let path = files.0.join("xconn/xconn.yaml");
-    let text = std::fs::read_to_string(&path)
-        .unwrap()
-        .replace("127.0.0.1:8080", "127.0.0.1:0")
-        .replace("127.0.0.1:8082", "127.0.0.1:0");
+    let mut text = std::fs::read_to_string(&path).unwrap();
+    for port in 8080..=8082 {
+        text = text.replace(&format!("127.0.0.1:{port}"), "127.0.0.1:0");
+    }
     std::fs::write(&path, text).unwrap();
-    let (mut child, address) = start(&path).await;
+    let (mut child, listeners) = start_listeners(&path).await;
+    let kinds: Vec<_> = listeners.iter().map(|(kind, _)| kind.as_str()).collect();
+    assert_eq!(kinds, ["WebSocket", "RawSocket", "QUIC"]);
     let _session = client(Box::new(JSONSerializerSpec))
-        .connect(&format!("ws://{address}"), "realm1")
+        .connect(&listeners[0].1, "realm1")
         .await
         .unwrap();
     child.kill().await.unwrap();
